@@ -114,9 +114,257 @@ const DEFAULT_WORKSPACES = [
   { id: "frame-brief", name: "Frame Brief", emoji: "📋" },
   { id: "personal", name: "Personal", emoji: "💡" },
 ];
-
 const EMOJIS = ["💡","🎬","🌈","📋","🎯","🚀","🎨","📸","🎵","📝","🔥","⚡","🌟","🏆","💼","🛠","📱","🎤","🎥","🌿"];
 
+const IDEA_SYSTEM = `You are a creative director and content strategist. The user has captured a raw idea. Turn it into a structured creative brief for a content piece or video project.
+
+Return ONLY raw JSON, no markdown, no backticks:
+{"title":"","logline":"","format":"","targetAudience":"","hook":"","angle":"","outline":[{"act":"","description":""}],"keyPoints":[],"scriptNotes":"","locations":[{"name":"","notes":""}],"props":[],"shotList":[{"number":"01","type":"","description":""}],"toDoList":[{"text":"","done":false}],"estimatedLength":"","tags":[]}`;
+
+// ─── IDEA PAGE (expanded view) ────────────────────────────────────────────────
+function IdeaPage({ idea, onBack, onUpdate }) {
+  const [localIdea, setLocalIdea] = useState(idea);
+  const brief = localIdea.brief;
+  const set = (k, v) => {
+    const updated = { ...localIdea, brief: { ...brief, [k]: v } };
+    setLocalIdea(updated);
+    onUpdate(updated);
+  };
+  const upArr = (k, i, v) => {
+    const a = [...(brief[k] || [])]; a[i] = v;
+    const updated = { ...localIdea, brief: { ...brief, [k]: a } };
+    setLocalIdea(updated); onUpdate(updated);
+  };
+  const delArr = (k, i) => {
+    const updated = { ...localIdea, brief: { ...brief, [k]: (brief[k] || []).filter((_, j) => j !== i) } };
+    setLocalIdea(updated); onUpdate(updated);
+  };
+  const addArr = (k, item) => {
+    const updated = { ...localIdea, brief: { ...brief, [k]: [...(brief[k] || []), item] } };
+    setLocalIdea(updated); onUpdate(updated);
+  };
+
+  function IdeaSection({ emoji, title, children, defaultOpen = true }) {
+    const [open, setOpen] = useState(defaultOpen);
+    return (
+      <div style={{ marginBottom: 4 }}>
+        <button onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: "9px 0", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
+          <span style={{ fontSize: 11, color: "#c4c3bf", transition: "transform .2s", display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
+          <span style={{ fontSize: 15 }}>{emoji}</span>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "#37352f" }}>{title}</span>
+        </button>
+        {open && <div style={{ paddingLeft: 26, paddingBottom: 12 }}>{children}</div>}
+      </div>
+    );
+  }
+
+  function IdeaEditable({ value, onChange, multiline, placeholder = "Click to edit…" }) {
+    const [editing, setEditing] = useState(false);
+    const [val, setVal] = useState(value || "");
+    const ref = useRef();
+    useEffect(() => setVal(value || ""), [value]);
+    useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
+    const commit = () => { setEditing(false); if (val !== (value || "")) onChange(val); };
+    const shared = { fontFamily: "inherit", fontSize: "inherit", color: "inherit", lineHeight: "inherit", width: "100%", border: "none", outline: "none", background: "rgba(35,131,226,0.07)", borderRadius: 4, padding: "3px 6px" };
+    if (editing) return multiline
+      ? <textarea ref={ref} value={val} onChange={e => setVal(e.target.value)} onBlur={commit} style={{ ...shared, resize: "vertical", minHeight: 48 }} />
+      : <input ref={ref} value={val} onChange={e => setVal(e.target.value)} onBlur={commit} onKeyDown={e => e.key === "Enter" && commit()} style={shared} />;
+    return (
+      <span onClick={() => setEditing(true)} style={{ cursor: "text", display: "block", borderRadius: 4, padding: "3px 6px", minHeight: "1.4em", wordBreak: "break-word" }}
+        onMouseEnter={e => e.currentTarget.style.background = "rgba(55,53,47,0.06)"}
+        onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+        {val || <span style={{ color: "#c4c3bf", fontStyle: "italic" }}>{placeholder}</span>}
+      </span>
+    );
+  }
+
+  const HR = () => <div style={{ height: 1, background: "#f1f0ef", margin: "12px 0" }} />;
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column" }}>
+      {/* Header */}
+      <div style={{ borderBottom: "1px solid #f1f0ef", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", color: "#9b9a97", cursor: "pointer", fontSize: 13, fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 4 }}>← Ideas</button>
+        <span style={{ color: "#e8e4dc" }}>·</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#37352f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{brief?.title || localIdea.rawText?.slice(0, 40)}</span>
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: "auto", maxWidth: 760, width: "100%", margin: "0 auto", padding: "40px 24px 100px" }}>
+        {/* Raw idea */}
+        <div style={{ background: "#f7f6f3", borderLeft: "3px solid #e97942", padding: "14px 18px", borderRadius: "0 8px 8px 0", marginBottom: 28, fontSize: 14, color: "#55534e", lineHeight: 1.7, fontStyle: "italic" }}>
+          <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Original Idea</div>
+          {localIdea.rawText}
+        </div>
+
+        {!brief ? (
+          <div style={{ textAlign: "center", padding: "40px 0", color: "#c4c3bf" }}>
+            <div className="spin" style={{ width: 24, height: 24, border: "2px solid #f1f0ef", borderTop: "2px solid #37352f", borderRadius: "50%", margin: "0 auto 12px" }} />
+            <p style={{ fontSize: 13, fontStyle: "italic" }}>Generating your creative brief…</p>
+          </div>
+        ) : (
+          <>
+            {/* Title + logline */}
+            <h1 style={{ fontSize: 30, fontWeight: 700, color: "#37352f", letterSpacing: "-0.02em", marginBottom: 6, lineHeight: 1.2 }}>
+              <IdeaEditable value={brief.title} onChange={v => set("title", v)} placeholder="Untitled Idea" />
+            </h1>
+            <div style={{ fontSize: 15, color: "#9b9a97", fontStyle: "italic", marginBottom: 8, lineHeight: 1.6 }}>
+              <IdeaEditable value={brief.logline} onChange={v => set("logline", v)} placeholder="One-sentence pitch…" />
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
+              {[["Format", "format"], ["Audience", "targetAudience"], ["Est. Length", "estimatedLength"]].map(([l, k]) => (
+                <div key={k} style={{ background: "#f1f0ef", borderRadius: 6, padding: "4px 10px" }}>
+                  <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em" }}>{l}: </span>
+                  <span style={{ fontSize: 12, color: "#37352f", fontWeight: 600 }}><IdeaEditable value={brief[k]} onChange={v => set(k, v)} placeholder="—" /></span>
+                </div>
+              ))}
+            </div>
+
+            <HR />
+            <IdeaSection emoji="🎣" title="Hook & Angle">
+              <div style={{ marginBottom: 10 }}>
+                <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Hook</div>
+                <div style={{ fontSize: 14, lineHeight: 1.8, background: "#fafaf9", borderRadius: 6, padding: "10px 14px" }}>
+                  <IdeaEditable value={brief.hook} onChange={v => set("hook", v)} multiline placeholder="What grabs attention in the first 3 seconds?" />
+                </div>
+              </div>
+              <div>
+                <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Angle / Perspective</div>
+                <div style={{ fontSize: 14, lineHeight: 1.8, background: "#fafaf9", borderRadius: 6, padding: "10px 14px" }}>
+                  <IdeaEditable value={brief.angle} onChange={v => set("angle", v)} multiline placeholder="What's the unique point of view?" />
+                </div>
+              </div>
+            </IdeaSection>
+            <HR />
+
+            <IdeaSection emoji="📋" title="Content Outline">
+              {(brief.outline || []).map((act, i) => (
+                <div key={i} style={{ background: "#f9f8f6", borderLeft: "3px solid #e8e4dc", padding: "12px 16px", borderRadius: "0 8px 8px 0", marginBottom: 10 }}>
+                  <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
+                    <IdeaEditable value={act.act} onChange={v => upArr("outline", i, { ...act, act: v })} placeholder="Section name" />
+                  </div>
+                  <div style={{ fontSize: 14, lineHeight: 1.75 }}>
+                    <IdeaEditable value={act.description} onChange={v => upArr("outline", i, { ...act, description: v })} multiline placeholder="Describe this section…" />
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => addArr("outline", { act: "New Section", description: "" })} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>
+                + Add section
+              </button>
+            </IdeaSection>
+            <HR />
+
+            <IdeaSection emoji="💬" title="Key Points to Hit">
+              {(brief.keyPoints || []).map((pt, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "5px 0" }}>
+                  <span style={{ color: "#e97942", marginTop: 4 }}>→</span>
+                  <div style={{ flex: 1, fontSize: 14 }}><IdeaEditable value={pt} onChange={v => upArr("keyPoints", i, v)} placeholder="Key point…" /></div>
+                  <button onClick={() => delArr("keyPoints", i)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13 }}
+                    onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
+                </div>
+              ))}
+              <button onClick={() => addArr("keyPoints", "New point")} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add point</button>
+            </IdeaSection>
+            <HR />
+
+            <IdeaSection emoji="📝" title="Script Notes">
+              <div style={{ fontSize: 14, lineHeight: 1.85, background: "#fafaf9", borderRadius: 6, padding: "12px 16px" }}>
+                <IdeaEditable value={brief.scriptNotes} onChange={v => set("scriptNotes", v)} multiline placeholder="Tone, delivery notes, phrases to use or avoid…" />
+              </div>
+            </IdeaSection>
+            <HR />
+
+            <IdeaSection emoji="📍" title="Locations">
+              {(brief.locations || []).map((loc, i) => (
+                <div key={i} style={{ background: "#f7f6f3", borderRadius: 8, padding: "12px 14px", marginBottom: 8, border: "1px solid #eeece8" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}><IdeaEditable value={loc.name} onChange={v => upArr("locations", i, { ...loc, name: v })} placeholder="Location name" /></div>
+                      <div style={{ fontSize: 13, color: "#55534e" }}><IdeaEditable value={loc.notes} onChange={v => upArr("locations", i, { ...loc, notes: v })} multiline placeholder="Notes…" /></div>
+                    </div>
+                    <button onClick={() => delArr("locations", i)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 13, marginLeft: 8 }}
+                      onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ccc"}>✕</button>
+                  </div>
+                </div>
+              ))}
+              <button onClick={() => addArr("locations", { name: "New Location", notes: "" })} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add location</button>
+            </IdeaSection>
+            <HR />
+
+            <IdeaSection emoji="🎪" title="Props & Equipment">
+              {(brief.props || []).map((p, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0" }}>
+                  <span style={{ color: "#9b9a97" }}>·</span>
+                  <div style={{ flex: 1, fontSize: 14 }}><IdeaEditable value={p} onChange={v => upArr("props", i, v)} /></div>
+                  <button onClick={() => delArr("props", i)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13 }}
+                    onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
+                </div>
+              ))}
+              <button onClick={() => addArr("props", "New item")} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add item</button>
+            </IdeaSection>
+            <HR />
+
+            <IdeaSection emoji="🎥" title="Shot List">
+              <div style={{ overflowX: "auto" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "36px 80px 1fr 24px", gap: 8, padding: "6px 0", borderBottom: "1px solid #e8e4dc", minWidth: 320 }}>
+                  {["#", "Type", "Description", ""].map((h, i) => <div key={i} style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>)}
+                </div>
+                {(brief.shotList || []).map((shot, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "36px 80px 1fr 24px", gap: 8, alignItems: "start", padding: "9px 0", borderBottom: "1px solid #f7f6f3", minWidth: 320 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#9b9a97", paddingTop: 4 }}>{shot.number || String(i + 1).padStart(2, "0")}</div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#e97942" }}><IdeaEditable value={shot.type} onChange={v => upArr("shotList", i, { ...shot, type: v })} placeholder="Type" /></div>
+                    <div style={{ fontSize: 13, lineHeight: 1.6 }}><IdeaEditable value={shot.description} onChange={v => upArr("shotList", i, { ...shot, description: v })} multiline placeholder="Describe the shot…" /></div>
+                    <button onClick={() => delArr("shotList", i)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 13, paddingTop: 4 }}
+                      onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ccc"}>✕</button>
+                  </div>
+                ))}
+              </div>
+              <button onClick={() => addArr("shotList", { number: String((brief.shotList?.length || 0) + 1).padStart(2, "0"), type: "B-Roll", description: "" })}
+                style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0", marginTop: 8 }}
+                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add shot</button>
+            </IdeaSection>
+            <HR />
+
+            <IdeaSection emoji="✅" title="To-Do List">
+              {(brief.toDoList || []).map((item, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "5px 0" }}>
+                  <input type="checkbox" checked={item.done} onChange={e => upArr("toDoList", i, { ...item, done: e.target.checked })}
+                    style={{ marginTop: 3, cursor: "pointer", flexShrink: 0, width: 15, height: 15, accentColor: "#37352f" }} />
+                  <div style={{ flex: 1, fontSize: 14, color: item.done ? "#9b9a97" : "#37352f", textDecoration: item.done ? "line-through" : "none", lineHeight: 1.6 }}>
+                    <IdeaEditable value={item.text} onChange={v => upArr("toDoList", i, { ...item, text: v })} />
+                  </div>
+                  <button onClick={() => delArr("toDoList", i)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13 }}
+                    onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
+                </div>
+              ))}
+              <button onClick={() => addArr("toDoList", { text: "New task", done: false })} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
+                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add task</button>
+            </IdeaSection>
+            <HR />
+
+            <IdeaSection emoji="🏷" title="Tags" defaultOpen={false}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {(brief.tags || []).map((tag, i) => (
+                  <span key={i} style={{ background: "#f1f0ef", color: "#55534e", borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                    {tag}
+                    <button onClick={() => delArr("tags", i)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 10, padding: 0 }}>✕</button>
+                  </span>
+                ))}
+                <button onClick={() => addArr("tags", "new tag")} style={{ background: "none", border: "1px dashed #e8e4dc", color: "#9b9a97", borderRadius: 20, padding: "3px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>+ Tag</button>
+              </div>
+            </IdeaSection>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── IDEA CAPTURE MAIN ────────────────────────────────────────────────────────
 function IdeaCapture({ user, onBack }) {
   const storageKey = `framebrief_ideas_${user?.id}`;
   const wsKey = `framebrief_workspaces_${user?.id}`;
@@ -125,22 +373,19 @@ function IdeaCapture({ user, onBack }) {
     try { return JSON.parse(localStorage.getItem(wsKey)) || DEFAULT_WORKSPACES; } catch { return DEFAULT_WORKSPACES; }
   });
   const [activeWs, setActiveWs] = useState(() => workspaces[0]?.id || "personal");
-  const [notes, setNotes] = useState(() => {
+  const [ideas, setIdeas] = useState(() => {
     try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { return {}; }
   });
+  const [openIdea, setOpenIdea] = useState(null);
   const [input, setInput] = useState("");
   const [interimText, setInterimText] = useState("");
-  const [aiMode, setAiMode] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-
-  // Workspace management state
+  const [generating, setGenerating] = useState(null); // id of idea being generated
   const [creatingWs, setCreatingWs] = useState(false);
   const [newWsName, setNewWsName] = useState("");
   const [newWsEmoji, setNewWsEmoji] = useState("💡");
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [editingWsId, setEditingWsId] = useState(null);
   const [editingWsName, setEditingWsName] = useState("");
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [wsMenuOpen, setWsMenuOpen] = useState(null);
 
   function saveWorkspaces(updated) {
@@ -148,21 +393,17 @@ function IdeaCapture({ user, onBack }) {
     try { localStorage.setItem(wsKey, JSON.stringify(updated)); } catch {}
   }
 
-  function saveNotes(updated) {
-    setNotes(updated);
+  function saveIdeas(updated) {
+    setIdeas(updated);
     try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch {}
   }
 
   function createWorkspace() {
     if (!newWsName.trim()) return;
     const id = `ws-${Date.now()}`;
-    const updated = [...workspaces, { id, name: newWsName.trim(), emoji: newWsEmoji }];
-    saveWorkspaces(updated);
+    saveWorkspaces([...workspaces, { id, name: newWsName.trim(), emoji: newWsEmoji }]);
     setActiveWs(id);
-    setCreatingWs(false);
-    setNewWsName("");
-    setNewWsEmoji("💡");
-    setShowEmojiPicker(false);
+    setCreatingWs(false); setNewWsName(""); setNewWsEmoji("💡"); setShowEmojiPicker(false);
   }
 
   function renameWorkspace(id, name) {
@@ -174,56 +415,64 @@ function IdeaCapture({ user, onBack }) {
     if (!window.confirm("Delete this workspace and all its ideas?")) return;
     const updated = workspaces.filter(w => w.id !== id);
     saveWorkspaces(updated);
-    const newNotes = { ...notes };
-    delete newNotes[id];
-    saveNotes(newNotes);
+    const newIdeas = { ...ideas }; delete newIdeas[id]; saveIdeas(newIdeas);
     if (activeWs === id) setActiveWs(updated[0]?.id || "");
     setWsMenuOpen(null);
   }
 
-  function addNote(text) {
-    if (!text.trim()) return;
-    const newNote = { id: `note-${Date.now()}`, text: text.trim(), done: false, createdAt: new Date().toISOString() };
-    saveNotes({ ...notes, [activeWs]: [newNote, ...(notes[activeWs] || [])] });
-    setInput("");
-    setInterimText("");
-  }
-
-  function toggleDone(noteId) {
-    saveNotes({ ...notes, [activeWs]: (notes[activeWs] || []).map(n => n.id === noteId ? { ...n, done: !n.done } : n) });
-  }
-
-  function deleteNote(noteId) {
-    saveNotes({ ...notes, [activeWs]: (notes[activeWs] || []).filter(n => n.id !== noteId) });
-  }
-
-  async function organizeWithAI() {
-    const wsNotes = notes[activeWs] || [];
-    if (!wsNotes.length && !aiPrompt.trim()) return;
-    setAiBusy(true);
-    const allText = wsNotes.map(n => `- ${n.text}`).join("\n");
-    const prompt = aiPrompt.trim()
-      ? `User request: ${aiPrompt}\n\nNotes:\n${allText}`
-      : `Organize and clean up these notes into clear action items. Remove duplicates, group related ideas, suggest priority order:\n${allText}`;
+  async function saveIdea() {
+    const text = (input + interimText).trim();
+    if (!text) return;
+    const id = `idea-${Date.now()}`;
+    const newIdea = { id, rawText: text, brief: null, createdAt: new Date().toISOString() };
+    const wsIdeas = [newIdea, ...(ideas[activeWs] || [])];
+    saveIdeas({ ...ideas, [activeWs]: wsIdeas });
+    setInput(""); setInterimText("");
+    // Generate brief for this idea
+    setGenerating(id);
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true", "x-api-key": API_KEY, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: MODEL, max_tokens: 2000, messages: [{ role: "user", content: prompt }] })
+        body: JSON.stringify({ model: MODEL, max_tokens: 3000, system: IDEA_SYSTEM, messages: [{ role: "user", content: `Generate a creative brief for this idea:
+
+${text}` }] })
       });
       const data = await res.json();
-      const result = (data.content || []).map(b => b.text || "").join("").trim();
-      const aiNote = { id: `note-${Date.now()}`, text: "✦ AI:\n" + result, done: false, createdAt: new Date().toISOString(), isAI: true };
-      saveNotes({ ...notes, [activeWs]: [aiNote, ...(notes[activeWs] || [])] });
-      setAiPrompt(""); setAiMode(false);
-    } catch(e) { console.error(e); }
-    setAiBusy(false);
+      const raw = (data.content || []).map(b => b.text || "").join("").trim();
+      let jsonStr = raw;
+      const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (fenced) jsonStr = fenced[1].trim();
+      else { const s = raw.indexOf("{"), e = raw.lastIndexOf("}"); if (s !== -1 && e !== -1) jsonStr = raw.slice(s, e + 1); }
+      jsonStr = jsonStr.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
+      const brief = JSON.parse(jsonStr);
+      const updated = { ...ideas, [activeWs]: wsIdeas.map(idea => idea.id === id ? { ...idea, brief } : idea) };
+      saveIdeas(updated);
+    } catch (e) {
+      console.error("Brief generation failed:", e);
+    }
+    setGenerating(null);
+  }
+
+  function updateIdea(updated) {
+    const wsIdeas = (ideas[activeWs] || []).map(i => i.id === updated.id ? updated : i);
+    saveIdeas({ ...ideas, [activeWs]: wsIdeas });
+  }
+
+  function deleteIdea(id) {
+    saveIdeas({ ...ideas, [activeWs]: (ideas[activeWs] || []).filter(i => i.id !== id) });
   }
 
   const ws = workspaces.find(w => w.id === activeWs);
-  const wsNotes = notes[activeWs] || [];
-  const pending = wsNotes.filter(n => !n.done);
-  const done = wsNotes.filter(n => n.done);
+  const wsIdeas = ideas[activeWs] || [];
+
+  // If viewing an idea, show full page
+  if (openIdea) {
+    const ideaData = wsIdeas.find(i => i.id === openIdea);
+    if (ideaData) return (
+      <IdeaPage idea={ideaData} onBack={() => setOpenIdea(null)} onUpdate={updateIdea} />
+    );
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column" }} onClick={() => { setWsMenuOpen(null); setShowEmojiPicker(false); }}>
@@ -241,7 +490,6 @@ function IdeaCapture({ user, onBack }) {
         {/* Workspace sidebar */}
         <div style={{ width: 220, borderRight: "1px solid #f1f0ef", padding: "16px 10px", background: "#fafaf9", flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
           <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#c4c3bf", textTransform: "uppercase", letterSpacing: "0.1em", padding: "0 10px", marginBottom: 8 }}>Workspaces</div>
-
           {workspaces.map(w => (
             <div key={w.id} style={{ position: "relative" }}>
               {editingWsId === w.id ? (
@@ -257,54 +505,31 @@ function IdeaCapture({ user, onBack }) {
                   <button className={`nb ${activeWs === w.id ? "on" : ""}`} onClick={() => setActiveWs(w.id)} style={{ flex: 1 }}>
                     <span style={{ fontSize: 15, flexShrink: 0 }}>{w.emoji}</span>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>{w.name}</span>
-                    {(notes[w.id] || []).filter(n => !n.done).length > 0 && (
-                      <span style={{ marginLeft: "auto", fontSize: 10, background: "#37352f", color: "#fff", borderRadius: 20, padding: "1px 6px", flexShrink: 0 }}>{(notes[w.id] || []).filter(n => !n.done).length}</span>
-                    )}
+                    {(ideas[w.id] || []).length > 0 && <span style={{ marginLeft: "auto", fontSize: 10, background: "#37352f", color: "#fff", borderRadius: 20, padding: "1px 6px", flexShrink: 0 }}>{(ideas[w.id] || []).length}</span>}
                   </button>
-                  {/* 3-dot menu */}
                   <button onClick={e => { e.stopPropagation(); setWsMenuOpen(wsMenuOpen === w.id ? null : w.id); }}
                     style={{ background: "none", border: "none", color: "#c4c3bf", cursor: "pointer", fontSize: 14, padding: "4px 6px", borderRadius: 4, flexShrink: 0, lineHeight: 1 }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#c4c3bf"}>
-                    ···
-                  </button>
+                    onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#c4c3bf"}>···</button>
                 </div>
               )}
-
-              {/* Workspace context menu */}
               {wsMenuOpen === w.id && (
                 <div onClick={e => e.stopPropagation()} style={{ position: "absolute", right: 0, top: "100%", background: "#fff", border: "1px solid #f1f0ef", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 300, minWidth: 160, overflow: "hidden" }}>
-                  <button onClick={() => { setEditingWsId(w.id); setEditingWsName(w.name); setWsMenuOpen(null); }}
-                    style={{ display: "block", width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#37352f", textAlign: "left", fontFamily: "'Lora',serif" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#f7f6f3"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    ✏️ Rename
-                  </button>
-                  <button onClick={() => deleteWorkspace(w.id)}
-                    style={{ display: "block", width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#c0392b", textAlign: "left", fontFamily: "'Lora',serif" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#fff2f2"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                    🗑 Delete
-                  </button>
+                  <button onClick={() => { setEditingWsId(w.id); setEditingWsName(w.name); setWsMenuOpen(null); }} style={{ display: "block", width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#37352f", textAlign: "left", fontFamily: "'Lora',serif" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#f7f6f3"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>✏️ Rename</button>
+                  <button onClick={() => deleteWorkspace(w.id)} style={{ display: "block", width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#c0392b", textAlign: "left", fontFamily: "'Lora',serif" }}
+                    onMouseEnter={e => e.currentTarget.style.background = "#fff2f2"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>🗑 Delete</button>
                 </div>
               )}
             </div>
           ))}
 
-          {/* Create workspace form */}
           {creatingWs ? (
             <div onClick={e => e.stopPropagation()} style={{ padding: "10px", background: "#fff", border: "1px solid #e8e4dc", borderRadius: 8, marginTop: 8 }}>
-              {/* Emoji picker row */}
               <div style={{ position: "relative", marginBottom: 8 }}>
-                <button onClick={e => { e.stopPropagation(); setShowEmojiPicker(p => !p); }}
-                  style={{ background: "#f7f6f3", border: "1px solid #e8e4dc", borderRadius: 6, padding: "6px 10px", fontSize: 18, cursor: "pointer", width: "100%", textAlign: "center" }}>
-                  {newWsEmoji}
-                </button>
+                <button onClick={e => { e.stopPropagation(); setShowEmojiPicker(p => !p); }} style={{ background: "#f7f6f3", border: "1px solid #e8e4dc", borderRadius: 6, padding: "6px 10px", fontSize: 18, cursor: "pointer", width: "100%", textAlign: "center" }}>{newWsEmoji}</button>
                 {showEmojiPicker && (
                   <div onClick={e => e.stopPropagation()} style={{ position: "absolute", top: "110%", left: 0, right: 0, background: "#fff", border: "1px solid #e8e4dc", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 400, padding: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {EMOJIS.map(em => (
-                      <button key={em} onClick={() => { setNewWsEmoji(em); setShowEmojiPicker(false); }}
-                        style={{ background: newWsEmoji === em ? "#e8f0fe" : "transparent", border: "none", borderRadius: 4, padding: "4px 6px", fontSize: 18, cursor: "pointer" }}>
-                        {em}
-                      </button>
-                    ))}
+                    {EMOJIS.map(em => <button key={em} onClick={() => { setNewWsEmoji(em); setShowEmojiPicker(false); }} style={{ background: newWsEmoji === em ? "#e8f0fe" : "transparent", border: "none", borderRadius: 4, padding: "4px 6px", fontSize: 18, cursor: "pointer" }}>{em}</button>)}
                   </div>
                 )}
               </div>
@@ -314,110 +539,101 @@ function IdeaCapture({ user, onBack }) {
                 style={{ width: "100%", border: "1px solid #e8e4dc", borderRadius: 6, padding: "7px 10px", fontSize: 13, outline: "none", fontFamily: "'Lora',serif", marginBottom: 8 }}
                 onFocus={e => e.target.style.borderColor = "#37352f"} onBlur={e => e.target.style.borderColor = "#e8e4dc"} />
               <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={createWorkspace} disabled={!newWsName.trim()}
-                  style={{ flex: 1, background: "#37352f", color: "#fff", border: "none", borderRadius: 6, padding: "7px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif", opacity: !newWsName.trim() ? 0.4 : 1 }}>
-                  Create
-                </button>
-                <button onClick={() => { setCreatingWs(false); setShowEmojiPicker(false); setNewWsName(""); }}
-                  style={{ flex: 1, background: "transparent", border: "1px solid #e8e4dc", borderRadius: 6, padding: "7px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif", color: "#9b9a97" }}>
-                  Cancel
-                </button>
+                <button onClick={createWorkspace} disabled={!newWsName.trim()} style={{ flex: 1, background: "#37352f", color: "#fff", border: "none", borderRadius: 6, padding: "7px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif", opacity: !newWsName.trim() ? 0.4 : 1 }}>Create</button>
+                <button onClick={() => { setCreatingWs(false); setShowEmojiPicker(false); setNewWsName(""); }} style={{ flex: 1, background: "transparent", border: "1px solid #e8e4dc", borderRadius: 6, padding: "7px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif", color: "#9b9a97" }}>Cancel</button>
               </div>
             </div>
           ) : (
-            <button onClick={() => setCreatingWs(true)}
-              style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "8px 10px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif", marginTop: 8, borderRadius: 6 }}
-              onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>
-              + New Workspace
-            </button>
+            <button onClick={() => setCreatingWs(true)} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "8px 10px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif", marginTop: 8, borderRadius: 6 }}
+              onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ New Workspace</button>
           )}
         </div>
 
-        {/* Main content area */}
+        {/* Main */}
         <div style={{ flex: 1, overflowY: "auto", padding: "32px 40px 80px", maxWidth: 700 }}>
           {!ws ? (
-            <div style={{ textAlign: "center", padding: "80px 20px", color: "#c4c3bf" }}>
-              <p style={{ fontSize: 14, fontStyle: "italic" }}>Select or create a workspace to get started.</p>
-            </div>
+            <p style={{ color: "#c4c3bf", fontStyle: "italic", fontSize: 14 }}>Select or create a workspace.</p>
           ) : (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
                 <span style={{ fontSize: 32 }}>{ws.emoji}</span>
                 <h1 style={{ fontSize: 26, fontWeight: 700, color: "#37352f", letterSpacing: "-0.02em" }}>{ws.name}</h1>
               </div>
-              <p style={{ fontSize: 13, color: "#9b9a97", marginBottom: 28, fontStyle: "italic" }}>
-                {pending.length} idea{pending.length !== 1 ? "s" : ""} · {done.length} done
-              </p>
+              <p style={{ fontSize: 13, color: "#9b9a97", marginBottom: 28, fontStyle: "italic" }}>{wsIdeas.length} idea{wsIdeas.length !== 1 ? "s" : ""}</p>
 
               {/* Input */}
-              <div style={{ background: "#fafaf9", border: "1px solid #e8e4dc", borderRadius: 10, padding: "16px", marginBottom: 20 }}>
+              <div style={{ background: "#fafaf9", border: "1px solid #e8e4dc", borderRadius: 10, padding: "16px", marginBottom: 28 }}>
+                <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Capture a new idea</div>
                 <textarea
                   value={input + interimText}
                   onChange={e => { setInput(e.target.value); setInterimText(""); }}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); addNote(input + interimText); } }}
-                  placeholder={`Capture an idea for ${ws.name}… (Enter to save)`}
-                  rows={2}
-                  style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: interimText ? "#9b9a97" : "#37352f", fontFamily: "'Lora',serif", lineHeight: 1.7, resize: "none", background: "transparent", marginBottom: 10 }}
+                  onKeyDown={e => { if (e.key === "Enter" && e.metaKey) { e.preventDefault(); saveIdea(); } }}
+                  placeholder={`Speak or type your idea for ${ws.name}…
+
+AI will turn it into a full creative brief with script outline, shot list, locations, and to-do list.`}
+                  rows={4}
+                  style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: interimText ? "#9b9a97" : "#37352f", fontFamily: "'Lora',serif", lineHeight: 1.75, resize: "none", background: "transparent", marginBottom: 12 }}
                 />
-                <div style={{ display: "flex", gap: 8, justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <VoiceMicBtn onTranscript={(final, interim) => { setInput(final); setInterimText(interim); }} />
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => setAiMode(m => !m)}
-                      style={{ background: "none", border: "1px solid #e8e4dc", color: "#9b9a97", borderRadius: 6, padding: "8px 14px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif" }}
-                      onMouseEnter={e => { e.currentTarget.style.borderColor = "#37352f"; e.currentTarget.style.color = "#37352f"; }}
-                      onMouseLeave={e => { e.currentTarget.style.borderColor = "#e8e4dc"; e.currentTarget.style.color = "#9b9a97"; }}>
-                      ✦ Organize with AI
-                    </button>
-                    <button onClick={() => addNote(input + interimText)} disabled={!(input + interimText).trim()}
-                      style={{ background: "#37352f", color: "#fff", border: "none", borderRadius: 6, padding: "8px 18px", fontSize: 13, cursor: "pointer", fontFamily: "'Lora',serif", opacity: !(input + interimText).trim() ? 0.4 : 1 }}>
-                      Save
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: 11, color: "#c4c3bf" }}>⌘+Enter to save</span>
+                    <button onClick={saveIdea} disabled={!(input + interimText).trim()}
+                      style={{ background: "#37352f", color: "#fff", border: "none", borderRadius: 6, padding: "9px 20px", fontSize: 13, cursor: "pointer", fontFamily: "'Lora',serif", opacity: !(input + interimText).trim() ? 0.4 : 1, display: "flex", alignItems: "center", gap: 8 }}>
+                      ✦ Generate Brief
                     </button>
                   </div>
                 </div>
-
-                {aiMode && (
-                  <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid #f1f0ef" }}>
-                    <p style={{ fontSize: 12, color: "#9b9a97", marginBottom: 8 }}>Tell AI what to do, or leave blank to auto-organize:</p>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <input value={aiPrompt} onChange={e => setAiPrompt(e.target.value)}
-                        placeholder="e.g. Turn these into a content calendar…"
-                        style={{ flex: 1, border: "1px solid #e8e4dc", borderRadius: 6, padding: "8px 12px", fontSize: 13, outline: "none", fontFamily: "'Lora',serif" }}
-                        onFocus={e => e.target.style.borderColor = "#37352f"} onBlur={e => e.target.style.borderColor = "#e8e4dc"} />
-                      <button onClick={organizeWithAI} disabled={aiBusy}
-                        style={{ background: "#37352f", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif", opacity: aiBusy ? 0.5 : 1 }}>
-                        {aiBusy ? "Thinking…" : "Go"}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
 
-              {/* Notes */}
-              {pending.length === 0 && done.length === 0 && (
+              {/* Ideas list */}
+              {wsIdeas.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "60px 20px", color: "#c4c3bf" }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>{ws.emoji}</div>
-                  <p style={{ fontSize: 14, fontStyle: "italic" }}>No ideas yet. Type above or tap 🎤 to speak.</p>
+                  <p style={{ fontSize: 14, fontStyle: "italic" }}>No ideas yet. Speak or type above — AI will build the full brief for you.</p>
                 </div>
-              )}
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  {wsIdeas.map(idea => (
+                    <div key={idea.id} onClick={() => idea.brief && setOpenIdea(idea.id)}
+                      style={{ border: "1px solid #f1f0ef", borderRadius: 10, padding: "18px 20px", background: "#fafaf9", cursor: idea.brief ? "pointer" : "default", transition: "all .15s", position: "relative" }}
+                      onMouseEnter={e => idea.brief && (e.currentTarget.style.background = "#f0ede8", e.currentTarget.style.borderColor = "#e0ddd8")}
+                      onMouseLeave={e => (e.currentTarget.style.background = "#fafaf9", e.currentTarget.style.borderColor = "#f1f0ef")}>
 
-              {pending.map(note => (
-                <div key={note.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 16px", background: note.isAI ? "#f7f6f3" : "#fff", border: "1px solid #f1f0ef", borderRadius: 8, marginBottom: 8, transition: "border-color .15s" }}
-                  onMouseEnter={e => e.currentTarget.style.borderColor = "#e0ddd8"} onMouseLeave={e => e.currentTarget.style.borderColor = "#f1f0ef"}>
-                  <input type="checkbox" checked={false} onChange={() => toggleDone(note.id)} style={{ marginTop: 3, cursor: "pointer", flexShrink: 0, width: 15, height: 15, accentColor: "#37352f" }} />
-                  <div style={{ flex: 1, fontSize: 14, color: "#37352f", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{note.text}</div>
-                  <button onClick={() => deleteNote(note.id)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 14, padding: "0 2px", flexShrink: 0 }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
-                </div>
-              ))}
+                      {/* Generating spinner */}
+                      {generating === idea.id && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                          <div className="spin" style={{ width: 14, height: 14, border: "2px solid #e8e4dc", borderTop: "2px solid #37352f", borderRadius: "50%", flexShrink: 0 }} />
+                          <span style={{ fontSize: 12, color: "#9b9a97", fontStyle: "italic" }}>Building your creative brief…</span>
+                        </div>
+                      )}
 
-              {done.length > 0 && (
-                <div style={{ marginTop: 24 }}>
-                  <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#c4c3bf", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}>Completed</div>
-                  {done.map(note => (
-                    <div key={note.id} style={{ display: "flex", alignItems: "flex-start", gap: 12, padding: "10px 16px", border: "1px solid #f1f0ef", borderRadius: 8, marginBottom: 6, opacity: 0.5 }}>
-                      <input type="checkbox" checked={true} onChange={() => toggleDone(note.id)} style={{ marginTop: 3, cursor: "pointer", flexShrink: 0, width: 15, height: 15, accentColor: "#37352f" }} />
-                      <div style={{ flex: 1, fontSize: 14, color: "#9b9a97", textDecoration: "line-through", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{note.text}</div>
-                      <button onClick={() => deleteNote(note.id)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 14, padding: "0 2px", flexShrink: 0 }}>✕</button>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          {idea.brief ? (
+                            <>
+                              <div style={{ fontWeight: 700, fontSize: 15, color: "#37352f", marginBottom: 4 }}>{idea.brief.title || "Untitled"}</div>
+                              <div style={{ fontSize: 13, color: "#9b9a97", fontStyle: "italic", marginBottom: 8, lineHeight: 1.5 }}>{idea.brief.logline}</div>
+                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                                {idea.brief.format && <span style={{ fontSize: 11, background: "#f1f0ef", borderRadius: 20, padding: "2px 8px", color: "#9b9a97" }}>{idea.brief.format}</span>}
+                                {idea.brief.estimatedLength && <span style={{ fontSize: 11, background: "#f1f0ef", borderRadius: 20, padding: "2px 8px", color: "#9b9a97" }}>{idea.brief.estimatedLength}</span>}
+                                {(idea.brief.toDoList || []).length > 0 && <span style={{ fontSize: 11, background: "#e6f4ea", borderRadius: 20, padding: "2px 8px", color: "#1e7e34" }}>✅ {idea.brief.toDoList.filter(t => t.done).length}/{idea.brief.toDoList.length} tasks</span>}
+                                {(idea.brief.shotList || []).length > 0 && <span style={{ fontSize: 11, background: "#e8f0fe", borderRadius: 20, padding: "2px 8px", color: "#1a56c4" }}>🎥 {idea.brief.shotList.length} shots</span>}
+                              </div>
+                            </>
+                          ) : (
+                            <div style={{ fontSize: 14, color: "#55534e", lineHeight: 1.65 }}>{idea.rawText.length > 120 ? idea.rawText.slice(0, 120) + "…" : idea.rawText}</div>
+                          )}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                          {idea.brief && <span style={{ fontSize: 11, background: "#eeece8", borderRadius: 20, padding: "3px 10px", color: "#9b9a97" }}>Open →</span>}
+                          <button onClick={e => { e.stopPropagation(); deleteIdea(idea.id); }} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 14, padding: "2px 4px" }}
+                            onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>🗑</button>
+                        </div>
+                      </div>
+                      <div style={{ fontSize: 11, color: "#c4c3bf", fontFamily: "'IBM Plex Mono',monospace", marginTop: 10 }}>
+                        {new Date(idea.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                      </div>
                     </div>
                   ))}
                 </div>
