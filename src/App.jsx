@@ -39,6 +39,21 @@ const isURL=(s)=>{try{const u=new URL(s);return u.protocol==="http:"||u.protocol
 const fmtSize=(b)=>b<1024?`${b}B`:b<1048576?`${(b/1024).toFixed(1)}KB`:`${(b/1048576).toFixed(1)}MB`;
 const STATUSES=["Draft","In Progress","Review","Delivered","Archived"];
 const SS={"Draft":{bg:"#f1f0ef",c:"#9b9a97"},"In Progress":{bg:"#e8f0fe",c:"#1a56c4"},"Review":{bg:"#fdeee4",c:"#b94a1a"},"Delivered":{bg:"#e6f4ea",c:"#1e7e34"},"Archived":{bg:"#f1f0ef",c:"#c4c3bf"}};
+// ─── STATUS BADGE ─────────────────────────────────────────────────────────────
+function StatusBadge({status,onChange,readonly}){
+  const[open,setOpen]=useState(false);
+  const s=SS[status]||SS.Draft;
+  if(readonly)return<span style={{background:s.bg,color:s.c,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600}}>{status}</span>;
+  return(
+    <div style={{position:"relative",display:"inline-block"}} onClick={e=>e.stopPropagation()}>
+      <span onClick={()=>setOpen(o=>!o)} style={{background:s.bg,color:s.c,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:600,cursor:"pointer",userSelect:"none"}}>{status} ▾</span>
+      {open&&<div style={{position:"absolute",top:"100%",left:0,marginTop:4,background:"#fff",border:"1px solid #f1f0ef",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,0.1)",zIndex:300,minWidth:140,overflow:"hidden"}}>
+        {STATUSES.map(st=>{const sc=SS[st];return(<div key={st} onClick={()=>{onChange(st);setOpen(false);}} style={{padding:"8px 14px",cursor:"pointer",display:"flex",alignItems:"center"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><span style={{background:sc.bg,color:sc.c,borderRadius:20,padding:"2px 8px",fontSize:11,fontWeight:600}}>{st}</span></div>);})}
+      </div>}
+    </div>
+  );
+}
+
 
 // ─── VOICE MIC BUTTON ─────────────────────────────────────────────────────────
 function VoiceMicBtn({ onTranscript, targetRef }) {
