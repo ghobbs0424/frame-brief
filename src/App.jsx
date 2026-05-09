@@ -631,8 +631,8 @@ AI will generate a full creative brief with script, shot list, locations, and to
                               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                                 {idea.brief.format && <span style={{ fontSize: 11, background: "#f1f0ef", borderRadius: 20, padding: "2px 8px", color: "#9b9a97" }}>{idea.brief.format}</span>}
                                 {idea.brief.estimatedLength && <span style={{ fontSize: 11, background: "#f1f0ef", borderRadius: 20, padding: "2px 8px", color: "#9b9a97" }}>{idea.brief.estimatedLength}</span>}
-                                {(idea.brief.toDoList || []).length > 0 && <span style={{ fontSize: 11, background: "#e6f4ea", borderRadius: 20, padding: "2px 8px", color: "#1e7e34" }}>✅ {idea.brief.toDoList.filter(t => t.done).length}/{idea.brief.toDoList.length} tasks</span>}
-                                {(idea.brief.shotList || []).length > 0 && <span style={{ fontSize: 11, background: "#e8f0fe", borderRadius: 20, padding: "2px 8px", color: "#1a56c4" }}>🎥 {idea.brief.shotList.length} shots</span>}
+                                {(idea.brief.toDoList || []).length > 0 && <span style={{ fontSize: 11, background: "#e6f4ea", borderRadius: 20, padding: "2px 8px", color: "#1e7e34" }}>✅ {(idea.brief.toDoList||[]).filter(t => t.done).length}/{(idea.brief.toDoList||[]).length} tasks</span>}
+                                {(idea.brief.shotList || []).length > 0 && <span style={{ fontSize: 11, background: "#e8f0fe", borderRadius: 20, padding: "2px 8px", color: "#1a56c4" }}>🎥 {(idea.brief.shotList||[]).length} shots</span>}
                               </div>
                             </>
                           ) : (
