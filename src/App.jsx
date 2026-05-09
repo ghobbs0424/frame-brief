@@ -474,95 +474,115 @@ ${text}` }] })
     );
   }
 
+  const [ideaSidebarOpen, setIdeaSidebarOpen] = useState(false);
+
+  // Sidebar content shared between desktop + mobile drawer
+  function WorkspaceSidebarContent() {
+    return (<>
+      <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#c4c3bf", textTransform: "uppercase", letterSpacing: "0.1em", padding: "0 10px", marginBottom: 8 }}>Workspaces</div>
+      {workspaces.map(w => (
+        <div key={w.id} style={{ position: "relative" }}>
+          {editingWsId === w.id ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px" }}>
+              <span style={{ fontSize: 15 }}>{w.emoji}</span>
+              <input autoFocus value={editingWsName} onChange={e => setEditingWsName(e.target.value)}
+                onBlur={() => renameWorkspace(w.id, editingWsName || w.name)}
+                onKeyDown={e => { if (e.key === "Enter") renameWorkspace(w.id, editingWsName || w.name); if (e.key === "Escape") setEditingWsId(null); }}
+                style={{ flex: 1, border: "1px solid #2383e2", borderRadius: 4, padding: "3px 6px", fontSize: 13, outline: "none", fontFamily: "'Lora',serif" }} />
+            </div>
+          ) : (
+            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+              <button className={`nb ${activeWs === w.id ? "on" : ""}`} onClick={() => { setActiveWs(w.id); setIdeaSidebarOpen(false); }} style={{ flex: 1 }}>
+                <span style={{ fontSize: 15, flexShrink: 0 }}>{w.emoji}</span>
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>{w.name}</span>
+                {(ideas[w.id] || []).length > 0 && <span style={{ marginLeft: "auto", fontSize: 10, background: "#37352f", color: "#fff", borderRadius: 20, padding: "1px 6px", flexShrink: 0 }}>{(ideas[w.id] || []).length}</span>}
+              </button>
+              <button onClick={e => { e.stopPropagation(); setWsMenuOpen(wsMenuOpen === w.id ? null : w.id); }}
+                style={{ background: "none", border: "none", color: "#c4c3bf", cursor: "pointer", fontSize: 14, padding: "4px 6px", borderRadius: 4, flexShrink: 0, lineHeight: 1 }}
+                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#c4c3bf"}>···</button>
+            </div>
+          )}
+          {wsMenuOpen === w.id && (
+            <div onClick={e => e.stopPropagation()} style={{ position: "absolute", right: 0, top: "100%", background: "#fff", border: "1px solid #f1f0ef", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 300, minWidth: 160, overflow: "hidden" }}>
+              <button onClick={() => { setEditingWsId(w.id); setEditingWsName(w.name); setWsMenuOpen(null); }} style={{ display: "block", width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#37352f", textAlign: "left", fontFamily: "'Lora',serif" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#f7f6f3"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>✏️ Rename</button>
+              <button onClick={() => deleteWorkspace(w.id)} style={{ display: "block", width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#c0392b", textAlign: "left", fontFamily: "'Lora',serif" }}
+                onMouseEnter={e => e.currentTarget.style.background = "#fff2f2"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>🗑 Delete</button>
+            </div>
+          )}
+        </div>
+      ))}
+      {creatingWs ? (
+        <div onClick={e => e.stopPropagation()} style={{ padding: "10px", background: "#fff", border: "1px solid #e8e4dc", borderRadius: 8, marginTop: 8 }}>
+          <div style={{ position: "relative", marginBottom: 8 }}>
+            <button onClick={e => { e.stopPropagation(); setShowEmojiPicker(p => !p); }} style={{ background: "#f7f6f3", border: "1px solid #e8e4dc", borderRadius: 6, padding: "6px 10px", fontSize: 18, cursor: "pointer", width: "100%", textAlign: "center" }}>{newWsEmoji}</button>
+            {showEmojiPicker && (
+              <div onClick={e => e.stopPropagation()} style={{ position: "absolute", top: "110%", left: 0, right: 0, background: "#fff", border: "1px solid #e8e4dc", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 400, padding: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                {EMOJIS.map(em => <button key={em} onClick={() => { setNewWsEmoji(em); setShowEmojiPicker(false); }} style={{ background: newWsEmoji === em ? "#e8f0fe" : "transparent", border: "none", borderRadius: 4, padding: "4px 6px", fontSize: 18, cursor: "pointer" }}>{em}</button>)}
+              </div>
+            )}
+          </div>
+          <input autoFocus value={newWsName} onChange={e => setNewWsName(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter") createWorkspace(); if (e.key === "Escape") { setCreatingWs(false); setShowEmojiPicker(false); } }}
+            placeholder="Workspace name…"
+            style={{ width: "100%", border: "1px solid #e8e4dc", borderRadius: 6, padding: "7px 10px", fontSize: 13, outline: "none", fontFamily: "'Lora',serif", marginBottom: 8 }}
+            onFocus={e => e.target.style.borderColor = "#37352f"} onBlur={e => e.target.style.borderColor = "#e8e4dc"} />
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={createWorkspace} disabled={!newWsName.trim()} style={{ flex: 1, background: "#37352f", color: "#fff", border: "none", borderRadius: 6, padding: "7px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif", opacity: !newWsName.trim() ? 0.4 : 1 }}>Create</button>
+            <button onClick={() => { setCreatingWs(false); setShowEmojiPicker(false); setNewWsName(""); }} style={{ flex: 1, background: "transparent", border: "1px solid #e8e4dc", borderRadius: 6, padding: "7px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif", color: "#9b9a97" }}>Cancel</button>
+          </div>
+        </div>
+      ) : (
+        <button onClick={() => setCreatingWs(true)} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "8px 10px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif", marginTop: 8, borderRadius: 6 }}
+          onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ New Workspace</button>
+      )}
+    </>);
+  }
+
   return (
-    <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column" }} onClick={() => { setWsMenuOpen(null); setShowEmojiPicker(false); }}>
+    <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}
+      onClick={() => { setWsMenuOpen(null); setShowEmojiPicker(false); }}>
+
+      {/* Mobile sidebar overlay + drawer */}
+      <div className={`sidebar-overlay ${ideaSidebarOpen ? "show" : ""}`} onClick={e => { e.stopPropagation(); setIdeaSidebarOpen(false); }} />
+      <div className={`sidebar-drawer ${ideaSidebarOpen ? "show" : ""}`} onClick={e => e.stopPropagation()}>
+        <button onClick={() => setIdeaSidebarOpen(false)} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif", borderBottom: "1px solid #f1f0ef", marginBottom: 8 }}>← Close Menu</button>
+        <WorkspaceSidebarContent />
+      </div>
+
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #f1f0ef", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <button onClick={onBack} style={{ background: "none", border: "none", color: "#9b9a97", cursor: "pointer", fontSize: 13, fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 4 }}>← Dashboard</button>
-          <span style={{ color: "#e8e4dc" }}>·</span>
-          <span style={{ fontSize: 20 }}>💡</span>
-          <span style={{ fontWeight: 700, fontSize: 15, color: "#37352f" }}>Idea Capture</span>
+      <div style={{ borderBottom: "1px solid #f1f0ef", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden", minWidth: 0 }}>
+          <button className="mobile-hamburger" onClick={e => { e.stopPropagation(); setIdeaSidebarOpen(true); }} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 6px", color: "#37352f", flexShrink: 0 }}>☰</button>
+          <button onClick={onBack} style={{ background: "none", border: "none", color: "#9b9a97", cursor: "pointer", fontSize: 13, fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>← Dashboard</button>
+          <span style={{ color: "#e8e4dc", flexShrink: 0 }}>·</span>
+          <span style={{ fontSize: 16, flexShrink: 0 }}>💡</span>
+          <span style={{ fontWeight: 700, fontSize: 14, color: "#37352f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {ws ? ws.emoji + " " + ws.name : "Idea Capture"}
+          </span>
         </div>
       </div>
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
-        {/* Workspace sidebar */}
-        <div style={{ width: 220, borderRight: "1px solid #f1f0ef", padding: "16px 10px", background: "#fafaf9", flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-          <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#c4c3bf", textTransform: "uppercase", letterSpacing: "0.1em", padding: "0 10px", marginBottom: 8 }}>Workspaces</div>
-          {workspaces.map(w => (
-            <div key={w.id} style={{ position: "relative" }}>
-              {editingWsId === w.id ? (
-                <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px" }}>
-                  <span style={{ fontSize: 15 }}>{w.emoji}</span>
-                  <input autoFocus value={editingWsName} onChange={e => setEditingWsName(e.target.value)}
-                    onBlur={() => renameWorkspace(w.id, editingWsName || w.name)}
-                    onKeyDown={e => { if (e.key === "Enter") renameWorkspace(w.id, editingWsName || w.name); if (e.key === "Escape") setEditingWsId(null); }}
-                    style={{ flex: 1, border: "1px solid #2383e2", borderRadius: 4, padding: "3px 6px", fontSize: 13, outline: "none", fontFamily: "'Lora',serif" }} />
-                </div>
-              ) : (
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <button className={`nb ${activeWs === w.id ? "on" : ""}`} onClick={() => setActiveWs(w.id)} style={{ flex: 1 }}>
-                    <span style={{ fontSize: 15, flexShrink: 0 }}>{w.emoji}</span>
-                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", flex: 1, textAlign: "left" }}>{w.name}</span>
-                    {(ideas[w.id] || []).length > 0 && <span style={{ marginLeft: "auto", fontSize: 10, background: "#37352f", color: "#fff", borderRadius: 20, padding: "1px 6px", flexShrink: 0 }}>{(ideas[w.id] || []).length}</span>}
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); setWsMenuOpen(wsMenuOpen === w.id ? null : w.id); }}
-                    style={{ background: "none", border: "none", color: "#c4c3bf", cursor: "pointer", fontSize: 14, padding: "4px 6px", borderRadius: 4, flexShrink: 0, lineHeight: 1 }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#c4c3bf"}>···</button>
-                </div>
-              )}
-              {wsMenuOpen === w.id && (
-                <div onClick={e => e.stopPropagation()} style={{ position: "absolute", right: 0, top: "100%", background: "#fff", border: "1px solid #f1f0ef", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.1)", zIndex: 300, minWidth: 160, overflow: "hidden" }}>
-                  <button onClick={() => { setEditingWsId(w.id); setEditingWsName(w.name); setWsMenuOpen(null); }} style={{ display: "block", width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#37352f", textAlign: "left", fontFamily: "'Lora',serif" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#f7f6f3"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>✏️ Rename</button>
-                  <button onClick={() => deleteWorkspace(w.id)} style={{ display: "block", width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#c0392b", textAlign: "left", fontFamily: "'Lora',serif" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "#fff2f2"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>🗑 Delete</button>
-                </div>
-              )}
-            </div>
-          ))}
-
-          {creatingWs ? (
-            <div onClick={e => e.stopPropagation()} style={{ padding: "10px", background: "#fff", border: "1px solid #e8e4dc", borderRadius: 8, marginTop: 8 }}>
-              <div style={{ position: "relative", marginBottom: 8 }}>
-                <button onClick={e => { e.stopPropagation(); setShowEmojiPicker(p => !p); }} style={{ background: "#f7f6f3", border: "1px solid #e8e4dc", borderRadius: 6, padding: "6px 10px", fontSize: 18, cursor: "pointer", width: "100%", textAlign: "center" }}>{newWsEmoji}</button>
-                {showEmojiPicker && (
-                  <div onClick={e => e.stopPropagation()} style={{ position: "absolute", top: "110%", left: 0, right: 0, background: "#fff", border: "1px solid #e8e4dc", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", zIndex: 400, padding: 8, display: "flex", flexWrap: "wrap", gap: 4 }}>
-                    {EMOJIS.map(em => <button key={em} onClick={() => { setNewWsEmoji(em); setShowEmojiPicker(false); }} style={{ background: newWsEmoji === em ? "#e8f0fe" : "transparent", border: "none", borderRadius: 4, padding: "4px 6px", fontSize: 18, cursor: "pointer" }}>{em}</button>)}
-                  </div>
-                )}
-              </div>
-              <input autoFocus value={newWsName} onChange={e => setNewWsName(e.target.value)}
-                onKeyDown={e => { if (e.key === "Enter") createWorkspace(); if (e.key === "Escape") { setCreatingWs(false); setShowEmojiPicker(false); } }}
-                placeholder="Workspace name…"
-                style={{ width: "100%", border: "1px solid #e8e4dc", borderRadius: 6, padding: "7px 10px", fontSize: 13, outline: "none", fontFamily: "'Lora',serif", marginBottom: 8 }}
-                onFocus={e => e.target.style.borderColor = "#37352f"} onBlur={e => e.target.style.borderColor = "#e8e4dc"} />
-              <div style={{ display: "flex", gap: 6 }}>
-                <button onClick={createWorkspace} disabled={!newWsName.trim()} style={{ flex: 1, background: "#37352f", color: "#fff", border: "none", borderRadius: 6, padding: "7px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif", opacity: !newWsName.trim() ? 0.4 : 1 }}>Create</button>
-                <button onClick={() => { setCreatingWs(false); setShowEmojiPicker(false); setNewWsName(""); }} style={{ flex: 1, background: "transparent", border: "1px solid #e8e4dc", borderRadius: 6, padding: "7px", fontSize: 12, cursor: "pointer", fontFamily: "'Lora',serif", color: "#9b9a97" }}>Cancel</button>
-              </div>
-            </div>
-          ) : (
-            <button onClick={() => setCreatingWs(true)} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "8px 10px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif", marginTop: 8, borderRadius: 6 }}
-              onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ New Workspace</button>
-          )}
+        {/* Desktop sidebar */}
+        <div className="desktop-sidebar" style={{ width: 220, borderRight: "1px solid #f1f0ef", padding: "16px 10px", background: "#fafaf9", flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+          <WorkspaceSidebarContent />
         </div>
 
-        {/* Main */}
-        <div style={{ flex: 1, overflowY: "auto", padding: "32px 40px 80px", maxWidth: 700 }}>
+        {/* Main content */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "28px 24px 80px", maxWidth: 700 }}>
           {!ws ? (
             <p style={{ color: "#c4c3bf", fontStyle: "italic", fontSize: 14 }}>Select or create a workspace.</p>
           ) : (
             <>
               <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
-                <span style={{ fontSize: 32 }}>{ws.emoji}</span>
-                <h1 style={{ fontSize: 26, fontWeight: 700, color: "#37352f", letterSpacing: "-0.02em" }}>{ws.name}</h1>
+                <span style={{ fontSize: 28 }}>{ws.emoji}</span>
+                <h1 style={{ fontSize: 24, fontWeight: 700, color: "#37352f", letterSpacing: "-0.02em" }}>{ws.name}</h1>
               </div>
-              <p style={{ fontSize: 13, color: "#9b9a97", marginBottom: 28, fontStyle: "italic" }}>{wsIdeas.length} idea{wsIdeas.length !== 1 ? "s" : ""}</p>
+              <p style={{ fontSize: 13, color: "#9b9a97", marginBottom: 24, fontStyle: "italic" }}>{wsIdeas.length} idea{wsIdeas.length !== 1 ? "s" : ""}</p>
 
               {/* Input */}
-              <div style={{ background: "#fafaf9", border: "1px solid #e8e4dc", borderRadius: 10, padding: "16px", marginBottom: 28 }}>
+              <div style={{ background: "#fafaf9", border: "1px solid #e8e4dc", borderRadius: 10, padding: "16px", marginBottom: 24 }}>
                 <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10 }}>Capture a new idea</div>
                 <textarea
                   value={input + interimText}
@@ -570,19 +590,16 @@ ${text}` }] })
                   onKeyDown={e => { if (e.key === "Enter" && e.metaKey) { e.preventDefault(); saveIdea(); } }}
                   placeholder={`Speak or type your idea for ${ws.name}…
 
-AI will turn it into a full creative brief with script outline, shot list, locations, and to-do list.`}
+AI will generate a full creative brief with script, shot list, locations, and to-dos.`}
                   rows={4}
                   style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: interimText ? "#9b9a97" : "#37352f", fontFamily: "'Lora',serif", lineHeight: 1.75, resize: "none", background: "transparent", marginBottom: 12 }}
                 />
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
                   <VoiceMicBtn onTranscript={(final, interim) => { setInput(final); setInterimText(interim); }} />
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 11, color: "#c4c3bf" }}>⌘+Enter to save</span>
-                    <button onClick={saveIdea} disabled={!(input + interimText).trim()}
-                      style={{ background: "#37352f", color: "#fff", border: "none", borderRadius: 6, padding: "9px 20px", fontSize: 13, cursor: "pointer", fontFamily: "'Lora',serif", opacity: !(input + interimText).trim() ? 0.4 : 1, display: "flex", alignItems: "center", gap: 8 }}>
-                      ✦ Generate Brief
-                    </button>
-                  </div>
+                  <button onClick={saveIdea} disabled={!(input + interimText).trim()}
+                    style={{ background: "#37352f", color: "#fff", border: "none", borderRadius: 6, padding: "9px 20px", fontSize: 13, cursor: "pointer", fontFamily: "'Lora',serif", opacity: !(input + interimText).trim() ? 0.4 : 1, display: "flex", alignItems: "center", gap: 8 }}>
+                    ✦ Generate Brief
+                  </button>
                 </div>
               </div>
 
@@ -590,24 +607,21 @@ AI will turn it into a full creative brief with script outline, shot list, locat
               {wsIdeas.length === 0 ? (
                 <div style={{ textAlign: "center", padding: "60px 20px", color: "#c4c3bf" }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>{ws.emoji}</div>
-                  <p style={{ fontSize: 14, fontStyle: "italic" }}>No ideas yet. Speak or type above — AI will build the full brief for you.</p>
+                  <p style={{ fontSize: 14, fontStyle: "italic" }}>No ideas yet. Speak or type above — AI will build a full brief for you.</p>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {wsIdeas.map(idea => (
                     <div key={idea.id} onClick={() => idea.brief && setOpenIdea(idea.id)}
-                      style={{ border: "1px solid #f1f0ef", borderRadius: 10, padding: "18px 20px", background: "#fafaf9", cursor: idea.brief ? "pointer" : "default", transition: "all .15s", position: "relative" }}
+                      style={{ border: "1px solid #f1f0ef", borderRadius: 10, padding: "16px 18px", background: "#fafaf9", cursor: idea.brief ? "pointer" : "default", transition: "all .15s" }}
                       onMouseEnter={e => idea.brief && (e.currentTarget.style.background = "#f0ede8", e.currentTarget.style.borderColor = "#e0ddd8")}
                       onMouseLeave={e => (e.currentTarget.style.background = "#fafaf9", e.currentTarget.style.borderColor = "#f1f0ef")}>
-
-                      {/* Generating spinner */}
                       {generating === idea.id && (
                         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                           <div className="spin" style={{ width: 14, height: 14, border: "2px solid #e8e4dc", borderTop: "2px solid #37352f", borderRadius: "50%", flexShrink: 0 }} />
                           <span style={{ fontSize: 12, color: "#9b9a97", fontStyle: "italic" }}>Building your creative brief…</span>
                         </div>
                       )}
-
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           {idea.brief ? (
@@ -644,6 +658,51 @@ AI will turn it into a full creative brief with script outline, shot list, locat
       </div>
     </div>
   );
+}
+
+// ─── AUTH SCREEN ──────────────────────────────────────────────────────────────
+function AuthScreen() {
+  const [loading,setLoading]=useState(false);
+  const [email,setEmail]=useState("");
+  const [password,setPassword]=useState("");
+  const [mode,setMode]=useState("login");
+  const [msg,setMsg]=useState("");
+  const [err,setErr]=useState("");
+  async function handleGoogle(){setLoading(true);setErr("");const{error}=await supabase.auth.signInWithOAuth({provider:"google",options:{redirectTo:window.location.origin}});if(error){setErr(error.message);setLoading(false);}}
+  async function handleEmail(e){e.preventDefault();setLoading(true);setErr("");setMsg("");if(mode==="magic"){const{error}=await supabase.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.origin}});if(error)setErr(error.message);else setMsg("Check your email for a magic link!");}else if(mode==="signup"){const{error}=await supabase.auth.signUp({email,password});if(error)setErr(error.message);else setMsg("Check your email to confirm your account!");}else{const{error}=await supabase.auth.signInWithPassword({email,password});if(error)setErr(error.message);}setLoading(false);}
+  return(<div style={{minHeight:"100vh",background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",padding:"20px"}}><div style={{width:"100%",maxWidth:400}}><div style={{textAlign:"center",marginBottom:36}}><div style={{fontSize:44,marginBottom:12}}>🎬</div><h1 style={{fontSize:28,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em",marginBottom:8}}>Frame Brief</h1><p style={{color:"#9b9a97",fontSize:14,fontStyle:"italic"}}>Creative production briefs for photographers &amp; videographers</p></div>{err&&<div style={{background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#c0392b"}}>{err}</div>}{msg&&<div style={{background:"#e6f4ea",border:"1px solid #a8d5b5",borderRadius:8,padding:"10px 14px",marginBottom:16,fontSize:13,color:"#1e7e34"}}>{msg}</div>}<button onClick={handleGoogle} disabled={loading} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:12,padding:"13px 20px",border:"1px solid #e8e4dc",borderRadius:8,background:"#fff",cursor:"pointer",fontFamily:"'Lora',serif",fontSize:14,color:"#37352f",marginBottom:16}} onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="#fff"}><svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 002.38-5.88c0-.57-.05-.66-.15-1.18z"/><path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2a4.8 4.8 0 01-7.18-2.54H1.83v2.07A8 8 0 008.98 17z"/><path fill="#FBBC05" d="M4.5 10.52a4.8 4.8 0 010-3.04V5.41H1.83a8 8 0 000 7.18l2.67-2.07z"/><path fill="#EA4335" d="M8.98 4.18c1.17 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 001.83 5.4L4.5 7.49a4.77 4.77 0 014.48-3.31z"/></svg>{loading?"Signing in…":"Continue with Google"}</button><div style={{display:"flex",alignItems:"center",gap:12,marginBottom:16}}><div style={{flex:1,height:1,background:"#f1f0ef"}}/><span style={{fontSize:12,color:"#c4c3bf"}}>or</span><div style={{flex:1,height:1,background:"#f1f0ef"}}/></div><form onSubmit={handleEmail}><input value={email} onChange={e=>setEmail(e.target.value)} type="email" placeholder="Email address" required style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"12px 14px",fontFamily:"'Lora',serif",fontSize:14,color:"#37352f",outline:"none",marginBottom:10,background:"#fafaf9"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>{mode!=="magic"&&<input value={password} onChange={e=>setPassword(e.target.value)} type="password" placeholder="Password" required style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"12px 14px",fontFamily:"'Lora',serif",fontSize:14,color:"#37352f",outline:"none",marginBottom:10,background:"#fafaf9"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>}<button type="submit" disabled={loading} style={{width:"100%",background:"#37352f",color:"#fff",border:"none",padding:"13px",borderRadius:8,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer",opacity:loading?0.6:1,marginBottom:14}}>{loading?"Loading…":mode==="login"?"Sign In":mode==="signup"?"Create Account":"Send Magic Link"}</button></form><div style={{display:"flex",flexDirection:"column",gap:6,alignItems:"center"}}>{mode==="login"&&<><button onClick={()=>{setMode("signup");setErr("");setMsg("");}} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif"}}>Don't have an account? Sign up</button><button onClick={()=>{setMode("magic");setErr("");setMsg("");}} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif"}}>Sign in with magic link instead</button></>}{mode==="signup"&&<button onClick={()=>{setMode("login");setErr("");setMsg("");}} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif"}}>Already have an account? Sign in</button>}{mode==="magic"&&<button onClick={()=>{setMode("login");setErr("");setMsg("");}} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif"}}>Back to sign in</button>}</div></div></div>);
+}
+
+// ─── EDITABLE ─────────────────────────────────────────────────────────────────
+function Editable({value,onChange,multiline,placeholder="Click to edit…",style={}}){
+  const[editing,setEditing]=useState(false);const[val,setVal]=useState(value??"");const ref=useRef();
+  useEffect(()=>setVal(value??""),[value]);useEffect(()=>{if(editing)ref.current?.focus();},[editing]);
+  const commit=()=>{setEditing(false);if(val!==(value??""))onChange(val);};
+  const shared={fontFamily:"inherit",fontSize:"inherit",color:"inherit",lineHeight:"inherit",width:"100%",border:"none",outline:"none",background:"rgba(35,131,226,0.07)",borderRadius:4,padding:"3px 6px"};
+  if(editing)return multiline?<textarea ref={ref} value={val} onChange={e=>setVal(e.target.value)} onBlur={commit} style={{...shared,resize:"vertical",minHeight:52}}/>:<input ref={ref} value={val} onChange={e=>setVal(e.target.value)} onBlur={commit} onKeyDown={e=>e.key==="Enter"&&commit()} style={shared}/>;
+  return(<span onClick={()=>setEditing(true)} style={{cursor:"text",display:"block",borderRadius:4,padding:"3px 6px",minHeight:"1.4em",wordBreak:"break-word",transition:"background .12s",...style}} onMouseEnter={e=>e.currentTarget.style.background="rgba(55,53,47,0.06)"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>{val||<span style={{color:"#c4c3bf",fontStyle:"italic"}}>{placeholder}</span>}</span>);
+}
+
+// ─── TAG ──────────────────────────────────────────────────────────────────────
+function Tag({value,bg,color,onEdit,onDelete}){
+  const[editing,setEditing]=useState(false);const[val,setVal]=useState(value);const ref=useRef();
+  useEffect(()=>{if(editing)ref.current?.focus();},[editing]);
+  const url=isURL(value);
+  if(editing)return<input ref={ref} value={val} onChange={e=>setVal(e.target.value)} onBlur={()=>{setEditing(false);onEdit(val);}} onKeyDown={e=>e.key==="Enter"&&ref.current.blur()} style={{border:"1px solid #2383e2",borderRadius:20,padding:"3px 12px",fontSize:12,outline:"none",width:Math.max(64,val.length*9),fontFamily:"inherit",background:"#fff"}}/>;
+  return(<span style={{display:"inline-flex",alignItems:"center",gap:3,background:bg,color,borderRadius:20,padding:"3px 12px 3px 10px",fontSize:12,fontWeight:500,userSelect:"none",margin:"2px 3px"}}>{url?<a href={value} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color,textDecoration:"underline",maxWidth:180,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",display:"inline-block"}}>{value.replace(/^https?:\/\//,"").split("/")[0]}</a>:<span onClick={()=>setEditing(true)} style={{cursor:"text"}}>{value}</span>}<span onClick={onDelete} style={{cursor:"pointer",opacity:0.45,fontSize:9,marginLeft:2}}>✕</span></span>);
+}
+
+// ─── SECTION ─────────────────────────────────────────────────────────────────
+function Section({emoji,title,children,defaultOpen=true,badge}){
+  const[open,setOpen]=useState(defaultOpen);
+  return(<div style={{marginBottom:2}}><button onClick={()=>setOpen(o=>!o)} style={{display:"flex",alignItems:"center",gap:8,width:"100%",background:"none",border:"none",padding:"9px 6px",cursor:"pointer",borderRadius:6,fontFamily:"inherit",textAlign:"left"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}><span style={{fontSize:11,color:"#c4c3bf",display:"inline-block",transition:"transform .2s",transform:open?"rotate(90deg)":"rotate(0deg)"}}>▶</span><span style={{fontSize:15}}>{emoji}</span><span style={{fontSize:14,fontWeight:700,color:"#37352f",letterSpacing:"-0.01em"}}>{title}</span>{badge&&<span style={{fontSize:11,background:badge.bg,color:badge.c,borderRadius:20,padding:"2px 8px",fontWeight:600}}>{badge.label}</span>}</button>{open&&<div style={{paddingLeft:28,paddingBottom:10}}>{children}</div>}</div>);
+}
+
+// ─── TODO LIST ────────────────────────────────────────────────────────────────
+function TodoList({items,onUpdate,onAdd,onDelete,accentColor="#37352f",readonly}){
+  const[newText,setNewText]=useState("");const inputRef=useRef();
+  function add(){if(!newText.trim())return;onAdd({id:`todo-${Date.now()}`,text:newText.trim(),done:false});setNewText("");inputRef.current?.focus();}
+  return(<div>{(items||[]).map((item,i)=>(<div key={item.id||i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"5px 0"}}><input type="checkbox" checked={item.done} onChange={e=>onUpdate(i,{...item,done:e.target.checked})} disabled={readonly} style={{marginTop:3,accentColor,cursor:readonly?"default":"pointer",flexShrink:0,width:15,height:15}}/><div style={{flex:1,fontSize:14,color:item.done?"#9b9a97":"#37352f",textDecoration:item.done?"line-through":"none",lineHeight:1.6}}>{readonly?<span>{item.text}</span>:<Editable value={item.text} onChange={v=>onUpdate(i,{...item,text:v})} placeholder="Add item…"/>}</div>{!readonly&&<button onClick={()=>onDelete(i)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"0 2px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>}</div>))}{!readonly&&(<div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}><input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="Add item… (Enter to save)" style={{flex:1,border:"none",outline:"none",fontSize:13,color:"#37352f",fontFamily:"inherit",padding:"4px 6px",borderRadius:4,background:"transparent"}} onFocus={e=>e.target.style.background="rgba(35,131,226,0.06)"} onBlur={e=>e.target.style.background="transparent"}/>{newText.trim()&&<button onClick={add} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:4,padding:"4px 10px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Add</button>}</div>)}</div>);
 }
 
 // ─── DOC UPLOAD ───────────────────────────────────────────────────────────────
