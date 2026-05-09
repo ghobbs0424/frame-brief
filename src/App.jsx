@@ -407,13 +407,13 @@ function IdeaCapture({ user, onBack }) {
   }
 
   function renameWorkspace(id, name) {
-    saveWorkspaces(workspaces.map(w => w.id === id ? { ...w, name } : w));
+    saveWorkspaces((workspaces||[]).map(w => w.id === id ? { ...w, name } : w));
     setEditingWsId(null);
   }
 
   function deleteWorkspace(id) {
     if (!window.confirm("Delete this workspace and all its ideas?")) return;
-    const updated = workspaces.filter(w => w.id !== id);
+    const updated = (workspaces||[]).filter(w => w.id !== id);
     saveWorkspaces(updated);
     const newIdeas = { ...ideas }; delete newIdeas[id]; saveIdeas(newIdeas);
     if (activeWs === id) setActiveWs(updated[0]?.id || "");
@@ -480,7 +480,7 @@ ${text}` }] })
   function WorkspaceSidebarContent() {
     return (<>
       <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#c4c3bf", textTransform: "uppercase", letterSpacing: "0.1em", padding: "0 10px", marginBottom: 8 }}>Workspaces</div>
-      {workspaces.map(w => (
+      {(workspaces||[]).map(w => (
         <div key={w.id} style={{ position: "relative" }}>
           {editingWsId === w.id ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px" }}>
@@ -579,7 +579,7 @@ ${text}` }] })
                 <span style={{ fontSize: 28 }}>{ws.emoji}</span>
                 <h1 style={{ fontSize: 24, fontWeight: 700, color: "#37352f", letterSpacing: "-0.02em" }}>{ws.name}</h1>
               </div>
-              <p style={{ fontSize: 13, color: "#9b9a97", marginBottom: 24, fontStyle: "italic" }}>{wsIdeas.length} idea{wsIdeas.length !== 1 ? "s" : ""}</p>
+              <p style={{ fontSize: 13, color: "#9b9a97", marginBottom: 24, fontStyle: "italic" }}>{(wsIdeas||[]).length} idea{(wsIdeas||[]).length !== 1 ? "s" : ""}</p>
 
               {/* Input */}
               <div style={{ background: "#fafaf9", border: "1px solid #e8e4dc", borderRadius: 10, padding: "16px", marginBottom: 24 }}>
@@ -604,14 +604,14 @@ AI will generate a full creative brief with script, shot list, locations, and to
               </div>
 
               {/* Ideas list */}
-              {wsIdeas.length === 0 ? (
+              {(wsIdeas||[]).length === 0 ? (
                 <div style={{ textAlign: "center", padding: "60px 20px", color: "#c4c3bf" }}>
                   <div style={{ fontSize: 40, marginBottom: 12 }}>{ws.emoji}</div>
                   <p style={{ fontSize: 14, fontStyle: "italic" }}>No ideas yet. Speak or type above — AI will build a full brief for you.</p>
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  {wsIdeas.map(idea => (
+                  {(wsIdeas||[]).map(idea => (
                     <div key={idea.id} onClick={() => idea.brief && setOpenIdea(idea.id)}
                       style={{ border: "1px solid #f1f0ef", borderRadius: 10, padding: "16px 18px", background: "#fafaf9", cursor: idea.brief ? "pointer" : "default", transition: "all .15s" }}
                       onMouseEnter={e => idea.brief && (e.currentTarget.style.background = "#f0ede8", e.currentTarget.style.borderColor = "#e0ddd8")}
