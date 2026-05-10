@@ -481,6 +481,8 @@ ${text}` }] })
   const ws = workspaces.find(w => w.id === activeWs);
   const wsIdeas = ideas[activeWs] || [];
 
+  const [ideaSidebarOpen, setIdeaSidebarOpen] = useState(false);
+
   // If viewing an idea, show full page
   if (openIdea) {
     const ideaData = wsIdeas.find(i => i.id === openIdea);
@@ -488,8 +490,6 @@ ${text}` }] })
       <IdeaPage idea={ideaData} onBack={() => setOpenIdea(null)} onUpdate={updateIdea} />
     );
   }
-
-  const [ideaSidebarOpen, setIdeaSidebarOpen] = useState(false);
 
   // Sidebar content shared between desktop + mobile drawer
   function WorkspaceSidebarContent() {
