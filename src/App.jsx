@@ -568,7 +568,7 @@ ${text}` }] })
       {/* Header */}
       <div style={{ borderBottom: "1px solid #f1f0ef", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden", minWidth: 0 }}>
-          <button className="mobile-hamburger" onClick={e => { e.stopPropagation(); setIdeaSidebarOpen(true); }} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 6px", color: "#37352f", flexShrink: 0 }}>☰</button>
+          <button className="mobile-hamburger" onClick={e => { e.stopPropagation(); if(window.innerWidth<=768)setIdeaSidebarOpen(true); }} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 6px", color: "#37352f", flexShrink: 0 }}>☰</button>
           <button onClick={onBack} style={{ background: "none", border: "none", color: "#9b9a97", cursor: "pointer", fontSize: 13, fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>← Dashboard</button>
           <span style={{ color: "#e8e4dc", flexShrink: 0 }}>·</span>
           <span style={{ fontSize: 16, flexShrink: 0 }}>💡</span>
@@ -905,7 +905,10 @@ function FrameBriefApp(){
   useEffect(()=>{
     supabase.auth.getSession().then(({data:{session}})=>{setUser(session?.user??null);setAuthLoading(false);});
     const{data:{subscription}}=supabase.auth.onAuthStateChange((_event,session)=>{setUser(session?.user??null);});
-    return()=>subscription.unsubscribe();
+    // Close mobile drawer if window resizes to desktop
+    const handleResize = () => { if(window.innerWidth > 768){setSidebarOpen(false);} };
+    window.addEventListener('resize', handleResize);
+    return()=>{ subscription.unsubscribe(); window.removeEventListener('resize', handleResize); };
   },[]);
 
   useEffect(()=>{if(user)loadProjects();},[user]);
@@ -1100,7 +1103,7 @@ function FrameBriefApp(){
       <div className={`sidebar-drawer ${sidebarOpen?"show":""}`}>{SidebarContent()}</div>
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.97)",backdropFilter:"blur(10px)",flexShrink:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:8,overflow:"hidden",minWidth:0}}>
-          <button className="mobile-hamburger" onClick={()=>setSidebarOpen(true)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"2px 6px",color:"#37352f",flexShrink:0}}>☰</button>
+          <button className="mobile-hamburger" onClick={()=>{if(window.innerWidth<=768)setSidebarOpen(true);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"2px 6px",color:"#37352f",flexShrink:0}}>☰</button>
           <button onClick={()=>setScreen("dashboard")} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>← Projects</button>
           <span style={{color:"#e8e4dc",flexShrink:0}}>·</span>
           <span style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{brief.projectTitle}</span>
