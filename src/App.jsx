@@ -743,7 +743,7 @@ function DocUpload({docs,onAdd,onRemove}){
 }
 
 // ─── OVERVIEW PAGE ────────────────────────────────────────────────────────────
-function OverviewPage({brief,setBrief,goTo,readonly,projectId,onBotStarted,recallStatus}){
+function OverviewPage({brief,setBrief,goTo,readonly}){
   const set=(k,v)=>setBrief(b=>({...b,[k]:v}));
   const upArr=(k,i,v)=>setBrief(b=>{const a=[...(b[k]||[])];a[i]=v;return{...b,[k]:a};});
   const delArr=(k,i)=>setBrief(b=>({...b,[k]:(b[k]||[]).filter((_,j)=>j!==i)}));
@@ -752,7 +752,6 @@ function OverviewPage({brief,setBrief,goTo,readonly,projectId,onBotStarted,recal
   return(
     <div style={{maxWidth:760,padding:"40px 24px 120px",margin:"0 auto"}}>
       <div style={{fontSize:48,marginBottom:10}}>{brief.coverEmoji||"🎬"}</div>
-      {!readonly&&<MeetingBotPanel projectId={projectId} onBotStarted={onBotStarted} recallStatus={recallStatus}/>}
       {readonly?<h1 style={{fontSize:34,fontWeight:700,letterSpacing:"-0.025em",margin:"0 0 8px",color:"#37352f",lineHeight:1.2}}>{brief.projectTitle}</h1>:<h1 contentEditable suppressContentEditableWarning onBlur={e=>set("projectTitle",e.target.innerText)} style={{fontSize:34,fontWeight:700,letterSpacing:"-0.025em",margin:"0 0 8px",outline:"none",color:"#37352f",lineHeight:1.2}}>{brief.projectTitle}</h1>}
       <div style={{fontSize:15,color:"#9b9a97",fontStyle:"italic",marginBottom:20,lineHeight:1.6}}>{readonly?<p style={{margin:0}}>{brief.logline}</p>:<Editable value={brief.logline} onChange={v=>set("logline",v)} placeholder="Project logline…"/>}</div>
       <div style={{border:"1px solid #f1f0ef",borderRadius:10,overflow:"hidden",marginBottom:28}}>
@@ -918,26 +917,47 @@ function MeetingBotPanel({ projectId, onBotStarted, recallStatus }) {
 function Dashboard({projects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas}){
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
+  const[sidebarOpen,setSidebarOpen]=useState(true);
   const filtered=[...projects].filter(p=>{const q=search.toLowerCase();const ms=!q||[p.title,p.client_name,p.brief?.projectType].some(s=>s?.toLowerCase().includes(q));return ms&&(filter==="All"||p.status===filter);}).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
+
+  function DashSidebar(){return(<>
+    <button onClick={()=>setSidebarOpen(false)} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"10px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,color:"#9b9a97",fontFamily:"'Lora',serif",borderBottom:"1px solid #f1f0ef",marginBottom:16}}>← Close Menu</button>
+    <div style={{padding:"0 10px"}}>
+      <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:12}}>Navigation</div>
+      <button onClick={onNew} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 10px",border:"none",background:"#37352f",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}>🎬 <span>New Brief</span></button>
+      <button onClick={onIdeas} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💡</span><span>Idea Capture</span></button>
+      <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Account</div>
+      <div style={{fontSize:12,color:"#9b9a97",padding:"4px 10px",marginBottom:8,lineHeight:1.5,wordBreak:"break-all"}}>{user?.email}</div>
+      <button onClick={onSignOut} className="nb"><span style={{fontSize:15}}>🚪</span><span>Sign Out</span></button>
+    </div>
+  </>);}
+
   return(
-    <div style={{minHeight:"100vh",background:"#fff"}}>
-      <div style={{borderBottom:"1px solid #f1f0ef",padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:20}}>🎬</span><span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#37352f",fontWeight:500,letterSpacing:"0.08em"}}>FRAME BRIEF</span></div>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <button onClick={onIdeas} style={{background:"none",border:"1px solid #e8e4dc",color:"#37352f",padding:"8px 14px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>💡 Ideas</button>
-          <button onClick={onNew} style={{background:"#37352f",color:"#fff",border:"none",padding:"9px 18px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ New Brief</button>
-          <button onClick={onSignOut} style={{background:"none",border:"1px solid #e8e4dc",color:"#9b9a97",padding:"8px 14px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer"}}>Sign Out</button>
+    <div style={{minHeight:"100vh",background:"#fff",display:"flex",flexDirection:"column"}}>
+      {/* Header */}
+      <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <button onClick={()=>setSidebarOpen(o=>!o)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"2px 6px",color:"#37352f"}}>☰</button>
+          <span style={{fontSize:18}}>🎬</span>
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#37352f",fontWeight:500,letterSpacing:"0.08em"}}>FRAME BRIEF</span>
         </div>
+        <button onClick={onNew} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ New Brief</button>
       </div>
-      <div style={{maxWidth:900,margin:"0 auto",padding:"36px 20px"}}>
-        <h1 style={{fontSize:28,fontWeight:700,color:"#37352f",marginBottom:4,letterSpacing:"-0.02em"}}>Projects</h1>
-        <p style={{fontSize:13,color:"#9b9a97",marginBottom:28,fontStyle:"italic"}}>Signed in as {user?.email}</p>
-        <div style={{display:"flex",gap:10,marginBottom:24,flexWrap:"wrap"}}>
-          <div style={{flex:1,minWidth:200,position:"relative"}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#9b9a97"}}>🔍</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search projects…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px 10px 36px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",background:"#fafaf9",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/></div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["All",...STATUSES].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"8px 12px",borderRadius:20,border:"1px solid",borderColor:filter===s?"#37352f":"#e8e4dc",background:filter===s?"#37352f":"transparent",color:filter===s?"#fff":"#9b9a97",fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>{s}</button>)}</div>
+
+      <div style={{display:"flex",flex:1,overflow:"hidden",minHeight:"calc(100vh - 53px)"}}>
+        {/* Collapsible sidebar */}
+        {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",background:"#fafaf9",flexShrink:0,overflowY:"auto"}}>{DashSidebar()}</div>}
+
+        {/* Main content */}
+        <div style={{flex:1,overflowY:"auto",padding:"32px 24px"}}>
+          <h1 style={{fontSize:26,fontWeight:700,color:"#37352f",marginBottom:20,letterSpacing:"-0.02em"}}>Projects</h1>
+          <div style={{display:"flex",gap:10,marginBottom:24,flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:180,position:"relative"}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#9b9a97"}}>🔍</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search projects…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px 10px 36px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",background:"#fafaf9",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/></div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["All",...STATUSES].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"7px 12px",borderRadius:20,border:"1px solid",borderColor:filter===s?"#37352f":"#e8e4dc",background:filter===s?"#37352f":"transparent",color:filter===s?"#fff":"#9b9a97",fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>{s}</button>)}</div>
+          </div>
+          {filtered.length===0?(<div style={{textAlign:"center",padding:"60px 20px"}}><div style={{fontSize:44,marginBottom:14}}>🎬</div><p style={{fontSize:17,fontWeight:600,color:"#37352f",marginBottom:8}}>{search||filter!=="All"?"No projects match":"No projects yet"}</p><p style={{fontSize:14,color:"#9b9a97",marginBottom:20}}>{search||filter!=="All"?"Try different filters":"Create your first production brief."}</p>{!search&&filter==="All"&&<button onClick={onNew} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer"}}>+ Create First Brief</button>}</div>)
+          :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))",gap:14}}>{filtered.map(p=>(<div key={p.id} onClick={()=>onOpen(p)} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"18px",background:"#fafaf9",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#f0ede8";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fafaf9";e.currentTarget.style.borderColor="#f1f0ef";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><div style={{display:"flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}><StatusBadge status={p.status} onChange={s=>onStatusChange(p.id,s)}/><button onClick={e=>{e.stopPropagation();if(window.confirm("Delete this project?"))onDelete(p.id);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"2px 4px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>🗑</button></div></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{arr(p.brief?.concepts).map((c,i)=><span key={i} style={{fontSize:11,background:"#f1f0ef",borderRadius:20,padding:"2px 8px",color:"#9b9a97"}}>{c.emoji} {c.title}</span>)}</div>{p.doc_count>0&&<div style={{fontSize:11,color:"#9b9a97",marginBottom:4}}>📎 {p.doc_count} doc{p.doc_count>1?"s":""}</div>}<div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div>)}
         </div>
-        {filtered.length===0?(<div style={{textAlign:"center",padding:"60px 20px"}}><div style={{fontSize:44,marginBottom:14}}>🎬</div><p style={{fontSize:17,fontWeight:600,color:"#37352f",marginBottom:8}}>{search||filter!=="All"?"No projects match":"No projects yet"}</p><p style={{fontSize:14,color:"#9b9a97",marginBottom:20}}>{search||filter!=="All"?"Try different filters":"Create your first production brief."}</p>{!search&&filter==="All"&&<button onClick={onNew} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer"}}>+ Create First Brief</button>}</div>)
-        :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))",gap:14}}>{filtered.map(p=>(<div key={p.id} onClick={()=>onOpen(p)} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"18px",background:"#fafaf9",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#f0ede8";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fafaf9";e.currentTarget.style.borderColor="#f1f0ef";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><div style={{display:"flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}><StatusBadge status={p.status} onChange={s=>onStatusChange(p.id,s)}/><button onClick={e=>{e.stopPropagation();if(window.confirm("Delete this project?"))onDelete(p.id);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"2px 4px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>🗑</button></div></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{arr(p.brief?.concepts).map((c,i)=><span key={i} style={{fontSize:11,background:"#f1f0ef",borderRadius:20,padding:"2px 8px",color:"#9b9a97"}}>{c.emoji} {c.title}</span>)}</div>{p.doc_count>0&&<div style={{fontSize:11,color:"#9b9a97",marginBottom:4}}>📎 {p.doc_count} doc{p.doc_count>1?"s":""}</div>}<div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div>)}
       </div>
     </div>
   );
@@ -1186,7 +1206,12 @@ function FrameBriefApp(){
     <div style={{minHeight:"100vh",background:"#fff"}}><style>{CSS}</style>
       <div style={{maxWidth:660,margin:"0 auto",padding:"36px 20px 80px"}}>
         <button onClick={()=>setScreen("dashboard")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",marginBottom:36,display:"flex",alignItems:"center",gap:6}}>← All Projects</button>
-        <div style={{textAlign:"center",marginBottom:36}}><div style={{fontSize:44,marginBottom:10}}>🎬</div><h1 style={{fontSize:32,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em",marginBottom:10}}>New Brief</h1><p style={{color:"#9b9a97",fontSize:14,fontStyle:"italic",lineHeight:1.6}}>Paste your meeting notes. Each deliverable gets its own concept page.</p></div>
+        <div style={{textAlign:"center",marginBottom:36}}><div style={{fontSize:44,marginBottom:10}}>🎬</div><h1 style={{fontSize:32,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em",marginBottom:10}}>New Brief</h1><p style={{color:"#9b9a97",fontSize:14,fontStyle:"italic",lineHeight:1.6}}>Paste your meeting notes or send a bot to your live meeting.</p></div>
+        <MeetingBotPanel projectId={null} onBotStarted={(botId)=>{
+          const newProject={id:crypto.randomUUID(),user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,recall_bot_id:botId,recall_status:"bot_joined",created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+          saveProject(newProject).then(saved=>{setActiveProject(saved||newProject);setPage("overview");setScreen("doc");});
+        }} recallStatus={null}/>
+        <div style={{display:"flex",alignItems:"center",gap:12,margin:"20px 0"}}><div style={{flex:1,height:1,background:"#f1f0ef"}}/><span style={{fontSize:12,color:"#c4c3bf"}}>or paste notes manually</span><div style={{flex:1,height:1,background:"#f1f0ef"}}/></div>
         {errMsg&&<div style={{background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#c0392b",lineHeight:1.65}}><strong>Error:</strong> {errMsg}</div>}
         <div style={{border:`1px solid ${transcript.length>=HARD_LIMIT?"#ffc9c9":transcript.length>STANDARD_LIMIT?"#fde8c8":"#e8e4dc"}`,borderRadius:10,padding:"20px",marginBottom:14,background:"#fafaf9"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -1224,7 +1249,7 @@ function FrameBriefApp(){
           {dbSaving&&<span style={{fontSize:11,color:"#c4c3bf",fontStyle:"italic",flexShrink:0}}>Saving…</span>}
         </div>
         <div style={{display:"flex",gap:6,flexShrink:0}}>
-          <button className="tbtn hide-on-mobile" onClick={()=>{navigator.clipboard.writeText(window.location.href).catch(()=>{});setCopied(true);setTimeout(()=>setCopied(false),2000);}}>{copied?"✓ Copied!":"🔗 Share"}</button>
+          <button className="tbtn" onClick={()=>{navigator.clipboard.writeText(window.location.href).catch(()=>{});setCopied(true);setTimeout(()=>setCopied(false),2000);}}>{copied?"✓ Copied!":"🔗 Share"}</button>
           <button className="tbtn" onClick={()=>setShareMode(true)}>👁 Client</button>
           <button className={`tbtn ${chatOpen?"on":""}`} onClick={()=>setChatOpen(o=>!o)}>{chatOpen?"✕ AI":"✦ AI"}</button>
         </div>
@@ -1232,7 +1257,7 @@ function FrameBriefApp(){
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
-          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} projectId={activeProject?.id} onBotStarted={botId=>updateRecallStatus(activeProject?.id,botId,"bot_joined")} recallStatus={activeProject?.recall_status}/>}
+          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
         </div>
         {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}} className="hide-on-mobile"><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div>}
