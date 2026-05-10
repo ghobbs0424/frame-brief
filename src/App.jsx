@@ -562,7 +562,7 @@ ${text}` }] })
       <div className={`sidebar-overlay ${ideaSidebarOpen ? "show" : ""}`} onClick={e => { e.stopPropagation(); setIdeaSidebarOpen(false); }} />
       <div className={`sidebar-drawer ${ideaSidebarOpen ? "show" : ""}`} onClick={e => e.stopPropagation()}>
         <button onClick={() => setIdeaSidebarOpen(false)} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif", borderBottom: "1px solid #f1f0ef", marginBottom: 8 }}>← Close Menu</button>
-        <WorkspaceSidebarContent />
+        {WorkspaceSidebarContent()}
       </div>
 
       {/* Header */}
@@ -581,7 +581,7 @@ ${text}` }] })
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         {/* Desktop sidebar */}
         <div className="desktop-sidebar" style={{ width: 220, borderRight: "1px solid #f1f0ef", padding: "16px 10px", background: "#fafaf9", flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-          <WorkspaceSidebarContent />
+          {WorkspaceSidebarContent()}
         </div>
 
         {/* Main content */}
@@ -1097,7 +1097,7 @@ function FrameBriefApp(){
   if(screen==="doc"&&brief)return(
     <div style={{height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden"}}><style>{CSS}</style>
       <div className={`sidebar-overlay ${sidebarOpen?"show":""}`} onClick={()=>setSidebarOpen(false)}/>
-      <div className={`sidebar-drawer ${sidebarOpen?"show":""}`}><SidebarContent/></div>
+      <div className={`sidebar-drawer ${sidebarOpen?"show":""}`}>{SidebarContent()}</div>
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.97)",backdropFilter:"blur(10px)",flexShrink:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:8,overflow:"hidden",minWidth:0}}>
           <button className="mobile-hamburger" onClick={()=>setSidebarOpen(true)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"2px 6px",color:"#37352f",flexShrink:0}}>☰</button>
@@ -1114,7 +1114,7 @@ function FrameBriefApp(){
         </div>
       </div>
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-        <div className="desktop-sidebar" style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0}}><SidebarContent/></div>
+        <div className="desktop-sidebar" style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0}}>{SidebarContent()}</div>
         <div style={{flex:1,overflowY:"auto"}}>
           {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
