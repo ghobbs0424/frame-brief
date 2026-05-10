@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const MODEL = "claude-sonnet-4-6";
@@ -31,6 +31,39 @@ Create one concept per deliverable. Generate 3-5 clientActionItems (things the c
 
 Return exactly this structure:
 {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[{"name":"","description":""}],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":""}]}`;
+
+// ─── SAFETY HELPERS ──────────────────────────────────────────────────────────
+// arr() always returns an array — prevents "reading 'length' of undefined"
+const arr = (x) => Array.isArray(x) ? x : [];
+// Safe object access
+const obj = (x) => (x && typeof x === "object" && !Array.isArray(x)) ? x : {};
+
+// ─── ERROR BOUNDARY ──────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  componentDidCatch(e, info) { console.error("Frame Brief error:", e, info); }
+  render() {
+    if (this.state.error) return (
+      <div style={{ minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center", flexDirection:"column", gap:16, padding:40, fontFamily:"Georgia, serif" }}>
+        <div style={{ fontSize:40 }}>⚠️</div>
+        <h2 style={{ fontSize:20, fontWeight:700, color:"#37352f" }}>Something went wrong</h2>
+        <p style={{ fontSize:14, color:"#9b9a97", maxWidth:400, textAlign:"center", lineHeight:1.7 }}>
+          {this.state.error?.message || "An unexpected error occurred."}
+        </p>
+        <button onClick={() => { localStorage.clear(); this.setState({ error: null }); window.location.reload(); }}
+          style={{ background:"#37352f", color:"#fff", border:"none", padding:"10px 24px", borderRadius:6, fontSize:14, cursor:"pointer", fontFamily:"inherit" }}>
+          Clear data &amp; reload
+        </button>
+        <button onClick={() => this.setState({ error: null })}
+          style={{ background:"transparent", color:"#9b9a97", border:"1px solid #e8e4dc", padding:"10px 24px", borderRadius:6, fontSize:14, cursor:"pointer", fontFamily:"inherit" }}>
+          Try again
+        </button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
 
 const readText = (f) => new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(f);});
 const readB64 = (f) => new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(f);});
@@ -838,7 +871,7 @@ function Dashboard({projects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["All",...STATUSES].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"8px 12px",borderRadius:20,border:"1px solid",borderColor:filter===s?"#37352f":"#e8e4dc",background:filter===s?"#37352f":"transparent",color:filter===s?"#fff":"#9b9a97",fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>{s}</button>)}</div>
         </div>
         {filtered.length===0?(<div style={{textAlign:"center",padding:"60px 20px"}}><div style={{fontSize:44,marginBottom:14}}>🎬</div><p style={{fontSize:17,fontWeight:600,color:"#37352f",marginBottom:8}}>{search||filter!=="All"?"No projects match":"No projects yet"}</p><p style={{fontSize:14,color:"#9b9a97",marginBottom:20}}>{search||filter!=="All"?"Try different filters":"Create your first production brief."}</p>{!search&&filter==="All"&&<button onClick={onNew} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer"}}>+ Create First Brief</button>}</div>)
-        :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))",gap:14}}>{filtered.map(p=>(<div key={p.id} onClick={()=>onOpen(p)} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"18px",background:"#fafaf9",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#f0ede8";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fafaf9";e.currentTarget.style.borderColor="#f1f0ef";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><div style={{display:"flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}><StatusBadge status={p.status} onChange={s=>onStatusChange(p.id,s)}/><button onClick={e=>{e.stopPropagation();if(window.confirm("Delete this project?"))onDelete(p.id);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"2px 4px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>🗑</button></div></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{(p.brief?.concepts||[]).map((c,i)=><span key={i} style={{fontSize:11,background:"#f1f0ef",borderRadius:20,padding:"2px 8px",color:"#9b9a97"}}>{c.emoji} {c.title}</span>)}</div>{p.doc_count>0&&<div style={{fontSize:11,color:"#9b9a97",marginBottom:4}}>📎 {p.doc_count} doc{p.doc_count>1?"s":""}</div>}<div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div>)}
+        :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))",gap:14}}>{filtered.map(p=>(<div key={p.id} onClick={()=>onOpen(p)} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"18px",background:"#fafaf9",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#f0ede8";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fafaf9";e.currentTarget.style.borderColor="#f1f0ef";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><div style={{display:"flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}><StatusBadge status={p.status} onChange={s=>onStatusChange(p.id,s)}/><button onClick={e=>{e.stopPropagation();if(window.confirm("Delete this project?"))onDelete(p.id);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"2px 4px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>🗑</button></div></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{arr(p.brief?.concepts).map((c,i)=><span key={i} style={{fontSize:11,background:"#f1f0ef",borderRadius:20,padding:"2px 8px",color:"#9b9a97"}}>{c.emoji} {c.title}</span>)}</div>{p.doc_count>0&&<div style={{fontSize:11,color:"#9b9a97",marginBottom:4}}>📎 {p.doc_count} doc{p.doc_count>1?"s":""}</div>}<div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div>)}
       </div>
     </div>
   );
@@ -874,7 +907,7 @@ function AIChatPanel({chatLog,onSend,busy,onClose}){
 }
 
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
-export default function FrameBrief(){
+function FrameBriefApp(){
   const[user,setUser]=useState(null);
   const[authLoading,setAuthLoading]=useState(true);
   const[screen,setScreen]=useState("dashboard");
@@ -991,7 +1024,7 @@ export default function FrameBrief(){
 
   function addConcept(){
     const blank={id:`c-${Date.now()}`,emoji:"🎬",title:"New Concept",type:"",logline:"",description:"",moodKeywords:[],inspiration:[],locations:[],lighting:{style:"",description:"",technical:""},colorHex:["#f5f0e8","#d4c5a9","#8b7355"],colorDescription:"",wardrobe:[],wardrobeNotes:"",props:[],shotList:[],script:{hook:"",act1:"",act2:"",act3:"",cta:""},deliverableFormat:"",directorNotes:""};
-    const idx=(brief?.concepts||[]).length;
+    const idx=arr(brief?.concepts).length;
     setBrief(b=>({...b,concepts:[...(b.concepts||[]),blank]}));
     setPage(`concept-${idx}`);setSidebarOpen(false);
   }
@@ -1005,9 +1038,9 @@ export default function FrameBrief(){
       <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",padding:"0 10px",marginBottom:4}}>Project</div>
       <button className={`nb ${page==="overview"?"on":""}`} onClick={()=>{setPage("overview");setSidebarOpen(false);}}><span style={{fontSize:15,flexShrink:0}}>📁</span><span>Overview</span></button>
       <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",padding:"14px 10px 4px"}}>Concepts</div>
-      {(brief?.concepts||[]).map((c,i)=>(<button key={i} className={`nb ${page===`concept-${i}`?"on":""}`} onClick={()=>{setPage(`concept-${i}`);setSidebarOpen(false);}}><span style={{fontSize:15,flexShrink:0}}>{c.emoji||"🎬"}</span><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{c.title||`Concept ${i+1}`}</span></button>))}
+      {arr(brief?.concepts).map((c,i)=>(<button key={i} className={`nb ${page===`concept-${i}`?"on":""}`} onClick={()=>{setPage(`concept-${i}`);setSidebarOpen(false);}}><span style={{fontSize:15,flexShrink:0}}>{c.emoji||"🎬"}</span><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{c.title||`Concept ${i+1}`}</span></button>))}
       <button onClick={addConcept} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#9b9a97",fontFamily:"'Lora',serif",marginTop:6,borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add Concept</button>
-      {((brief?.clientActionItems?.length||0)+(brief?.internalTodos?.length||0))>0&&(<div style={{marginTop:16,padding:"12px 10px",borderTop:"1px solid #f1f0ef"}}><div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Progress</div>{brief.clientActionItems?.length>0&&(<div style={{marginBottom:6}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>✅ Client</span><span>{(brief.clientActionItems||[]).filter(t=>t.done).length}/{(brief.clientActionItems||[]).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#1e7e34",width:`${((brief.clientActionItems||[]).filter(t=>t.done).length/(brief.clientActionItems||[]).length)*100}%`,transition:"width .3s"}}/></div></div>)}{brief.internalTodos?.length>0&&(<div><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>🔒 Team</span><span>{(brief.internalTodos||[]).filter(t=>t.done).length}/{(brief.internalTodos||[]).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#e97942",width:`${((brief.internalTodos||[]).filter(t=>t.done).length/(brief.internalTodos||[]).length)*100}%`,transition:"width .3s"}}/></div></div>)}</div>)}
+      {((brief?.clientActionItems?.length||0)+(brief?.internalTodos?.length||0))>0&&(<div style={{marginTop:16,padding:"12px 10px",borderTop:"1px solid #f1f0ef"}}><div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Progress</div>{brief.clientActionItems?.length>0&&(<div style={{marginBottom:6}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>✅ Client</span><span>{arr(brief.clientActionItems).filter(t=>t.done).length}/{arr(brief.clientActionItems).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#1e7e34",width:`${(arr(brief.clientActionItems).filter(t=>t.done).length/arr(brief.clientActionItems).length)*100}%`,transition:"width .3s"}}/></div></div>)}{brief.internalTodos?.length>0&&(<div><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>🔒 Team</span><span>{arr(brief.internalTodos).filter(t=>t.done).length}/{arr(brief.internalTodos).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#e97942",width:`${(arr(brief.internalTodos).filter(t=>t.done).length/arr(brief.internalTodos).length)*100}%`,transition:"width .3s"}}/></div></div>)}</div>)}
     </>);
   }
 
@@ -1043,7 +1076,7 @@ export default function FrameBrief(){
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         <div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0}} className="hide-on-mobile">
           <button className={`nb ${page==="overview"?"on":""}`} onClick={()=>setPage("overview")}><span style={{fontSize:15}}>📁</span><span>Overview</span></button>
-          {(brief?.concepts||[]).map((c,i)=><button key={i} className={`nb ${page===`concept-${i}`?"on":""}`} onClick={()=>setPage(`concept-${i}`)}><span style={{fontSize:15}}>{c.emoji}</span><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{c.title}</span></button>)}
+          {arr(brief?.concepts).map((c,i)=><button key={i} className={`nb ${page===`concept-${i}`?"on":""}`} onClick={()=>setPage(`concept-${i}`)}><span style={{fontSize:15}}>{c.emoji}</span><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{c.title}</span></button>)}
         </div>
         <div style={{flex:1,overflowY:"auto"}}>
           {page==="overview"&&<OverviewPage brief={brief} setBrief={()=>{}} goTo={setPage} readonly/>}
@@ -1118,4 +1151,8 @@ export default function FrameBrief(){
   );
 
   return null;
+
+
+export default function FrameBrief() {
+  return <ErrorBoundary><FrameBriefApp /></ErrorBoundary>;
 }
