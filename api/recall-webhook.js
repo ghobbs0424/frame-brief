@@ -1,6 +1,7 @@
 // api/recall-webhook.js
-// Vercel serverless function - receives transcripts from Recall.ai
-// Deploy this file to your repo at: api/recall-webhook.js
+// Handles both:
+// POST /api/recall-webhook?action=create-bot  → creates a Recall bot (called from browser)
+// POST /api/recall-webhook                    → receives transcript webhook (called from Recall.ai)
 
 import { createClient } from "@supabase/supabase-js";
 
@@ -9,25 +10,83 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_KEY
 );
 
+const RECALL_KEY = process.env.RECALL_API_KEY;
+const RECALL_REGION = "us-west-2";
+
 export default async function handler(req, res) {
+  // Allow CORS from your app
+  res.setHeader("Access-Control-Allow-Origin", "https://frame-brief.vercel.app");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const event = req.body;
-    console.log("Recall webhook received:", event?.event, event?.data?.bot_id);
+    // ── Route 1: Create bot (called from browser) ──────────────────────────
+    if (req.query.action === "create-bot") {
+      const { meetingUrl, projectId } = req.body;
 
-    // Only process transcript ready events
-    if (event?.event !== "bot.transcription_complete" && 
-        event?.event !== "bot.done") {
+      if (!meetingUrl) {
+        return res.status(400).json({ error: "meetingUrl is required" });
+      }
+
+      const webhookUrl = `https://frame-brief.vercel.app/api/recall-webhook`;
+
+      const recallRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/bot/`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Token ${RECALL_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          meeting_url: meetingUrl,
+          bot_name: "Frame Brief",
+          transcription_options: { provider: "assembly_ai" },
+          webhook_url: webhookUrl,
+        }),
+      });
+
+      const botData = await recallRes.json();
+
+      if (!recallRes.ok) {
+        console.error("Recall API error:", botData);
+        return res.status(recallRes.status).json({ 
+          error: botData?.message || botData?.detail || "Failed to create bot" 
+        });
+      }
+
+      // If a projectId was passed, save the bot ID to that project
+      if (projectId) {
+        await supabase.from("projects").update({
+          recall_bot_id: botData.id,
+          recall_status: "bot_joined",
+          updated_at: new Date().toISOString(),
+        }).eq("id", projectId);
+      }
+
+      return res.status(200).json({ botId: botData.id, status: botData.status });
+    }
+
+    // ── Route 2: Receive transcript from Recall.ai webhook ─────────────────
+    const event = req.body;
+    console.log("Recall webhook event:", event?.event, event?.data?.bot_id);
+
+    // Only process completion events
+    const completionEvents = ["bot.done", "bot.transcription_complete", "transcript.done"];
+    if (!completionEvents.includes(event?.event)) {
       return res.status(200).json({ ok: true, skipped: true });
     }
 
     const botId = event?.data?.bot_id;
     if (!botId) return res.status(200).json({ ok: true });
 
-    // Look up which project this bot belongs to
+    // Find which project this bot belongs to
     const { data: project } = await supabase
       .from("projects")
       .select("*")
@@ -39,54 +98,56 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // Fetch the full transcript from Recall.ai
+    // Fetch the transcript from Recall.ai
     const transcriptRes = await fetch(
-      `https://us-west-2.recall.ai/api/v1/bot/${botId}/transcript`,
+      `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/transcript`,
       {
         headers: {
-          Authorization: `Token ${process.env.RECALL_API_KEY}`,
+          Authorization: `Token ${RECALL_KEY}`,
           "Content-Type": "application/json",
         },
       }
     );
 
     const transcriptData = await transcriptRes.json();
-    
-    // Build transcript text from words
+
+    // Build readable transcript text
     let transcriptText = "";
     if (Array.isArray(transcriptData)) {
       transcriptText = transcriptData
         .map(segment => {
           const speaker = segment.speaker || "Speaker";
-          const words = (segment.words || []).map(w => w.text).join(" ");
+          const words = arr(segment.words).map(w => w.text).join(" ");
           return `${speaker}: ${words}`;
         })
+        .filter(line => line.trim().length > 10)
         .join("\n\n");
-    } else if (transcriptData.transcript) {
+    } else if (transcriptData?.transcript) {
       transcriptText = transcriptData.transcript;
     }
 
     if (!transcriptText.trim()) {
-      console.log("Empty transcript for bot:", botId);
-      await supabase.from("projects").update({ 
+      await supabase.from("projects").update({
         recall_status: "empty_transcript",
         updated_at: new Date().toISOString()
       }).eq("id", project.id);
       return res.status(200).json({ ok: true });
     }
 
-    // Update project with transcript - mark as ready for brief generation
+    // Save transcript and mark ready
     await supabase.from("projects").update({
       recall_status: "transcript_ready",
       recall_transcript: transcriptText,
       updated_at: new Date().toISOString()
     }).eq("id", project.id);
 
-    console.log("Transcript saved for project:", project.id);
+    console.log("✅ Transcript saved for project:", project.id);
     return res.status(200).json({ ok: true });
 
   } catch (err) {
-    console.error("Webhook error:", err);
+    console.error("Webhook handler error:", err);
     return res.status(500).json({ error: err.message });
   }
 }
+
+function arr(x) { return Array.isArray(x) ? x : []; }
