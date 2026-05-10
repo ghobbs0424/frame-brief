@@ -561,7 +561,7 @@ ${text}` }] })
       {/* Mobile sidebar overlay + drawer */}
       <div className={`sidebar-overlay ${ideaSidebarOpen ? "show" : ""}`} onClick={e => { e.stopPropagation(); setIdeaSidebarOpen(false); }} />
       <div className={`sidebar-drawer ${ideaSidebarOpen ? "show" : ""}`} onClick={e => e.stopPropagation()}>
-        <button onClick={() => setIdeaSidebarOpen(false)} style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif", borderBottom: "1px solid #f1f0ef", marginBottom: 8 }}>← Close Menu</button>
+        <button onClick={() => setIdeaSidebarOpen(false)} className="mobile-only" style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif", borderBottom: "1px solid #f1f0ef", marginBottom: 8 }}>← Close Menu</button>
         {WorkspaceSidebarContent()}
       </div>
 
