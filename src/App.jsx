@@ -622,42 +622,40 @@ AI will generate a full creative brief with script, shot list, locations, and to
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   {(wsIdeas||[]).map(idea => (
                     <div key={idea.id} onClick={() => idea.brief && setOpenIdea(idea.id)}
-                      style={{ border: "1px solid #f1f0ef", borderRadius: 10, padding: "16px 18px", background: "#fafaf9", cursor: idea.brief ? "pointer" : "default", transition: "all .15s" }}
+                      style={{ border: "1px solid #f1f0ef", borderRadius: 10, padding: "18px", background: "#fafaf9", cursor: idea.brief ? "pointer" : "default", transition: "all .15s" }}
                       onMouseEnter={e => idea.brief && (e.currentTarget.style.background = "#f0ede8", e.currentTarget.style.borderColor = "#e0ddd8")}
                       onMouseLeave={e => (e.currentTarget.style.background = "#fafaf9", e.currentTarget.style.borderColor = "#f1f0ef")}>
-                      {generating === idea.id && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                          <div className="spin" style={{ width: 14, height: 14, border: "2px solid #e8e4dc", borderTop: "2px solid #37352f", borderRadius: "50%", flexShrink: 0 }} />
-                          <span style={{ fontSize: 12, color: "#9b9a97", fontStyle: "italic" }}>Building your creative brief…</span>
-                        </div>
-                      )}
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          {idea.brief ? (
-                            <>
-                              <div style={{ fontWeight: 700, fontSize: 15, color: "#37352f", marginBottom: 4 }}>{idea.brief.title || "Untitled"}</div>
-                              <div style={{ fontSize: 13, color: "#9b9a97", fontStyle: "italic", marginBottom: 8, lineHeight: 1.5 }}>{idea.brief.logline}</div>
-                              <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                                {idea.brief.format && <span style={{ fontSize: 11, background: "#f1f0ef", borderRadius: 20, padding: "2px 8px", color: "#9b9a97" }}>{idea.brief.format}</span>}
-                                {idea.brief.estimatedLength && <span style={{ fontSize: 11, background: "#f1f0ef", borderRadius: 20, padding: "2px 8px", color: "#9b9a97" }}>{idea.brief.estimatedLength}</span>}
-                                {(idea.brief.toDoList || []).length > 0 && <span style={{ fontSize: 11, background: "#e6f4ea", borderRadius: 20, padding: "2px 8px", color: "#1e7e34" }}>✅ {(idea.brief.toDoList||[]).filter(t => t.done).length}/{(idea.brief.toDoList||[]).length} tasks</span>}
-                                {(idea.brief.shotList || []).length > 0 && <span style={{ fontSize: 11, background: "#e8f0fe", borderRadius: 20, padding: "2px 8px", color: "#1a56c4" }}>🎥 {(idea.brief.shotList||[]).length} shots</span>}
-                              </div>
-                            </>
-                          ) : (
-                            <div style={{ fontSize: 14, color: "#55534e", lineHeight: 1.65 }}>{idea.rawText.length > 120 ? idea.rawText.slice(0, 120) + "…" : idea.rawText}</div>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-                          {idea.brief && <span style={{ fontSize: 11, background: "#eeece8", borderRadius: 20, padding: "3px 10px", color: "#9b9a97" }}>Open →</span>}
-                          <button onClick={e => { e.stopPropagation(); deleteIdea(idea.id); }} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 14, padding: "2px 4px" }}
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 }}>
+                        <span style={{ fontSize: 26 }}>{idea.brief ? "💡" : "✏️"}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={e => e.stopPropagation()}>
+                          {idea.brief && <span style={{ fontSize: 11, background: "#eeece8", borderRadius: 20, padding: "3px 10px", color: "#9b9a97", whiteSpace: "nowrap" }}>Open →</span>}
+                          <button onClick={e => { e.stopPropagation(); deleteIdea(idea.id); }} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
                             onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>🗑</button>
                         </div>
                       </div>
-                      <div style={{ fontSize: 11, color: "#c4c3bf", fontFamily: "'IBM Plex Mono',monospace", marginTop: 10 }}>
+                      {generating === idea.id && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <div className="spin" style={{ width: 13, height: 13, border: "2px solid #e8e4dc", borderTop: "2px solid #37352f", borderRadius: "50%", flexShrink: 0 }} />
+                          <span style={{ fontSize: 12, color: "#9b9a97", fontStyle: "italic" }}>Building your creative brief…</span>
+                        </div>
+                      )}
+                      {idea.brief ? (<>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: "#37352f", marginBottom: 4, lineHeight: 1.3 }}>{idea.brief.title || "Untitled"}</div>
+                        <div style={{ fontSize: 12, color: "#9b9a97", marginBottom: 8, lineHeight: 1.5, fontStyle: "italic" }}>{idea.brief.logline}</div>
+                        <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 8 }}>
+                          {idea.brief.format && <span style={{ fontSize: 11, background: "#f1f0ef", borderRadius: 20, padding: "2px 8px", color: "#9b9a97" }}>{idea.brief.format}</span>}
+                          {idea.brief.estimatedLength && <span style={{ fontSize: 11, background: "#f1f0ef", borderRadius: 20, padding: "2px 8px", color: "#9b9a97" }}>{idea.brief.estimatedLength}</span>}
+                          {(idea.brief.toDoList||[]).length > 0 && <span style={{ fontSize: 11, background: "#e6f4ea", borderRadius: 20, padding: "2px 8px", color: "#1e7e34" }}>✅ {(idea.brief.toDoList||[]).filter(t=>t.done).length}/{(idea.brief.toDoList||[]).length}</span>}
+                          {(idea.brief.shotList||[]).length > 0 && <span style={{ fontSize: 11, background: "#e8f0fe", borderRadius: 20, padding: "2px 8px", color: "#1a56c4" }}>🎥 {(idea.brief.shotList||[]).length} shots</span>}
+                        </div>
+                      </>) : (
+                        <div style={{ fontSize: 13, color: "#55534e", lineHeight: 1.65, marginBottom: 8 }}>{idea.rawText.length > 100 ? idea.rawText.slice(0, 100) + "…" : idea.rawText}</div>
+                      )}
+                      <div style={{ fontSize: 11, color: "#c4c3bf", fontFamily: "'IBM Plex Mono',monospace" }}>
                         {new Date(idea.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
                       </div>
                     </div>
+
                   ))}
                 </div>
               )}
