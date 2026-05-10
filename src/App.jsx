@@ -1151,7 +1151,7 @@ function FrameBriefApp(){
   );
 
   return null;
-
+}
 
 export default function FrameBrief() {
   return <ErrorBoundary><FrameBriefApp /></ErrorBoundary>;
