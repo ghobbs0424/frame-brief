@@ -481,7 +481,7 @@ ${text}` }] })
   const ws = workspaces.find(w => w.id === activeWs);
   const wsIdeas = ideas[activeWs] || [];
 
-  const [ideaSidebarOpen, setIdeaSidebarOpen] = useState(false);
+  const [ideaSidebarOpen, setIdeaSidebarOpen] = useState(true);
 
   // If viewing an idea, show full page
   if (openIdea) {
@@ -559,16 +559,10 @@ ${text}` }] })
       onClick={() => { setWsMenuOpen(null); setShowEmojiPicker(false); }}>
 
       {/* Mobile sidebar overlay + drawer */}
-      <div className={`sidebar-overlay ${ideaSidebarOpen ? "show" : ""}`} onClick={e => { e.stopPropagation(); setIdeaSidebarOpen(false); }} />
-      <div className={`sidebar-drawer ${ideaSidebarOpen ? "show" : ""}`} onClick={e => e.stopPropagation()}>
-        <button onClick={() => setIdeaSidebarOpen(false)} className="mobile-only" style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", padding: "10px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif", borderBottom: "1px solid #f1f0ef", marginBottom: 8 }}>← Close Menu</button>
-        {WorkspaceSidebarContent()}
-      </div>
 
-      {/* Header */}
       <div style={{ borderBottom: "1px solid #f1f0ef", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, overflow: "hidden", minWidth: 0 }}>
-          <button className="mobile-hamburger" onClick={e => { e.stopPropagation(); if(window.innerWidth<=768)setIdeaSidebarOpen(true); }} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 6px", color: "#37352f", flexShrink: 0 }}>☰</button>
+          <button onClick={e => { e.stopPropagation(); setIdeaSidebarOpen(true); }} style={{ background: "none", border: "none", fontSize: 20, cursor: "pointer", padding: "2px 6px", color: "#37352f", flexShrink: 0 }}>☰</button>
           <button onClick={onBack} style={{ background: "none", border: "none", color: "#9b9a97", cursor: "pointer", fontSize: 13, fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>← Dashboard</button>
           <span style={{ color: "#e8e4dc", flexShrink: 0 }}>·</span>
           <span style={{ fontSize: 16, flexShrink: 0 }}>💡</span>
@@ -580,9 +574,9 @@ ${text}` }] })
 
       <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
         {/* Desktop sidebar */}
-        <div className="desktop-sidebar" style={{ width: 220, borderRight: "1px solid #f1f0ef", padding: "16px 10px", background: "#fafaf9", flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+        {ideaSidebarOpen&&<div style={{ width: 220, borderRight: "1px solid #f1f0ef", padding: "16px 10px", background: "#fafaf9", flexShrink: 0, overflowY: "auto", display: "flex", flexDirection: "column" }}>
           {WorkspaceSidebarContent()}
-        </div>
+        </div>}
 
         {/* Main content */}
         <div style={{ flex: 1, overflowY: "auto", padding: "28px 24px 80px", maxWidth: 700 }}>
@@ -894,7 +888,7 @@ function FrameBriefApp(){
   const[loadMsg,setLoadMsg]=useState("Reading your transcript…");
   const[errMsg,setErrMsg]=useState("");
   const[shareMode,setShareMode]=useState(false);
-  const[sidebarOpen,setSidebarOpen]=useState(false);
+  const[sidebarOpen,setSidebarOpen]=useState(true);
   const[chatOpen,setChatOpen]=useState(false);
   const[chatLog,setChatLog]=useState([]);
   const[chatBusy,setChatBusy]=useState(false);
@@ -1012,7 +1006,7 @@ function FrameBriefApp(){
 
   function SidebarContent(){
     return(<>
-      <button onClick={()=>setSidebarOpen(false)} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"10px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,color:"#9b9a97",fontFamily:"'Lora',serif",borderBottom:"1px solid #f1f0ef",marginBottom:8}} className="mobile-only">← Close Menu</button>
+      <button onClick={()=>setSidebarOpen(false)} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"10px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,color:"#9b9a97",fontFamily:"'Lora',serif",borderBottom:"1px solid #f1f0ef",marginBottom:8}}>← Close Menu</button>
       <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",padding:"0 10px",marginBottom:4}}>Project</div>
       <button className={`nb ${page==="overview"?"on":""}`} onClick={()=>{setPage("overview");setSidebarOpen(false);}}><span style={{fontSize:15,flexShrink:0}}>📁</span><span>Overview</span></button>
       <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",padding:"14px 10px 4px"}}>Concepts</div>
@@ -1099,11 +1093,10 @@ function FrameBriefApp(){
 
   if(screen==="doc"&&brief)return(
     <div style={{height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden"}}><style>{CSS}</style>
-      <div className={`sidebar-overlay ${sidebarOpen?"show":""}`} onClick={()=>setSidebarOpen(false)}/>
-      <div className={`sidebar-drawer ${sidebarOpen?"show":""}`}>{SidebarContent()}</div>
+      <div className={`sidebar-overlay ${sidebarOpen?"show":""}`} onClick={()=>setSidebarOpen(false)} style={{display:"none"}}/>
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.97)",backdropFilter:"blur(10px)",flexShrink:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:8,overflow:"hidden",minWidth:0}}>
-          <button className="mobile-hamburger" onClick={()=>{if(window.innerWidth<=768)setSidebarOpen(true);}} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"2px 6px",color:"#37352f",flexShrink:0}}>☰</button>
+          <button onClick={()=>setSidebarOpen(true)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"2px 6px",color:"#37352f",flexShrink:0}}>☰</button>
           <button onClick={()=>setScreen("dashboard")} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>← Projects</button>
           <span style={{color:"#e8e4dc",flexShrink:0}}>·</span>
           <span style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{brief.projectTitle}</span>
@@ -1117,7 +1110,7 @@ function FrameBriefApp(){
         </div>
       </div>
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
-        <div className="desktop-sidebar" style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0}}>{SidebarContent()}</div>
+        {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
           {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
