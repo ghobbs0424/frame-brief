@@ -177,41 +177,6 @@ function IdeaPage({ idea, onBack, onUpdate }) {
     setLocalIdea(updated); onUpdate(updated);
   };
 
-  function IdeaSection({ emoji, title, children, defaultOpen = true }) {
-    const [open, setOpen] = useState(defaultOpen);
-    return (
-      <div style={{ marginBottom: 4 }}>
-        <button onClick={() => setOpen(o => !o)} style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", background: "none", border: "none", padding: "9px 0", cursor: "pointer", fontFamily: "inherit", textAlign: "left" }}>
-          <span style={{ fontSize: 11, color: "#c4c3bf", transition: "transform .2s", display: "inline-block", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
-          <span style={{ fontSize: 15 }}>{emoji}</span>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "#37352f" }}>{title}</span>
-        </button>
-        {open && <div style={{ paddingLeft: 26, paddingBottom: 12 }}>{children}</div>}
-      </div>
-    );
-  }
-
-  function IdeaEditable({ value, onChange, multiline, placeholder = "Click to edit…" }) {
-    const [editing, setEditing] = useState(false);
-    const [val, setVal] = useState(value || "");
-    const ref = useRef();
-    useEffect(() => setVal(value || ""), [value]);
-    useEffect(() => { if (editing) ref.current?.focus(); }, [editing]);
-    const commit = () => { setEditing(false); if (val !== (value || "")) onChange(val); };
-    const shared = { fontFamily: "inherit", fontSize: "inherit", color: "inherit", lineHeight: "inherit", width: "100%", border: "none", outline: "none", background: "rgba(35,131,226,0.07)", borderRadius: 4, padding: "3px 6px" };
-    if (editing) return multiline
-      ? <textarea ref={ref} value={val} onChange={e => setVal(e.target.value)} onBlur={commit} style={{ ...shared, resize: "vertical", minHeight: 48 }} />
-      : <input ref={ref} value={val} onChange={e => setVal(e.target.value)} onBlur={commit} onKeyDown={e => e.key === "Enter" && commit()} style={shared} />;
-    return (
-      <span onClick={() => setEditing(true)} style={{ cursor: "text", display: "block", borderRadius: 4, padding: "3px 6px", minHeight: "1.4em", wordBreak: "break-word" }}
-        onMouseEnter={e => e.currentTarget.style.background = "rgba(55,53,47,0.06)"}
-        onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-        {val || <span style={{ color: "#c4c3bf", fontStyle: "italic" }}>{placeholder}</span>}
-      </span>
-    );
-  }
-
-  const HR = () => <div style={{ height: 1, background: "#f1f0ef", margin: "12px 0" }} />;
 
   return (
     <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column" }}>
@@ -239,45 +204,45 @@ function IdeaPage({ idea, onBack, onUpdate }) {
           <>
             {/* Title + logline */}
             <h1 style={{ fontSize: 30, fontWeight: 700, color: "#37352f", letterSpacing: "-0.02em", marginBottom: 6, lineHeight: 1.2 }}>
-              <IdeaEditable value={brief.title} onChange={v => set("title", v)} placeholder="Untitled Idea" />
+              <Editable value={brief.title} onChange={v => set("title", v)} placeholder="Untitled Idea" />
             </h1>
             <div style={{ fontSize: 15, color: "#9b9a97", fontStyle: "italic", marginBottom: 8, lineHeight: 1.6 }}>
-              <IdeaEditable value={brief.logline} onChange={v => set("logline", v)} placeholder="One-sentence pitch…" />
+              <Editable value={brief.logline} onChange={v => set("logline", v)} placeholder="One-sentence pitch…" />
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
               {[["Format", "format"], ["Audience", "targetAudience"], ["Est. Length", "estimatedLength"]].map(([l, k]) => (
                 <div key={k} style={{ background: "#f1f0ef", borderRadius: 6, padding: "4px 10px" }}>
                   <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em" }}>{l}: </span>
-                  <span style={{ fontSize: 12, color: "#37352f", fontWeight: 600 }}><IdeaEditable value={brief[k]} onChange={v => set(k, v)} placeholder="—" /></span>
+                  <span style={{ fontSize: 12, color: "#37352f", fontWeight: 600 }}><Editable value={brief[k]} onChange={v => set(k, v)} placeholder="—" /></span>
                 </div>
               ))}
             </div>
 
             <HR />
-            <IdeaSection emoji="🎣" title="Hook & Angle">
+            <Section emoji="🎣" title="Hook & Angle">
               <div style={{ marginBottom: 10 }}>
                 <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Hook</div>
                 <div style={{ fontSize: 14, lineHeight: 1.8, background: "#fafaf9", borderRadius: 6, padding: "10px 14px" }}>
-                  <IdeaEditable value={brief.hook} onChange={v => set("hook", v)} multiline placeholder="What grabs attention in the first 3 seconds?" />
+                  <Editable value={brief.hook} onChange={v => set("hook", v)} multiline placeholder="What grabs attention in the first 3 seconds?" />
                 </div>
               </div>
               <div>
                 <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Angle / Perspective</div>
                 <div style={{ fontSize: 14, lineHeight: 1.8, background: "#fafaf9", borderRadius: 6, padding: "10px 14px" }}>
-                  <IdeaEditable value={brief.angle} onChange={v => set("angle", v)} multiline placeholder="What's the unique point of view?" />
+                  <Editable value={brief.angle} onChange={v => set("angle", v)} multiline placeholder="What's the unique point of view?" />
                 </div>
               </div>
-            </IdeaSection>
+            </Section>
             <HR />
 
-            <IdeaSection emoji="📋" title="Content Outline">
+            <Section emoji="📋" title="Content Outline">
               {(brief.outline || []).map((act, i) => (
                 <div key={i} style={{ background: "#f9f8f6", borderLeft: "3px solid #e8e4dc", padding: "12px 16px", borderRadius: "0 8px 8px 0", marginBottom: 10 }}>
                   <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
-                    <IdeaEditable value={act.act} onChange={v => upArr("outline", i, { ...act, act: v })} placeholder="Section name" />
+                    <Editable value={act.act} onChange={v => upArr("outline", i, { ...act, act: v })} placeholder="Section name" />
                   </div>
                   <div style={{ fontSize: 14, lineHeight: 1.75 }}>
-                    <IdeaEditable value={act.description} onChange={v => upArr("outline", i, { ...act, description: v })} multiline placeholder="Describe this section…" />
+                    <Editable value={act.description} onChange={v => upArr("outline", i, { ...act, description: v })} multiline placeholder="Describe this section…" />
                   </div>
                 </div>
               ))}
@@ -285,37 +250,37 @@ function IdeaPage({ idea, onBack, onUpdate }) {
                 onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>
                 + Add section
               </button>
-            </IdeaSection>
+            </Section>
             <HR />
 
-            <IdeaSection emoji="💬" title="Key Points to Hit">
+            <Section emoji="💬" title="Key Points to Hit">
               {(brief.keyPoints || []).map((pt, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "5px 0" }}>
                   <span style={{ color: "#e97942", marginTop: 4 }}>→</span>
-                  <div style={{ flex: 1, fontSize: 14 }}><IdeaEditable value={pt} onChange={v => upArr("keyPoints", i, v)} placeholder="Key point…" /></div>
+                  <div style={{ flex: 1, fontSize: 14 }}><Editable value={pt} onChange={v => upArr("keyPoints", i, v)} placeholder="Key point…" /></div>
                   <button onClick={() => delArr("keyPoints", i)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13 }}
                     onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
                 </div>
               ))}
               <button onClick={() => addArr("keyPoints", "New point")} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
                 onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add point</button>
-            </IdeaSection>
+            </Section>
             <HR />
 
-            <IdeaSection emoji="📝" title="Script Notes">
+            <Section emoji="📝" title="Script Notes">
               <div style={{ fontSize: 14, lineHeight: 1.85, background: "#fafaf9", borderRadius: 6, padding: "12px 16px" }}>
-                <IdeaEditable value={brief.scriptNotes} onChange={v => set("scriptNotes", v)} multiline placeholder="Tone, delivery notes, phrases to use or avoid…" />
+                <Editable value={brief.scriptNotes} onChange={v => set("scriptNotes", v)} multiline placeholder="Tone, delivery notes, phrases to use or avoid…" />
               </div>
-            </IdeaSection>
+            </Section>
             <HR />
 
-            <IdeaSection emoji="📍" title="Locations">
+            <Section emoji="📍" title="Locations">
               {(brief.locations || []).map((loc, i) => (
                 <div key={i} style={{ background: "#f7f6f3", borderRadius: 8, padding: "12px 14px", marginBottom: 8, border: "1px solid #eeece8" }}>
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}><IdeaEditable value={loc.name} onChange={v => upArr("locations", i, { ...loc, name: v })} placeholder="Location name" /></div>
-                      <div style={{ fontSize: 13, color: "#55534e" }}><IdeaEditable value={loc.notes} onChange={v => upArr("locations", i, { ...loc, notes: v })} multiline placeholder="Notes…" /></div>
+                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}><Editable value={loc.name} onChange={v => upArr("locations", i, { ...loc, name: v })} placeholder="Location name" /></div>
+                      <div style={{ fontSize: 13, color: "#55534e" }}><Editable value={loc.notes} onChange={v => upArr("locations", i, { ...loc, notes: v })} multiline placeholder="Notes…" /></div>
                     </div>
                     <button onClick={() => delArr("locations", i)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 13, marginLeft: 8 }}
                       onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ccc"}>✕</button>
@@ -324,24 +289,24 @@ function IdeaPage({ idea, onBack, onUpdate }) {
               ))}
               <button onClick={() => addArr("locations", { name: "New Location", notes: "" })} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
                 onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add location</button>
-            </IdeaSection>
+            </Section>
             <HR />
 
-            <IdeaSection emoji="🎪" title="Props & Equipment">
+            <Section emoji="🎪" title="Props & Equipment">
               {(brief.props || []).map((p, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0" }}>
                   <span style={{ color: "#9b9a97" }}>·</span>
-                  <div style={{ flex: 1, fontSize: 14 }}><IdeaEditable value={p} onChange={v => upArr("props", i, v)} /></div>
+                  <div style={{ flex: 1, fontSize: 14 }}><Editable value={p} onChange={v => upArr("props", i, v)} /></div>
                   <button onClick={() => delArr("props", i)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13 }}
                     onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
                 </div>
               ))}
               <button onClick={() => addArr("props", "New item")} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
                 onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add item</button>
-            </IdeaSection>
+            </Section>
             <HR />
 
-            <IdeaSection emoji="🎥" title="Shot List">
+            <Section emoji="🎥" title="Shot List">
               <div style={{ overflowX: "auto" }}>
                 <div style={{ display: "grid", gridTemplateColumns: "36px 80px 1fr 24px", gap: 8, padding: "6px 0", borderBottom: "1px solid #e8e4dc", minWidth: 320 }}>
                   {["#", "Type", "Description", ""].map((h, i) => <div key={i} style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>)}
@@ -349,8 +314,8 @@ function IdeaPage({ idea, onBack, onUpdate }) {
                 {(brief.shotList || []).map((shot, i) => (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "36px 80px 1fr 24px", gap: 8, alignItems: "start", padding: "9px 0", borderBottom: "1px solid #f7f6f3", minWidth: 320 }}>
                     <div style={{ fontSize: 11, fontWeight: 700, color: "#9b9a97", paddingTop: 4 }}>{shot.number || String(i + 1).padStart(2, "0")}</div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#e97942" }}><IdeaEditable value={shot.type} onChange={v => upArr("shotList", i, { ...shot, type: v })} placeholder="Type" /></div>
-                    <div style={{ fontSize: 13, lineHeight: 1.6 }}><IdeaEditable value={shot.description} onChange={v => upArr("shotList", i, { ...shot, description: v })} multiline placeholder="Describe the shot…" /></div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#e97942" }}><Editable value={shot.type} onChange={v => upArr("shotList", i, { ...shot, type: v })} placeholder="Type" /></div>
+                    <div style={{ fontSize: 13, lineHeight: 1.6 }}><Editable value={shot.description} onChange={v => upArr("shotList", i, { ...shot, description: v })} multiline placeholder="Describe the shot…" /></div>
                     <button onClick={() => delArr("shotList", i)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 13, paddingTop: 4 }}
                       onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ccc"}>✕</button>
                   </div>
@@ -359,16 +324,16 @@ function IdeaPage({ idea, onBack, onUpdate }) {
               <button onClick={() => addArr("shotList", { number: String((brief.shotList?.length || 0) + 1).padStart(2, "0"), type: "B-Roll", description: "" })}
                 style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0", marginTop: 8 }}
                 onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add shot</button>
-            </IdeaSection>
+            </Section>
             <HR />
 
-            <IdeaSection emoji="✅" title="To-Do List">
+            <Section emoji="✅" title="To-Do List">
               {(brief.toDoList || []).map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "5px 0" }}>
                   <input type="checkbox" checked={item.done} onChange={e => upArr("toDoList", i, { ...item, done: e.target.checked })}
                     style={{ marginTop: 3, cursor: "pointer", flexShrink: 0, width: 15, height: 15, accentColor: "#37352f" }} />
                   <div style={{ flex: 1, fontSize: 14, color: item.done ? "#9b9a97" : "#37352f", textDecoration: item.done ? "line-through" : "none", lineHeight: 1.6 }}>
-                    <IdeaEditable value={item.text} onChange={v => upArr("toDoList", i, { ...item, text: v })} />
+                    <Editable value={item.text} onChange={v => upArr("toDoList", i, { ...item, text: v })} />
                   </div>
                   <button onClick={() => delArr("toDoList", i)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13 }}
                     onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
@@ -376,10 +341,10 @@ function IdeaPage({ idea, onBack, onUpdate }) {
               ))}
               <button onClick={() => addArr("toDoList", { text: "New task", done: false })} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
                 onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add task</button>
-            </IdeaSection>
+            </Section>
             <HR />
 
-            <IdeaSection emoji="🏷" title="Tags" defaultOpen={false}>
+            <Section emoji="🏷" title="Tags" defaultOpen={false}>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
                 {(brief.tags || []).map((tag, i) => (
                   <span key={i} style={{ background: "#f1f0ef", color: "#55534e", borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6 }}>
@@ -389,7 +354,7 @@ function IdeaPage({ idea, onBack, onUpdate }) {
                 ))}
                 <button onClick={() => addArr("tags", "new tag")} style={{ background: "none", border: "1px dashed #e8e4dc", color: "#9b9a97", borderRadius: 20, padding: "3px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>+ Tag</button>
               </div>
-            </IdeaSection>
+            </Section>
           </>
         )}
       </div>
@@ -754,6 +719,16 @@ function TodoList({items,onUpdate,onAdd,onDelete,accentColor="#37352f",readonly}
   function add(){if(!newText.trim())return;onAdd({id:`todo-${Date.now()}`,text:newText.trim(),done:false});setNewText("");inputRef.current?.focus();}
   return(<div>{(items||[]).map((item,i)=>(<div key={item.id||i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"5px 0"}}><input type="checkbox" checked={item.done} onChange={e=>onUpdate(i,{...item,done:e.target.checked})} disabled={readonly} style={{marginTop:3,accentColor,cursor:readonly?"default":"pointer",flexShrink:0,width:15,height:15}}/><div style={{flex:1,fontSize:14,color:item.done?"#9b9a97":"#37352f",textDecoration:item.done?"line-through":"none",lineHeight:1.6}}>{readonly?<span>{item.text}</span>:<Editable value={item.text} onChange={v=>onUpdate(i,{...item,text:v})} placeholder="Add item…"/>}</div>{!readonly&&<button onClick={()=>onDelete(i)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"0 2px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>}</div>))}{!readonly&&(<div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}><input ref={inputRef} value={newText} onChange={e=>setNewText(e.target.value)} onKeyDown={e=>e.key==="Enter"&&add()} placeholder="Add item… (Enter to save)" style={{flex:1,border:"none",outline:"none",fontSize:13,color:"#37352f",fontFamily:"inherit",padding:"4px 6px",borderRadius:4,background:"transparent"}} onFocus={e=>e.target.style.background="rgba(35,131,226,0.06)"} onBlur={e=>e.target.style.background="transparent"}/>{newText.trim()&&<button onClick={add} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:4,padding:"4px 10px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>Add</button>}</div>)}</div>);
 }
+
+function PropRow({label,children}){
+  return(<div style={{display:"flex",alignItems:"baseline",padding:"7px 16px",borderBottom:"1px solid #f1f0ef",gap:12}}><span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#9b9a97",minWidth:126,textTransform:"uppercase",letterSpacing:"0.06em",flexShrink:0,paddingTop:2}}>{label}</span><span style={{flex:1,fontSize:14,color:"#37352f"}}>{children}</span></div>);
+}
+
+function AddBtn({label,onClick}){
+  return(<button onClick={onClick} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",padding:"4px 0",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ {label}</button>);
+}
+
+const HR = () => <div style={{height:1,background:"#f1f0ef",margin:"14px 0"}}/>;
 
 // ─── DOC UPLOAD ───────────────────────────────────────────────────────────────
 function DocUpload({docs,onAdd,onRemove}){
