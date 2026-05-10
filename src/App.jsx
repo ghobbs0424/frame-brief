@@ -370,11 +370,17 @@ function IdeaCapture({ user, onBack }) {
   const wsKey = `framebrief_workspaces_${user?.id}`;
 
   const [workspaces, setWorkspaces] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(wsKey)) || DEFAULT_WORKSPACES; } catch { return DEFAULT_WORKSPACES; }
+    try {
+      const parsed = JSON.parse(localStorage.getItem(wsKey));
+      return Array.isArray(parsed) ? parsed : DEFAULT_WORKSPACES;
+    } catch { return DEFAULT_WORKSPACES; }
   });
   const [activeWs, setActiveWs] = useState(() => workspaces[0]?.id || "personal");
   const [ideas, setIdeas] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(storageKey) || "{}"); } catch { return {}; }
+    try {
+      const parsed = JSON.parse(localStorage.getItem(storageKey) || "{}");
+      return (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : {};
+    } catch { return {}; }
   });
   const [openIdea, setOpenIdea] = useState(null);
   const [input, setInput] = useState("");
@@ -445,7 +451,18 @@ ${text}` }] })
       if (fenced) jsonStr = fenced[1].trim();
       else { const s = raw.indexOf("{"), e = raw.lastIndexOf("}"); if (s !== -1 && e !== -1) jsonStr = raw.slice(s, e + 1); }
       jsonStr = jsonStr.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
-      const brief = JSON.parse(jsonStr);
+      const rawBrief = JSON.parse(jsonStr);
+      // Ensure all array fields are actually arrays (AI sometimes returns null)
+      const brief = {
+        ...rawBrief,
+        outline: Array.isArray(rawBrief.outline) ? rawBrief.outline : [],
+        keyPoints: Array.isArray(rawBrief.keyPoints) ? rawBrief.keyPoints : [],
+        locations: Array.isArray(rawBrief.locations) ? rawBrief.locations : [],
+        props: Array.isArray(rawBrief.props) ? rawBrief.props : [],
+        shotList: Array.isArray(rawBrief.shotList) ? rawBrief.shotList : [],
+        toDoList: Array.isArray(rawBrief.toDoList) ? rawBrief.toDoList : [],
+        tags: Array.isArray(rawBrief.tags) ? rawBrief.tags : [],
+      };
       const updated = { ...ideas, [activeWs]: wsIdeas.map(idea => idea.id === id ? { ...idea, brief } : idea) };
       saveIdeas(updated);
     } catch (e) {
