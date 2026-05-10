@@ -817,29 +817,16 @@ function ConceptPage({concept,onChange,readonly}){
 
 
 // ─── MEETING BOT ─────────────────────────────────────────────────────────────
-const RECALL_KEY = import.meta.env.VITE_RECALL_API_KEY || "";
-const RECALL_REGION = "us-west-2"; // matches your account region
-
 async function startRecallBot(meetingUrl, projectId) {
-  // Create bot via Recall.ai API
-  const res = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/bot/`, {
+  // Route through our own Vercel function to avoid CORS issues
+  const res = await fetch(`/api/recall-webhook?action=create-bot`, {
     method: "POST",
-    headers: {
-      "Authorization": `Token ${RECALL_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      meeting_url: meetingUrl,
-      bot_name: "Frame Brief",
-      transcription_options: { provider: "assembly_ai" },
-      webhook_url: `${window.location.origin}/api/recall-webhook`,
-    })
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ meetingUrl, projectId })
   });
-  if (!res.ok) {
-    const err = await res.json();
-    throw new Error(err?.message || err?.detail || "Failed to start bot");
-  }
-  return await res.json();
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || "Failed to start bot");
+  return data;
 }
 
 function MeetingBotPanel({ projectId, onBotStarted, recallStatus }) {
