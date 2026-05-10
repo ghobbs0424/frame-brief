@@ -743,7 +743,7 @@ function DocUpload({docs,onAdd,onRemove}){
 }
 
 // ─── OVERVIEW PAGE ────────────────────────────────────────────────────────────
-function OverviewPage({brief,setBrief,goTo,readonly}){
+function OverviewPage({brief,setBrief,goTo,readonly,projectId,onBotStarted,recallStatus}){
   const set=(k,v)=>setBrief(b=>({...b,[k]:v}));
   const upArr=(k,i,v)=>setBrief(b=>{const a=[...(b[k]||[])];a[i]=v;return{...b,[k]:a};});
   const delArr=(k,i)=>setBrief(b=>({...b,[k]:(b[k]||[]).filter((_,j)=>j!==i)}));
@@ -752,6 +752,7 @@ function OverviewPage({brief,setBrief,goTo,readonly}){
   return(
     <div style={{maxWidth:760,padding:"40px 24px 120px",margin:"0 auto"}}>
       <div style={{fontSize:48,marginBottom:10}}>{brief.coverEmoji||"🎬"}</div>
+      {!readonly&&<MeetingBotPanel projectId={projectId} onBotStarted={onBotStarted} recallStatus={recallStatus}/>}
       {readonly?<h1 style={{fontSize:34,fontWeight:700,letterSpacing:"-0.025em",margin:"0 0 8px",color:"#37352f",lineHeight:1.2}}>{brief.projectTitle}</h1>:<h1 contentEditable suppressContentEditableWarning onBlur={e=>set("projectTitle",e.target.innerText)} style={{fontSize:34,fontWeight:700,letterSpacing:"-0.025em",margin:"0 0 8px",outline:"none",color:"#37352f",lineHeight:1.2}}>{brief.projectTitle}</h1>}
       <div style={{fontSize:15,color:"#9b9a97",fontStyle:"italic",marginBottom:20,lineHeight:1.6}}>{readonly?<p style={{margin:0}}>{brief.logline}</p>:<Editable value={brief.logline} onChange={v=>set("logline",v)} placeholder="Project logline…"/>}</div>
       <div style={{border:"1px solid #f1f0ef",borderRadius:10,overflow:"hidden",marginBottom:28}}>
@@ -813,6 +814,102 @@ function ConceptPage({concept,onChange,readonly}){
       <Section emoji="🎥" title="Shot List"><div style={{borderTop:"1px solid #f1f0ef",overflowX:"auto"}}><div style={{display:"grid",gridTemplateColumns:"36px 80px 1fr 80px 24px",gap:8,padding:"6px 0",borderBottom:"1px solid #e8e4dc",minWidth:400}}>{["#","Type","Description","Lens",""].map((h,i)=><div key={i} style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>)}</div>{(concept.shotList||[]).map((shot,i)=>(<div key={i} style={{display:"grid",gridTemplateColumns:"36px 80px 1fr 80px 24px",gap:8,alignItems:"start",padding:"10px 0",borderBottom:"1px solid #f7f6f3",minWidth:400}}><div style={{fontSize:11,fontWeight:700,color:"#9b9a97",paddingTop:4}}>{shot.number||String(i+1).padStart(2,"0")}</div><div style={{fontSize:12,fontWeight:600,color:"#e97942"}}>{readonly?shot.type:<Editable value={shot.type} onChange={v=>upArr("shotList",i,{...shot,type:v})} placeholder="Type"/>}</div><div><div style={{fontSize:13,lineHeight:1.6}}>{readonly?shot.description:<Editable value={shot.description} onChange={v=>upArr("shotList",i,{...shot,description:v})} multiline placeholder="Describe…"/>}</div>{shot.notes&&<div style={{fontSize:11,color:"#9b9a97",marginTop:2}}>{readonly?shot.notes:<Editable value={shot.notes} onChange={v=>upArr("shotList",i,{...shot,notes:v})} placeholder="Notes…"/>}</div>}</div><div style={{fontSize:11,color:"#9b9a97"}}>{readonly?shot.lens:<Editable value={shot.lens} onChange={v=>upArr("shotList",i,{...shot,lens:v})} placeholder="Lens"/>}</div>{!readonly&&<button onClick={()=>delArr("shotList",i)} style={{background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:13,paddingTop:4}}>✕</button>}</div>))}</div>{!readonly&&<div style={{marginTop:8}}><AddBtn label="Add shot" onClick={()=>addArr("shotList",{number:String((concept.shotList?.length||0)+1).padStart(2,"0"),type:"B-Roll",description:"",lens:"",notes:""})} /></div>}</Section><HR/>
       <Section emoji="📝" title="Script Outline">{[["Opening Hook","hook"],["Act I — Setup","act1"],["Act II — Journey","act2"],["Act III — Resolution","act3"],["Closing / CTA","cta"]].map(([label,key])=>(<div key={key} style={{background:"#f9f8f6",borderLeft:"3px solid #e8e4dc",padding:"14px 18px",borderRadius:"0 8px 8px 0",marginBottom:10}}><div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>{label}</div><div style={{fontSize:14,lineHeight:1.85}}>{readonly?<p style={{margin:0}}>{concept.script?.[key]}</p>:<Editable value={concept.script?.[key]} onChange={v=>upScript(key,v)} multiline placeholder={`Write the ${label.toLowerCase()}…`}/>}</div></div>))}</Section><HR/>
       <Section emoji="✍️" title="Director's Notes"><div style={{fontSize:15,lineHeight:1.95,color:"#55534e",fontStyle:"italic",borderLeft:"3px solid #e97942",paddingLeft:18}}>{readonly?<p style={{margin:0}}>{concept.directorNotes}</p>:<Editable value={concept.directorNotes} onChange={v=>up("directorNotes",v)} multiline placeholder="Your creative vision for this concept…"/>}</div></Section>
+    </div>
+  );
+}
+
+
+// ─── MEETING BOT ─────────────────────────────────────────────────────────────
+const RECALL_KEY = import.meta.env.VITE_RECALL_API_KEY || "";
+const RECALL_REGION = "us-west-2"; // matches your account region
+
+async function startRecallBot(meetingUrl, projectId) {
+  // Create bot via Recall.ai API
+  const res = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/bot/`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Token ${RECALL_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      meeting_url: meetingUrl,
+      bot_name: "Frame Brief",
+      transcription_options: { provider: "assembly_ai" },
+      webhook_url: `${window.location.origin}/api/recall-webhook`,
+    })
+  });
+  if (!res.ok) {
+    const err = await res.json();
+    throw new Error(err?.message || err?.detail || "Failed to start bot");
+  }
+  return await res.json();
+}
+
+function MeetingBotPanel({ projectId, onBotStarted, recallStatus }) {
+  const [meetingUrl, setMeetingUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [botStarted, setBotStarted] = useState(false);
+
+  async function handleStart() {
+    if (!meetingUrl.trim()) return;
+    setLoading(true); setError("");
+    try {
+      const bot = await startRecallBot(meetingUrl.trim(), projectId);
+      setBotStarted(true);
+      onBotStarted(bot.id);
+    } catch(err) {
+      setError(err.message);
+    }
+    setLoading(false);
+  }
+
+  if (recallStatus === "transcript_ready") return (
+    <div style={{background:"#e6f4ea",border:"1px solid #a8d5b5",borderRadius:10,padding:"14px 18px",marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+        <span style={{fontSize:16}}>✅</span>
+        <span style={{fontWeight:700,fontSize:14,color:"#1e7e34"}}>Transcript received!</span>
+      </div>
+      <p style={{fontSize:13,color:"#1e7e34",margin:0}}>Your meeting transcript is ready. Generate a brief from it below.</p>
+    </div>
+  );
+
+  if (botStarted || recallStatus === "bot_joined") return (
+    <div style={{background:"#e8f0fe",border:"1px solid #b3c9f9",borderRadius:10,padding:"14px 18px",marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+        <div className="spin" style={{width:14,height:14,border:"2px solid #b3c9f9",borderTop:"2px solid #1a56c4",borderRadius:"50%",flexShrink:0}}/>
+        <span style={{fontWeight:700,fontSize:14,color:"#1a56c4"}}>Bot is in your meeting</span>
+      </div>
+      <p style={{fontSize:13,color:"#1a56c4",margin:0}}>Recording and transcribing. When the meeting ends, your brief will be ready automatically.</p>
+    </div>
+  );
+
+  return (
+    <div style={{background:"#fafaf9",border:"1px solid #e8e4dc",borderRadius:10,padding:"18px",marginBottom:20}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+        <span style={{fontSize:18}}>🤖</span>
+        <span style={{fontWeight:700,fontSize:14,color:"#37352f"}}>Meeting Bot</span>
+        <span style={{fontSize:11,background:"#e8f0fe",color:"#1a56c4",borderRadius:20,padding:"2px 8px",fontWeight:600}}>Beta</span>
+      </div>
+      <p style={{fontSize:13,color:"#9b9a97",marginBottom:12,lineHeight:1.6}}>
+        Paste your Google Meet, Zoom, or Teams link. A bot will join, record, and auto-generate your brief when the call ends.
+      </p>
+      {error && <div style={{background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:6,padding:"8px 12px",marginBottom:10,fontSize:12,color:"#c0392b"}}>{error}</div>}
+      <div style={{display:"flex",gap:8}}>
+        <input
+          value={meetingUrl}
+          onChange={e=>setMeetingUrl(e.target.value)}
+          placeholder="https://meet.google.com/xxx-xxxx-xxx"
+          style={{flex:1,border:"1px solid #e8e4dc",borderRadius:6,padding:"10px 14px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}
+          onFocus={e=>e.target.style.borderColor="#37352f"}
+          onBlur={e=>e.target.style.borderColor="#e8e4dc"}
+          onKeyDown={e=>e.key==="Enter"&&handleStart()}
+        />
+        <button onClick={handleStart} disabled={!meetingUrl.trim()||loading}
+          style={{background:"#37352f",color:"#fff",border:"none",borderRadius:6,padding:"10px 20px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",opacity:!meetingUrl.trim()||loading?0.4:1,whiteSpace:"nowrap"}}>
+          {loading?"Starting…":"Send Bot →"}
+        </button>
+      </div>
     </div>
   );
 }
@@ -907,6 +1004,20 @@ function FrameBriefApp(){
 
   useEffect(()=>{if(user)loadProjects();},[user]);
 
+  // Poll for transcript when bot is in a meeting
+  useEffect(()=>{
+    if(!activeProject?.id || activeProject?.recall_status !== "bot_joined") return;
+    const interval = setInterval(async () => {
+      const { data } = await supabase.from("projects").select("recall_status,recall_transcript").eq("id", activeProject.id).single();
+      if (data?.recall_status === "transcript_ready") {
+        clearInterval(interval);
+        setActiveProject(prev => ({...prev, ...data}));
+        setProjects(ps => ps.map(p => p.id === activeProject.id ? {...p, ...data} : p));
+      }
+    }, 10000); // poll every 10s
+    return () => clearInterval(interval);
+  },[activeProject?.id, activeProject?.recall_status]);
+
   async function loadProjects(){
     const{data,error}=await supabase.from("projects").select("*").order("updated_at",{ascending:false});
     if(!error&&data)setProjects(data);
@@ -930,6 +1041,15 @@ function FrameBriefApp(){
     await supabase.from("projects").update({status,updated_at:new Date().toISOString()}).eq("id",id);
     setProjects(ps=>ps.map(p=>p.id===id?{...p,status}:p));
     if(activeProject?.id===id)setActiveProject(p=>({...p,status}));
+  }
+
+  async function updateRecallStatus(projectId, botId, status) {
+    if (!projectId) return;
+    const updates = { recall_status: status, updated_at: new Date().toISOString() };
+    if (botId) updates.recall_bot_id = botId;
+    await supabase.from("projects").update(updates).eq("id", projectId);
+    setProjects(ps => ps.map(p => p.id === projectId ? { ...p, ...updates } : p));
+    setActiveProject(prev => prev?.id === projectId ? { ...prev, ...updates } : prev);
   }
 
   function setBrief(updater){
@@ -1112,7 +1232,7 @@ function FrameBriefApp(){
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
-          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}}/>}
+          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} projectId={activeProject?.id} onBotStarted={botId=>updateRecallStatus(activeProject?.id,botId,"bot_joined")} recallStatus={activeProject?.recall_status}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
         </div>
         {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}} className="hide-on-mobile"><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div>}
