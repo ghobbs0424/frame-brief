@@ -822,11 +822,11 @@ async function startRecallBot(meetingUrl, projectId) {
   const res = await fetch(`/api/recall-webhook?action=create-bot`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ meetingUrl, projectId })
+    body: JSON.stringify({ meetingUrl, projectId: projectId || null })
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data?.error || "Failed to start bot");
-  return data;
+  return data; // returns { botId, status }
 }
 
 function MeetingBotPanel({ projectId, onBotStarted, recallStatus }) {
@@ -1009,17 +1009,18 @@ function FrameBriefApp(){
 
   useEffect(()=>{if(user)loadProjects();},[user]);
 
-  // Poll for transcript when bot is in a meeting
+  // Poll for transcript/brief when bot is in a meeting
   useEffect(()=>{
-    if(!activeProject?.id || activeProject?.recall_status !== "bot_joined") return;
+    const pollStatuses = ["bot_joined", "transcript_ready"];
+    if(!activeProject?.id || !pollStatuses.includes(activeProject?.recall_status)) return;
     const interval = setInterval(async () => {
-      const { data } = await supabase.from("projects").select("recall_status,recall_transcript").eq("id", activeProject.id).single();
-      if (data?.recall_status === "transcript_ready") {
+      const { data } = await supabase.from("projects").select("*").eq("id", activeProject.id).single();
+      if (data?.recall_status === "brief_ready" || data?.recall_status === "transcript_ready") {
         clearInterval(interval);
         setActiveProject(prev => ({...prev, ...data}));
         setProjects(ps => ps.map(p => p.id === activeProject.id ? {...p, ...data} : p));
       }
-    }, 10000); // poll every 10s
+    }, 8000); // poll every 8s
     return () => clearInterval(interval);
   },[activeProject?.id, activeProject?.recall_status]);
 
@@ -1192,9 +1193,16 @@ function FrameBriefApp(){
       <div style={{maxWidth:660,margin:"0 auto",padding:"36px 20px 80px"}}>
         <button onClick={()=>setScreen("dashboard")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",marginBottom:36,display:"flex",alignItems:"center",gap:6}}>← All Projects</button>
         <div style={{textAlign:"center",marginBottom:36}}><div style={{fontSize:44,marginBottom:10}}>🎬</div><h1 style={{fontSize:32,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em",marginBottom:10}}>New Brief</h1><p style={{color:"#9b9a97",fontSize:14,fontStyle:"italic",lineHeight:1.6}}>Paste your meeting notes or send a bot to your live meeting.</p></div>
-        <MeetingBotPanel projectId={null} onBotStarted={(botId)=>{
+        <MeetingBotPanel projectId={null} onBotStarted={async (botId)=>{
+          // Create project first, then link the bot ID to it
           const newProject={id:crypto.randomUUID(),user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,recall_bot_id:botId,recall_status:"bot_joined",created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-          saveProject(newProject).then(saved=>{setActiveProject(saved||newProject);setPage("overview");setScreen("doc");});
+          const saved = await saveProject(newProject);
+          const project = saved || newProject;
+          // Now update Supabase with the bot ID explicitly
+          await supabase.from("projects").update({recall_bot_id:botId,recall_status:"bot_joined",updated_at:new Date().toISOString()}).eq("id",project.id);
+          setActiveProject({...project,recall_bot_id:botId,recall_status:"bot_joined"});
+          setPage("overview");
+          setScreen("doc");
         }} recallStatus={null}/>
         <div style={{display:"flex",alignItems:"center",gap:12,margin:"20px 0"}}><div style={{flex:1,height:1,background:"#f1f0ef"}}/><span style={{fontSize:12,color:"#c4c3bf"}}>or paste notes manually</span><div style={{flex:1,height:1,background:"#f1f0ef"}}/></div>
         {errMsg&&<div style={{background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#c0392b",lineHeight:1.65}}><strong>Error:</strong> {errMsg}</div>}
