@@ -70,6 +70,49 @@ export default async function handler(req, res) {
       return res.status(200).json({ botId: botData.id, status: botData.status });
     }
 
+    // ── Route 1b: Manually fetch transcript for a bot ──────────────────────
+    if (req.query.action === "fetch-transcript") {
+      const { botId, projectId } = req.body || {};
+      console.log("Manual fetch-transcript:", { botId, projectId });
+
+      if (!botId || !projectId) return res.status(400).json({ error: "botId and projectId required" });
+
+      const transcriptRes = await fetch(
+        `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/transcript`,
+        { headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" } }
+      );
+      const transcriptData = await transcriptRes.json();
+      console.log("Transcript response status:", transcriptRes.status, "data type:", typeof transcriptData, "is array:", Array.isArray(transcriptData));
+      console.log("Transcript sample:", JSON.stringify(transcriptData).slice(0, 300));
+
+      let transcriptText = "";
+      if (Array.isArray(transcriptData)) {
+        transcriptText = transcriptData
+          .map(seg => `${seg.speaker || "Speaker"}: ${(seg.words || []).map(w => w.text || w.word || "").join(" ")}`)
+          .filter(line => line.length > 10)
+          .join("
+
+");
+      } else if (transcriptData?.transcript) {
+        transcriptText = transcriptData.transcript;
+      } else if (typeof transcriptData === "string") {
+        transcriptText = transcriptData;
+      }
+
+      if (!transcriptText.trim()) {
+        return res.status(200).json({ ok: true, message: "No transcript yet", raw: JSON.stringify(transcriptData).slice(0, 200) });
+      }
+
+      // Save and generate brief
+      await supabase.from("projects").update({
+        recall_status: "transcript_ready",
+        recall_transcript: transcriptText,
+        updated_at: new Date().toISOString()
+      }).eq("id", projectId);
+
+      return res.status(200).json({ ok: true, transcriptLength: transcriptText.length, preview: transcriptText.slice(0, 200) });
+    }
+
     // ── Route 2: Receive transcript from Recall.ai webhook ──
     const event = req.body;
     console.log("Recall webhook event:", event?.event, event?.data?.bot_id);
