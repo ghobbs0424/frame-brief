@@ -59,11 +59,12 @@ export default async function handler(req, res) {
 
       // Save bot ID to project if provided
       if (projectId) {
-        await supabase.from("projects").update({
+        const { error: updateError } = await supabase.from("projects").update({
           recall_bot_id: botData.id,
           recall_status: "bot_joined",
           updated_at: new Date().toISOString(),
         }).eq("id", projectId);
+        console.log("Saved bot ID to project:", projectId, "bot:", botData.id, "error:", updateError);
       }
 
       return res.status(200).json({ botId: botData.id, status: botData.status });
