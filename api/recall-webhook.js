@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           meeting_url: meetingUrl,
           bot_name: "Frame Brief",
-          // transcription_options omitted - uses Recall default provider
+          transcription_options: { provider: "assembly_ai" },
           webhook_url: `https://frame-brief.vercel.app/api/recall-webhook`,
         }),
       });
@@ -110,13 +110,60 @@ export default async function handler(req, res) {
       transcriptText = transcriptData.transcript;
     }
 
+
+    // Save transcript
     await supabase.from("projects").update({
-      recall_status: transcriptText.trim() ? "transcript_ready" : "empty_transcript",
+      recall_status: "transcript_ready",
       recall_transcript: transcriptText || null,
       updated_at: new Date().toISOString()
     }).eq("id", project.id);
 
-    console.log("✅ Transcript saved for project:", project.id);
+    console.log("Transcript saved, generating brief for project:", project.id);
+
+    // Auto-generate brief from transcript using Claude
+    if (transcriptText && transcriptText.trim()) {
+      try {
+        const ANTHROPIC_KEY = process.env.VITE_ANTHROPIC_KEY;
+        const SYSTEM = `You are a creative director AI. Analyze meeting notes and return ONLY valid JSON, no markdown, no backticks. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":""}]}`;
+
+        const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
+          body: JSON.stringify({
+            model: "claude-sonnet-4-6",
+            max_tokens: 8000,
+            system: SYSTEM,
+            messages: [{ role: "user", content: `Create a production brief from this meeting transcript:\n\n${transcriptText}` }]
+          })
+        });
+
+        const aiData = await aiRes.json();
+        const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
+        let brief = null;
+        try {
+          let jsonStr = raw;
+          const s = raw.indexOf("{"), e = raw.lastIndexOf("}");
+          if (s !== -1 && e !== -1) jsonStr = raw.slice(s, e+1);
+          jsonStr = jsonStr.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
+          brief = JSON.parse(jsonStr);
+          if (!Array.isArray(brief.concepts)) brief.concepts = [];
+          if (!brief.clientActionItems) brief.clientActionItems = [];
+          if (!brief.internalTodos) brief.internalTodos = [];
+        } catch(e) { console.error("Parse error:", e); }
+
+        if (brief) {
+          await supabase.from("projects").update({
+            title: brief.projectTitle || "Untitled",
+            client_name: brief.clientName || "",
+            brief: brief,
+            recall_status: "brief_ready",
+            updated_at: new Date().toISOString()
+          }).eq("id", project.id);
+          console.log("Brief generated for project:", project.id);
+        }
+      } catch(aiErr) { console.error("Brief gen error:", aiErr); }
+    }
+
     return res.status(200).json({ ok: true });
 
   } catch (err) {
