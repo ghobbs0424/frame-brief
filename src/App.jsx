@@ -841,7 +841,7 @@ function MeetingBotPanel({ projectId, onBotStarted, recallStatus }) {
     try {
       const bot = await startRecallBot(meetingUrl.trim(), projectId);
       setBotStarted(true);
-      onBotStarted(bot.id);
+      onBotStarted(bot.botId || bot.id);
     } catch(err) {
       setError(err.message);
     }
@@ -1194,13 +1194,19 @@ function FrameBriefApp(){
         <button onClick={()=>setScreen("dashboard")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",marginBottom:36,display:"flex",alignItems:"center",gap:6}}>← All Projects</button>
         <div style={{textAlign:"center",marginBottom:36}}><div style={{fontSize:44,marginBottom:10}}>🎬</div><h1 style={{fontSize:32,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em",marginBottom:10}}>New Brief</h1><p style={{color:"#9b9a97",fontSize:14,fontStyle:"italic",lineHeight:1.6}}>Paste your meeting notes or send a bot to your live meeting.</p></div>
         <MeetingBotPanel projectId={null} onBotStarted={async (botId)=>{
-          // Create project first, then link the bot ID to it
-          const newProject={id:crypto.randomUUID(),user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,recall_bot_id:botId,recall_status:"bot_joined",created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-          const saved = await saveProject(newProject);
-          const project = saved || newProject;
-          // Now update Supabase with the bot ID explicitly
-          await supabase.from("projects").update({recall_bot_id:botId,recall_status:"bot_joined",updated_at:new Date().toISOString()}).eq("id",project.id);
-          setActiveProject({...project,recall_bot_id:botId,recall_status:"bot_joined"});
+          // Create project with bot ID already included
+          const projectId = crypto.randomUUID();
+          const newProject={id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,recall_bot_id:botId,recall_status:"bot_joined",created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+          // Save to Supabase directly with upsert to ensure bot ID is stored
+          const{data}=await supabase.from("projects").insert({
+            id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",
+            status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},
+            doc_count:0,recall_bot_id:botId,recall_status:"bot_joined",
+            created_at:new Date().toISOString(),updated_at:new Date().toISOString()
+          }).select().single();
+          const project = data || newProject;
+          setProjects(ps=>[project,...ps]);
+          setActiveProject(project);
           setPage("overview");
           setScreen("doc");
         }} recallStatus={null}/>
