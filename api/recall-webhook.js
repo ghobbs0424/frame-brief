@@ -91,15 +91,19 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    const { data: project } = await supabase
+    const { data: project, error: lookupError } = await supabase
       .from("projects")
       .select("*")
       .eq("recall_bot_id", botId)
       .single();
 
+    console.log("Project lookup - botId:", botId, "found:", !!project, "error:", lookupError?.message);
+
     if (!project) {
-      console.log("No project found for bot:", botId);
-      return res.status(200).json({ ok: true });
+      // Try fetching all projects to debug
+      const { data: allProjects } = await supabase.from("projects").select("id,recall_bot_id,recall_status").limit(10);
+      console.log("All projects recall_bot_ids:", JSON.stringify(allProjects?.map(p => ({id:p.id, bot:p.recall_bot_id, status:p.recall_status}))));
+      return res.status(200).json({ ok: true, debug: "no_project_found" });
     }
 
     // Fetch transcript
