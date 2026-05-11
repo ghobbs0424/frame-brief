@@ -103,15 +103,15 @@ export default async function handler(req, res) {
 
     // ── Receive Recall webhook ───────────────────────────────────────────────
     const event = req.body;
-    console.log("Webhook event:", event && event.event, "bot:", event && event.data && event.data.bot_id);
+    const eventName = event && event.event;
+    const botId = (event && event.data && (event.data.bot_id || event.data.id)) || (event && event.bot_id);
+    console.log("Webhook event:", eventName, "bot:", botId);
 
-    const doneEvents = ["bot.done", "bot.transcription_complete", "transcript.done", "bot.call_ended"];
-    if (!event || !doneEvents.includes(event.event)) {
-      return res.status(200).json({ ok: true, skipped: event && event.event });
+    const handledEvents = ["bot.done", "bot.call_ended", "bot.transcription_complete", "transcript.done"];
+    if (!event || !handledEvents.includes(eventName)) {
+      return res.status(200).json({ ok: true, skipped: eventName });
     }
 
-    const botId = (event.data && (event.data.bot_id || event.data.id)) || event.bot_id;
-    console.log("Bot ID:", botId);
     if (!botId) return res.status(200).json({ ok: true, error: "no bot id" });
 
     const { data: project, error: lookupErr } = await supabase
@@ -123,11 +123,36 @@ export default async function handler(req, res) {
     console.log("Project lookup:", project && project.id, "error:", lookupErr && lookupErr.message);
     if (!project) return res.status(200).json({ ok: true, error: "project not found for bot " + botId });
 
+    // ── bot.done / bot.call_ended → trigger async transcription ─────────────
+    if (eventName === "bot.done" || eventName === "bot.call_ended") {
+      console.log("Bot done — triggering AssemblyAI async transcription for bot:", botId);
+
+      const asyncRes = await fetch(
+        `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/async_transcription`,
+        {
+          method: "POST",
+          headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ provider: "assembly_ai" }),
+        }
+      );
+      const asyncData = await asyncRes.json();
+      console.log("Async transcription trigger status:", asyncRes.status, JSON.stringify(asyncData).slice(0, 200));
+
+      await supabase.from("projects").update({
+        recall_status: "transcribing",
+        updated_at: new Date().toISOString(),
+      }).eq("id", project.id);
+
+      return res.status(200).json({ ok: true, triggered: asyncRes.status });
+    }
+
+    // ── bot.transcription_complete / transcript.done → fetch + generate brief ─
     const tRes = await fetch(
       `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/transcript`,
       { headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" } }
     );
     const tData = await tRes.json();
+    console.log("Transcript fetch status:", tRes.status, "sample:", JSON.stringify(tData).slice(0, 300));
 
     let text = "";
     if (Array.isArray(tData)) {
