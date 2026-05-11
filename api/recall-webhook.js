@@ -74,13 +74,22 @@ export default async function handler(req, res) {
     const event = req.body;
     console.log("Recall webhook event:", event?.event, event?.data?.bot_id);
 
-    const completionEvents = ["bot.done", "bot.transcription_complete", "transcript.done"];
+    // Log full event for debugging
+    console.log("Full event:", JSON.stringify(event).slice(0, 500));
+
+    const completionEvents = ["bot.done", "bot.transcription_complete", "transcript.done", "bot.call_ended", "bot.complete"];
     if (!completionEvents.includes(event?.event)) {
+      console.log("Skipping event:", event?.event);
       return res.status(200).json({ ok: true, skipped: true });
     }
 
-    const botId = event?.data?.bot_id;
-    if (!botId) return res.status(200).json({ ok: true });
+    // Recall.ai sends bot_id in different places depending on event type
+    const botId = event?.data?.bot_id || event?.data?.id || event?.bot_id;
+    console.log("Bot ID from event:", botId, "event type:", event?.event);
+    if (!botId) {
+      console.log("No bot ID found in event:", JSON.stringify(event).slice(0, 300));
+      return res.status(200).json({ ok: true });
+    }
 
     const { data: project } = await supabase
       .from("projects")
