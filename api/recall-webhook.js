@@ -43,7 +43,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           meeting_url: meetingUrl,
           bot_name: "Frame Brief",
-          transcription_options: { provider: "assembly_ai" },
+
           webhook_url: `https://frame-brief.vercel.app/api/recall-webhook`,
         }),
       });
