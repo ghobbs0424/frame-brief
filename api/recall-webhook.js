@@ -109,6 +109,7 @@ export default async function handler(req, res) {
 
     const handledEvents = ["bot.done", "bot.call_ended", "bot.transcription_complete", "transcript.done"];
     if (!event || !handledEvents.includes(eventName)) {
+      console.log("Skipping unhandled event:", eventName, "full payload:", JSON.stringify(event).slice(0, 400));
       return res.status(200).json({ ok: true, skipped: eventName });
     }
 
@@ -125,19 +126,34 @@ export default async function handler(req, res) {
 
     // ── bot.done / bot.call_ended → trigger async transcription ─────────────
     if (eventName === "bot.done" || eventName === "bot.call_ended") {
-      console.log("Bot done — triggering AssemblyAI async transcription for bot:", botId);
+      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/async_transcription/`;
+      const asyncBody = { provider: "assembly_ai" };
+      console.log("Bot done — triggering async transcription:", asyncUrl, JSON.stringify(asyncBody));
 
-      const asyncRes = await fetch(
-        `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/async_transcription`,
-        {
-          method: "POST",
-          headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: "assembly_ai" }),
-        }
-      );
-      const asyncData = await asyncRes.json();
-      console.log("Async transcription trigger status:", asyncRes.status, JSON.stringify(asyncData).slice(0, 200));
+      const asyncRes = await fetch(asyncUrl, {
+        method: "POST",
+        headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify(asyncBody),
+      });
 
+      let asyncData;
+      const rawText = await asyncRes.text();
+      try { asyncData = JSON.parse(rawText); } catch { asyncData = rawText; }
+
+      if (!asyncRes.ok) {
+        console.error(
+          "ASYNC TRANSCRIPTION FAILED — status:", asyncRes.status,
+          "url:", asyncUrl,
+          "response:", rawText
+        );
+        await supabase.from("projects").update({
+          recall_status: "transcription_error",
+          updated_at: new Date().toISOString(),
+        }).eq("id", project.id);
+        return res.status(200).json({ ok: false, error: "async transcription trigger failed", status: asyncRes.status, body: rawText });
+      }
+
+      console.log("Async transcription triggered OK — status:", asyncRes.status, "response:", rawText);
       await supabase.from("projects").update({
         recall_status: "transcribing",
         updated_at: new Date().toISOString(),
