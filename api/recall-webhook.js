@@ -1,8 +1,4 @@
 // api/recall-webhook.js
-// Handles both:
-// POST /api/recall-webhook?action=create-bot  → creates a Recall bot (called from browser)
-// POST /api/recall-webhook                    → receives transcript webhook (called from Recall.ai)
-
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -13,11 +9,9 @@ const supabase = createClient(
 const RECALL_KEY = process.env.RECALL_API_KEY;
 const RECALL_REGION = "us-west-2";
 
-// Required for Vercel to parse JSON body
 export const config = { api: { bodyParser: true } };
 
 export default async function handler(req, res) {
-  // Allow CORS from your app
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
@@ -26,13 +20,12 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    // ── Route 1: Create bot (called from browser via our proxy) ──
+    // ── Create bot ──────────────────────────────────────────────────────────
     if (req.query.action === "create-bot") {
       const { meetingUrl, projectId } = req.body || {};
-      console.log("create-bot called:", { meetingUrl, projectId });
+      console.log("create-bot:", meetingUrl, projectId);
 
       if (!meetingUrl) return res.status(400).json({ error: "meetingUrl is required" });
-      if (!RECALL_KEY) return res.status(500).json({ error: "RECALL_API_KEY not configured" });
 
       const recallRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/bot/`, {
         method: "POST",
@@ -43,188 +36,176 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           meeting_url: meetingUrl,
           bot_name: "Frame Brief",
-
           webhook_url: `https://frame-brief.vercel.app/api/recall-webhook`,
         }),
       });
 
       const botData = await recallRes.json();
-      console.log("Recall response:", recallRes.status, JSON.stringify(botData));
+      console.log("Recall create-bot response:", recallRes.status, JSON.stringify(botData).slice(0, 200));
 
       if (!recallRes.ok) {
         return res.status(recallRes.status).json({
-          error: botData?.message || botData?.detail || JSON.stringify(botData) || "Failed to create bot"
+          error: botData?.message || botData?.detail || JSON.stringify(botData)
         });
       }
 
-      // Save bot ID to project if provided
       if (projectId) {
-        const { error: updateError } = await supabase.from("projects").update({
+        const { error: dbErr } = await supabase.from("projects").update({
           recall_bot_id: botData.id,
           recall_status: "bot_joined",
           updated_at: new Date().toISOString(),
         }).eq("id", projectId);
-        console.log("Saved bot ID to project:", projectId, "bot:", botData.id, "error:", updateError);
+        console.log("Saved bot to project:", projectId, "error:", dbErr?.message);
       }
 
       return res.status(200).json({ botId: botData.id, status: botData.status });
     }
 
-    // ── Route 1b: Manually fetch transcript for a bot ──────────────────────
+    // ── Fetch transcript manually ────────────────────────────────────────────
     if (req.query.action === "fetch-transcript") {
       const { botId, projectId } = req.body || {};
-      console.log("Manual fetch-transcript:", { botId, projectId });
+      console.log("fetch-transcript:", botId, projectId);
 
       if (!botId || !projectId) return res.status(400).json({ error: "botId and projectId required" });
 
-      const transcriptRes = await fetch(
+      const tRes = await fetch(
         `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/transcript`,
         { headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" } }
       );
-      const transcriptData = await transcriptRes.json();
-      console.log("Transcript response status:", transcriptRes.status, "data type:", typeof transcriptData, "is array:", Array.isArray(transcriptData));
-      console.log("Transcript sample:", JSON.stringify(transcriptData).slice(0, 300));
+      const tData = await tRes.json();
+      console.log("Transcript fetch status:", tRes.status, "sample:", JSON.stringify(tData).slice(0, 300));
 
-      let transcriptText = "";
-      if (Array.isArray(transcriptData)) {
-        transcriptText = transcriptData
+      let text = "";
+      if (Array.isArray(tData)) {
+        text = tData
           .map(seg => `${seg.speaker || "Speaker"}: ${(seg.words || []).map(w => w.text || w.word || "").join(" ")}`)
           .filter(line => line.length > 10)
-          .join("
-
-");
-      } else if (transcriptData?.transcript) {
-        transcriptText = transcriptData.transcript;
-      } else if (typeof transcriptData === "string") {
-        transcriptText = transcriptData;
+          .join("\n\n");
+      } else if (tData && tData.transcript) {
+        text = tData.transcript;
       }
 
-      if (!transcriptText.trim()) {
-        return res.status(200).json({ ok: true, message: "No transcript yet", raw: JSON.stringify(transcriptData).slice(0, 200) });
+      if (!text.trim()) {
+        return res.status(200).json({ ok: false, message: "No transcript yet", raw: JSON.stringify(tData).slice(0, 300) });
       }
 
-      // Save and generate brief
       await supabase.from("projects").update({
         recall_status: "transcript_ready",
-        recall_transcript: transcriptText,
-        updated_at: new Date().toISOString()
+        recall_transcript: text,
+        updated_at: new Date().toISOString(),
       }).eq("id", projectId);
 
-      return res.status(200).json({ ok: true, transcriptLength: transcriptText.length, preview: transcriptText.slice(0, 200) });
+      // Generate brief with Claude
+      await generateBrief(projectId, text);
+
+      return res.status(200).json({ ok: true, transcriptLength: text.length });
     }
 
-    // ── Route 2: Receive transcript from Recall.ai webhook ──
+    // ── Receive Recall webhook ───────────────────────────────────────────────
     const event = req.body;
-    console.log("Recall webhook event:", event?.event, event?.data?.bot_id);
+    console.log("Webhook event:", event && event.event, "bot:", event && event.data && event.data.bot_id);
 
-    // Log full event for debugging
-    console.log("Full event:", JSON.stringify(event).slice(0, 500));
-
-    const completionEvents = ["bot.done", "bot.transcription_complete", "transcript.done", "bot.call_ended", "bot.complete"];
-    if (!completionEvents.includes(event?.event)) {
-      console.log("Skipping event:", event?.event);
-      return res.status(200).json({ ok: true, skipped: true });
+    const doneEvents = ["bot.done", "bot.transcription_complete", "transcript.done", "bot.call_ended"];
+    if (!event || !doneEvents.includes(event.event)) {
+      return res.status(200).json({ ok: true, skipped: event && event.event });
     }
 
-    // Recall.ai sends bot_id in different places depending on event type
-    const botId = event?.data?.bot_id || event?.data?.id || event?.bot_id;
-    console.log("Bot ID from event:", botId, "event type:", event?.event);
-    if (!botId) {
-      console.log("No bot ID found in event:", JSON.stringify(event).slice(0, 300));
-      return res.status(200).json({ ok: true });
-    }
+    const botId = (event.data && (event.data.bot_id || event.data.id)) || event.bot_id;
+    console.log("Bot ID:", botId);
+    if (!botId) return res.status(200).json({ ok: true, error: "no bot id" });
 
-    const { data: project, error: lookupError } = await supabase
+    const { data: project, error: lookupErr } = await supabase
       .from("projects")
       .select("*")
       .eq("recall_bot_id", botId)
       .single();
 
-    console.log("Project lookup - botId:", botId, "found:", !!project, "error:", lookupError?.message);
+    console.log("Project lookup:", project && project.id, "error:", lookupErr && lookupErr.message);
+    if (!project) return res.status(200).json({ ok: true, error: "project not found for bot " + botId });
 
-    if (!project) {
-      // Try fetching all projects to debug
-      const { data: allProjects } = await supabase.from("projects").select("id,recall_bot_id,recall_status").limit(10);
-      console.log("All projects recall_bot_ids:", JSON.stringify(allProjects?.map(p => ({id:p.id, bot:p.recall_bot_id, status:p.recall_status}))));
-      return res.status(200).json({ ok: true, debug: "no_project_found" });
-    }
-
-    // Fetch transcript
-    const transcriptRes = await fetch(
+    const tRes = await fetch(
       `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/transcript`,
       { headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" } }
     );
+    const tData = await tRes.json();
 
-    const transcriptData = await transcriptRes.json();
-    let transcriptText = "";
-
-    if (Array.isArray(transcriptData)) {
-      transcriptText = transcriptData
-        .map(seg => `${seg.speaker || "Speaker"}: ${(seg.words || []).map(w => w.text).join(" ")}`)
+    let text = "";
+    if (Array.isArray(tData)) {
+      text = tData
+        .map(seg => `${seg.speaker || "Speaker"}: ${(seg.words || []).map(w => w.text || w.word || "").join(" ")}`)
         .filter(line => line.length > 10)
         .join("\n\n");
-    } else if (transcriptData?.transcript) {
-      transcriptText = transcriptData.transcript;
+    } else if (tData && tData.transcript) {
+      text = tData.transcript;
     }
 
-
-    // Save transcript
     await supabase.from("projects").update({
-      recall_status: "transcript_ready",
-      recall_transcript: transcriptText || null,
-      updated_at: new Date().toISOString()
+      recall_status: text.trim() ? "transcript_ready" : "empty_transcript",
+      recall_transcript: text || null,
+      updated_at: new Date().toISOString(),
     }).eq("id", project.id);
 
-    console.log("Transcript saved, generating brief for project:", project.id);
-
-    // Auto-generate brief from transcript using Claude
-    if (transcriptText && transcriptText.trim()) {
-      try {
-        const ANTHROPIC_KEY = process.env.VITE_ANTHROPIC_KEY;
-        const SYSTEM = `You are a creative director AI. Analyze meeting notes and return ONLY valid JSON, no markdown, no backticks. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":""}]}`;
-
-        const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
-          body: JSON.stringify({
-            model: "claude-sonnet-4-6",
-            max_tokens: 8000,
-            system: SYSTEM,
-            messages: [{ role: "user", content: `Create a production brief from this meeting transcript:\n\n${transcriptText}` }]
-          })
-        });
-
-        const aiData = await aiRes.json();
-        const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
-        let brief = null;
-        try {
-          let jsonStr = raw;
-          const s = raw.indexOf("{"), e = raw.lastIndexOf("}");
-          if (s !== -1 && e !== -1) jsonStr = raw.slice(s, e+1);
-          jsonStr = jsonStr.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
-          brief = JSON.parse(jsonStr);
-          if (!Array.isArray(brief.concepts)) brief.concepts = [];
-          if (!brief.clientActionItems) brief.clientActionItems = [];
-          if (!brief.internalTodos) brief.internalTodos = [];
-        } catch(e) { console.error("Parse error:", e); }
-
-        if (brief) {
-          await supabase.from("projects").update({
-            title: brief.projectTitle || "Untitled",
-            client_name: brief.clientName || "",
-            brief: brief,
-            recall_status: "brief_ready",
-            updated_at: new Date().toISOString()
-          }).eq("id", project.id);
-          console.log("Brief generated for project:", project.id);
-        }
-      } catch(aiErr) { console.error("Brief gen error:", aiErr); }
+    if (text.trim()) {
+      await generateBrief(project.id, text);
     }
 
     return res.status(200).json({ ok: true });
 
   } catch (err) {
-    console.error("Webhook error:", err);
+    console.error("Handler error:", err.message);
     return res.status(500).json({ error: err.message });
+  }
+}
+
+async function generateBrief(projectId, transcriptText) {
+  try {
+    const ANTHROPIC_KEY = process.env.VITE_ANTHROPIC_KEY;
+    const SYSTEM = `You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object with no markdown or backticks. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":""}]}`;
+
+    const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": ANTHROPIC_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 8000,
+        system: SYSTEM,
+        messages: [{ role: "user", content: `Create a production brief from this meeting transcript:\n\n${transcriptText}` }],
+      }),
+    });
+
+    const aiData = await aiRes.json();
+    const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
+
+    let brief = null;
+    try {
+      const s = raw.indexOf("{");
+      const e = raw.lastIndexOf("}");
+      if (s !== -1 && e !== -1) {
+        let jsonStr = raw.slice(s, e + 1).replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
+        brief = JSON.parse(jsonStr);
+        if (!Array.isArray(brief.concepts)) brief.concepts = [];
+        if (!brief.clientActionItems) brief.clientActionItems = [];
+        if (!brief.internalTodos) brief.internalTodos = [];
+      }
+    } catch (parseErr) {
+      console.error("Brief parse error:", parseErr.message);
+    }
+
+    if (brief) {
+      await supabase.from("projects").update({
+        title: brief.projectTitle || "Untitled",
+        client_name: brief.clientName || "",
+        brief: brief,
+        recall_status: "brief_ready",
+        updated_at: new Date().toISOString(),
+      }).eq("id", projectId);
+      console.log("Brief generated for project:", projectId);
+    }
+  } catch (err) {
+    console.error("generateBrief error:", err.message);
   }
 }
