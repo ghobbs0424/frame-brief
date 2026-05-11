@@ -741,7 +741,7 @@ function DocUpload({docs,onAdd,onRemove}){
 }
 
 // ─── OVERVIEW PAGE ────────────────────────────────────────────────────────────
-function OverviewPage({brief,setBrief,goTo,readonly}){
+function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,projectId,onTranscriptReady}){
   const set=(k,v)=>setBrief(b=>({...b,[k]:v}));
   const upArr=(k,i,v)=>setBrief(b=>{const a=[...(b[k]||[])];a[i]=v;return{...b,[k]:a};});
   const delArr=(k,i)=>setBrief(b=>({...b,[k]:(b[k]||[]).filter((_,j)=>j!==i)}));
@@ -829,7 +829,7 @@ async function startRecallBot(meetingUrl, projectId) {
   return data; // returns { botId, status }
 }
 
-function MeetingBotPanel({ projectId, onBotStarted, recallStatus }) {
+function MeetingBotPanel({ projectId, onBotStarted, recallStatus, recallBotId, onTranscriptReady }) {
   const [meetingUrl, setMeetingUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -862,9 +862,25 @@ function MeetingBotPanel({ projectId, onBotStarted, recallStatus }) {
     <div style={{background:"#e8f0fe",border:"1px solid #b3c9f9",borderRadius:10,padding:"14px 18px",marginBottom:20}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
         <div className="spin" style={{width:14,height:14,border:"2px solid #b3c9f9",borderTop:"2px solid #1a56c4",borderRadius:"50%",flexShrink:0}}/>
-        <span style={{fontWeight:700,fontSize:14,color:"#1a56c4"}}>Bot is in your meeting</span>
+        <span style={{fontWeight:700,fontSize:14,color:"#1a56c4"}}>Bot is recording</span>
       </div>
-      <p style={{fontSize:13,color:"#1a56c4",margin:0}}>Recording and transcribing. When the meeting ends, your brief will be ready automatically.</p>
+      <p style={{fontSize:13,color:"#1a56c4",marginBottom:10}}>When the meeting ends, click below to fetch the transcript and generate your brief.</p>
+      <button onClick={async()=>{
+        if(!recallBotId||!projectId){alert("No bot ID found.");return;}
+        setLoading(true);
+        try{
+          const res=await fetch("/api/recall-webhook?action=fetch-transcript",{
+            method:"POST",headers:{"Content-Type":"application/json"},
+            body:JSON.stringify({botId:recallBotId,projectId})
+          });
+          const data=await res.json();
+          if(data.transcriptLength>0){onTranscriptReady();}
+          else{alert("Transcript not ready yet. Try again in a minute. Debug: "+data.message);}
+        }catch(e){alert("Error: "+e.message);}
+        setLoading(false);
+      }} style={{background:"#1a56c4",color:"#fff",border:"none",borderRadius:6,padding:"8px 16px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif"}}>
+        {loading?"Fetching…":"📄 Fetch Transcript & Generate Brief"}
+      </button>
     </div>
   );
 
@@ -1256,7 +1272,7 @@ function FrameBriefApp(){
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
-          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}}/>}
+          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
         </div>
         {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}} className="hide-on-mobile"><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div>}
