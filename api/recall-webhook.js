@@ -266,7 +266,13 @@ async function downloadAndParseTranscript(transcriptId) {
 
 async function generateBrief(projectId, transcriptText) {
   try {
-    const ANTHROPIC_KEY = process.env.VITE_ANTHROPIC_KEY;
+    const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY || process.env.VITE_ANTHROPIC_KEY;
+    console.log("generateBrief — ANTHROPIC_KEY present:", !!ANTHROPIC_KEY, "key prefix:", ANTHROPIC_KEY ? ANTHROPIC_KEY.slice(0, 7) : "MISSING", "projectId:", projectId, "transcriptLength:", transcriptText?.length);
+    if (!ANTHROPIC_KEY) {
+      console.error("generateBrief ABORT — no Anthropic key found in env (tried ANTHROPIC_KEY and VITE_ANTHROPIC_KEY)");
+      await supabase.from("projects").update({ recall_status: "brief_error", updated_at: new Date().toISOString() }).eq("id", projectId);
+      return;
+    }
     const SYSTEM = `You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object with no markdown or backticks. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":""}]}`;
 
     const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
