@@ -61,32 +61,28 @@ export default async function handler(req, res) {
       return res.status(200).json({ botId: botData.id, status: botData.status });
     }
 
-    // ── Fetch transcript manually ────────────────────────────────────────────
+    // ── Fetch transcript manually (recovery action) ──────────────────────────
     if (req.query.action === "fetch-transcript") {
       const { botId, projectId } = req.body || {};
       console.log("fetch-transcript:", botId, projectId);
-
       if (!botId || !projectId) return res.status(400).json({ error: "botId and projectId required" });
 
-      const tRes = await fetch(
-        `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/transcript`,
-        { headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" } }
+      // Get bot to find the transcript ID
+      const botRes = await fetch(
+        `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/`,
+        { headers: { "Authorization": `Token ${RECALL_KEY}` } }
       );
-      const tData = await tRes.json();
-      console.log("Transcript fetch status:", tRes.status, "sample:", JSON.stringify(tData).slice(0, 300));
+      const botData = await botRes.json();
+      const transcriptId = botData.recordings?.[0]?.media_shortcuts?.transcript?.id;
+      console.log("fetch-transcript: transcriptId:", transcriptId);
 
-      let text = "";
-      if (Array.isArray(tData)) {
-        text = tData
-          .map(seg => `${seg.speaker || "Speaker"}: ${(seg.words || []).map(w => w.text || w.word || "").join(" ")}`)
-          .filter(line => line.length > 10)
-          .join("\n\n");
-      } else if (tData && tData.transcript) {
-        text = tData.transcript;
+      if (!transcriptId) {
+        return res.status(200).json({ ok: false, message: "No transcript found on bot", botStatus: JSON.stringify(botData.recordings?.[0]?.media_shortcuts?.transcript).slice(0, 200) });
       }
 
+      const text = await downloadAndParseTranscript(transcriptId);
       if (!text.trim()) {
-        return res.status(200).json({ ok: false, message: "No transcript yet", raw: JSON.stringify(tData).slice(0, 300) });
+        return res.status(200).json({ ok: false, message: "Transcript empty or not ready" });
       }
 
       await supabase.from("projects").update({
@@ -95,9 +91,7 @@ export default async function handler(req, res) {
         updated_at: new Date().toISOString(),
       }).eq("id", projectId);
 
-      // Generate brief with Claude
       await generateBrief(projectId, text);
-
       return res.status(200).json({ ok: true, transcriptLength: text.length });
     }
 
@@ -204,35 +198,13 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, failed: true, sub_code: subCode });
     }
 
-    // ── transcript.done → fetch transcript from bot, generate brief ───────────
-    const tRes = await fetch(
-      `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/transcript/`,
-      { headers: { "Authorization": `Token ${RECALL_KEY}` } }
-    );
-    const tRaw = await tRes.text();
-    console.log("Bot transcript fetch — status:", tRes.status, "sample:", tRaw.slice(0, 400));
-
-    if (!tRes.ok) {
-      console.error("Failed to fetch bot transcript — status:", tRes.status, "body:", tRaw);
-      return res.status(200).json({ ok: false, error: "bot transcript fetch failed", status: tRes.status });
+    // ── transcript.done → download via transcript ID, generate brief ──────────
+    if (!transcriptId) {
+      console.error("transcript.done received but no transcript.id in payload");
+      return res.status(200).json({ ok: false, error: "no transcript id in payload" });
     }
 
-    // Parse: Recall returns an array of speaker segments with word arrays
-    let text = "";
-    try {
-      const tData = JSON.parse(tRaw);
-      if (Array.isArray(tData)) {
-        text = tData
-          .map(seg => `${seg.speaker || "Speaker"}: ${(seg.words || []).map(w => w.text || w.word || "").join(" ")}`)
-          .filter(line => line.length > 10)
-          .join("\n\n");
-      } else if (tData && typeof tData.transcript === "string") {
-        text = tData.transcript;
-      }
-    } catch {
-      text = tRaw;
-    }
-
+    const text = await downloadAndParseTranscript(transcriptId);
     console.log("Parsed transcript length:", text.length, "preview:", text.slice(0, 200));
 
     await supabase.from("projects").update({
@@ -251,6 +223,45 @@ export default async function handler(req, res) {
     console.error("Handler error:", err.message);
     return res.status(500).json({ error: err.message });
   }
+}
+
+async function downloadAndParseTranscript(transcriptId) {
+  // GET /transcript/{id}/ to find download_url
+  const metaRes = await fetch(
+    `https://${RECALL_REGION}.recall.ai/api/v1/transcript/${transcriptId}/`,
+    { headers: { "Authorization": `Token ${RECALL_KEY}` } }
+  );
+  const metaRaw = await metaRes.text();
+  console.log("Transcript meta status:", metaRes.status, "sample:", metaRaw.slice(0, 300));
+  if (!metaRes.ok) { console.error("Transcript meta fetch failed:", metaRaw); return ""; }
+
+  const meta = JSON.parse(metaRaw);
+  const downloadUrl = meta.data?.download_url || meta.download_url;
+  if (!downloadUrl) { console.error("No download_url in transcript meta:", metaRaw); return ""; }
+
+  const dlRes = await fetch(downloadUrl);
+  const dlRaw = await dlRes.text();
+  console.log("Transcript download status:", dlRes.status, "sample:", dlRaw.slice(0, 300));
+  if (!dlRes.ok) { console.error("Transcript download failed:", dlRes.status); return ""; }
+
+  // Format: array of { participant: { name }, words: [{ text }] }
+  try {
+    const segments = JSON.parse(dlRaw);
+    if (Array.isArray(segments)) {
+      return segments
+        .map(seg => {
+          const speaker = seg.participant?.name || seg.speaker || "Speaker";
+          const words = (seg.words || []).map(w => w.text || w.word || "").join(" ").trim();
+          return `${speaker}: ${words}`;
+        })
+        .filter(line => line.length > 10)
+        .join("\n\n");
+    }
+  } catch (e) {
+    console.error("Transcript parse error:", e.message);
+    return dlRaw;
+  }
+  return "";
 }
 
 async function generateBrief(projectId, transcriptText) {
