@@ -136,8 +136,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: false, error: "no recording id" });
       }
 
-      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/async_transcription/`;
-      const asyncBody = { provider: { assembly_ai: {} } };
+      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/create_transcript/`;
+      const asyncBody = { provider: { assembly_ai_async: {} } };
       console.log("Triggering async transcription — url:", asyncUrl, "body:", JSON.stringify(asyncBody));
 
       const asyncRes = await fetch(asyncUrl, {
