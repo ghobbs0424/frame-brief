@@ -107,7 +107,7 @@ export default async function handler(req, res) {
     // Log full payload every time so we can see exact structure from Recall
     console.log("Webhook event:", eventName, "full payload:", JSON.stringify(event));
 
-    const transcriptionTriggerEvents = ["status.recording_done", "status.done"];
+    const transcriptionTriggerEvents = ["recording.done"];
     const handledEvents = [...transcriptionTriggerEvents, "transcript.done", "transcript.failed"];
     if (!event || !handledEvents.includes(eventName)) {
       console.log("Skipping unhandled event:", eventName);
@@ -134,9 +134,9 @@ export default async function handler(req, res) {
     console.log("Project lookup:", project && project.id, "error:", lookupErr && lookupErr.message);
     if (!project) return res.status(200).json({ ok: true, error: "project not found for bot " + botId });
 
-    // ── status.recording_done / status.done → trigger async transcription ────
+    // ── recording.done → trigger async transcription ─────────────────────────
     if (transcriptionTriggerEvents.includes(eventName)) {
-      // Get recording_id — from event payload first, else fetch from bot API
+      // recording.done should carry recording_id directly; fall back to bot API if not
       let recordingId = recordingIdFromEvent;
       if (!recordingId) {
         console.log("No recording_id in event — fetching from bot API");
@@ -164,8 +164,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: false, error: "no recording_id found" });
       }
 
-      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/create_transcript/`;
-      const asyncBody = { provider: { assembly_ai_async: {} } };
+      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/async_transcription/`;
+      const asyncBody = { provider: { assembly_ai: {} } };
       console.log("Triggering async transcription — url:", asyncUrl, "body:", JSON.stringify(asyncBody));
 
       const asyncRes = await fetch(asyncUrl, {
