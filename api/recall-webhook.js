@@ -104,19 +104,24 @@ export default async function handler(req, res) {
     // ── Receive Recall webhook ───────────────────────────────────────────────
     const event = req.body;
     const eventName = event && event.event;
-    console.log("Webhook event:", eventName, "full payload:", JSON.stringify(event).slice(0, 600));
+    // Log full payload every time so we can see exact structure from Recall
+    console.log("Webhook event:", eventName, "full payload:", JSON.stringify(event));
 
-    const handledEvents = ["recording.done", "transcript.done", "transcript.failed"];
+    const transcriptionTriggerEvents = ["status.recording_done", "status.done"];
+    const handledEvents = [...transcriptionTriggerEvents, "transcript.done", "transcript.failed"];
     if (!event || !handledEvents.includes(eventName)) {
       console.log("Skipping unhandled event:", eventName);
       return res.status(200).json({ ok: true, skipped: eventName });
     }
 
-    // Extract IDs from payload — recording.done and transcript.done both carry bot + recording
-    const botId = event.data && event.data.bot && event.data.bot.id;
-    const recordingId = event.data && event.data.recording && event.data.recording.id;
+    // Recall status events carry bot_id at event.data.bot_id or event.data.id
+    const botId = (event.data && (event.data.bot_id || event.data.id))
+      || (event.data && event.data.bot && event.data.bot.id);
+    // recording_id may be directly in event data, or nested under a recording object
+    const recordingIdFromEvent = (event.data && event.data.recording_id)
+      || (event.data && event.data.recording && event.data.recording.id);
     const transcriptId = event.data && event.data.transcript && event.data.transcript.id;
-    console.log("botId:", botId, "recordingId:", recordingId, "transcriptId:", transcriptId);
+    console.log("botId:", botId, "recordingId (from event):", recordingIdFromEvent, "transcriptId:", transcriptId);
 
     if (!botId) return res.status(200).json({ ok: true, error: "no bot id in payload" });
 
@@ -129,11 +134,34 @@ export default async function handler(req, res) {
     console.log("Project lookup:", project && project.id, "error:", lookupErr && lookupErr.message);
     if (!project) return res.status(200).json({ ok: true, error: "project not found for bot " + botId });
 
-    // ── recording.done → trigger async transcription ─────────────────────────
-    if (eventName === "recording.done") {
+    // ── status.recording_done / status.done → trigger async transcription ────
+    if (transcriptionTriggerEvents.includes(eventName)) {
+      // Get recording_id — from event payload first, else fetch from bot API
+      let recordingId = recordingIdFromEvent;
       if (!recordingId) {
-        console.error("recording.done received but no recording.id in payload");
-        return res.status(200).json({ ok: false, error: "no recording id" });
+        console.log("No recording_id in event — fetching from bot API");
+        const botRes = await fetch(
+          `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/`,
+          { headers: { "Authorization": `Token ${RECALL_KEY}` } }
+        );
+        const botRaw = await botRes.text();
+        console.log("Bot fetch status:", botRes.status, "response:", botRaw.slice(0, 500));
+        if (botRes.ok) {
+          const botData = JSON.parse(botRaw);
+          // recordings is typically an array; grab the first/only one
+          recordingId = (botData.recordings && botData.recordings[0] && botData.recordings[0].id)
+            || (botData.recording && botData.recording.id);
+          console.log("recording_id from bot API:", recordingId);
+        }
+      }
+
+      if (!recordingId) {
+        console.error("Could not find recording_id for bot:", botId);
+        await supabase.from("projects").update({
+          recall_status: "transcription_error",
+          updated_at: new Date().toISOString(),
+        }).eq("id", project.id);
+        return res.status(200).json({ ok: false, error: "no recording_id found" });
       }
 
       const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/create_transcript/`;
