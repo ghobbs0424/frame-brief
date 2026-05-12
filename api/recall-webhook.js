@@ -104,16 +104,21 @@ export default async function handler(req, res) {
     // ── Receive Recall webhook ───────────────────────────────────────────────
     const event = req.body;
     const eventName = event && event.event;
-    const botId = (event && event.data && (event.data.bot_id || event.data.id)) || (event && event.bot_id);
-    console.log("Webhook event:", eventName, "bot:", botId);
+    console.log("Webhook event:", eventName, "full payload:", JSON.stringify(event).slice(0, 600));
 
-    const handledEvents = ["bot.done", "bot.call_ended", "bot.transcription_complete", "transcript.done"];
+    const handledEvents = ["recording.done", "transcript.done", "transcript.failed"];
     if (!event || !handledEvents.includes(eventName)) {
-      console.log("Skipping unhandled event:", eventName, "full payload:", JSON.stringify(event).slice(0, 400));
+      console.log("Skipping unhandled event:", eventName);
       return res.status(200).json({ ok: true, skipped: eventName });
     }
 
-    if (!botId) return res.status(200).json({ ok: true, error: "no bot id" });
+    // Extract IDs from payload — recording.done and transcript.done both carry bot + recording
+    const botId = event.data && event.data.bot && event.data.bot.id;
+    const recordingId = event.data && event.data.recording && event.data.recording.id;
+    const transcriptId = event.data && event.data.transcript && event.data.transcript.id;
+    console.log("botId:", botId, "recordingId:", recordingId, "transcriptId:", transcriptId);
+
+    if (!botId) return res.status(200).json({ ok: true, error: "no bot id in payload" });
 
     const { data: project, error: lookupErr } = await supabase
       .from("projects")
@@ -124,11 +129,16 @@ export default async function handler(req, res) {
     console.log("Project lookup:", project && project.id, "error:", lookupErr && lookupErr.message);
     if (!project) return res.status(200).json({ ok: true, error: "project not found for bot " + botId });
 
-    // ── bot.done / bot.call_ended → trigger async transcription ─────────────
-    if (eventName === "bot.done" || eventName === "bot.call_ended") {
-      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/async_transcription/`;
-      const asyncBody = { provider: "assembly_ai" };
-      console.log("Bot done — triggering async transcription:", asyncUrl, JSON.stringify(asyncBody));
+    // ── recording.done → trigger async transcription ─────────────────────────
+    if (eventName === "recording.done") {
+      if (!recordingId) {
+        console.error("recording.done received but no recording.id in payload");
+        return res.status(200).json({ ok: false, error: "no recording id" });
+      }
+
+      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/create_transcript/`;
+      const asyncBody = { provider: { assembly_ai: {} } };
+      console.log("Triggering async transcription — url:", asyncUrl, "body:", JSON.stringify(asyncBody));
 
       const asyncRes = await fetch(asyncUrl, {
         method: "POST",
@@ -136,21 +146,14 @@ export default async function handler(req, res) {
         body: JSON.stringify(asyncBody),
       });
 
-      let asyncData;
       const rawText = await asyncRes.text();
-      try { asyncData = JSON.parse(rawText); } catch { asyncData = rawText; }
-
       if (!asyncRes.ok) {
-        console.error(
-          "ASYNC TRANSCRIPTION FAILED — status:", asyncRes.status,
-          "url:", asyncUrl,
-          "response:", rawText
-        );
+        console.error("ASYNC TRANSCRIPTION TRIGGER FAILED — status:", asyncRes.status, "response:", rawText);
         await supabase.from("projects").update({
           recall_status: "transcription_error",
           updated_at: new Date().toISOString(),
         }).eq("id", project.id);
-        return res.status(200).json({ ok: false, error: "async transcription trigger failed", status: asyncRes.status, body: rawText });
+        return res.status(200).json({ ok: false, status: asyncRes.status, body: rawText });
       }
 
       console.log("Async transcription triggered OK — status:", asyncRes.status, "response:", rawText);
@@ -162,23 +165,72 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, triggered: asyncRes.status });
     }
 
-    // ── bot.transcription_complete / transcript.done → fetch + generate brief ─
-    const tRes = await fetch(
-      `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/transcript`,
-      { headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" } }
-    );
-    const tData = await tRes.json();
-    console.log("Transcript fetch status:", tRes.status, "sample:", JSON.stringify(tData).slice(0, 300));
-
-    let text = "";
-    if (Array.isArray(tData)) {
-      text = tData
-        .map(seg => `${seg.speaker || "Speaker"}: ${(seg.words || []).map(w => w.text || w.word || "").join(" ")}`)
-        .filter(line => line.length > 10)
-        .join("\n\n");
-    } else if (tData && tData.transcript) {
-      text = tData.transcript;
+    // ── transcript.failed → log and mark error ───────────────────────────────
+    if (eventName === "transcript.failed") {
+      const subCode = event.data && event.data.data && event.data.data.sub_code;
+      console.error("TRANSCRIPT FAILED — sub_code:", subCode, "botId:", botId, "recordingId:", recordingId);
+      await supabase.from("projects").update({
+        recall_status: "transcript_failed",
+        updated_at: new Date().toISOString(),
+      }).eq("id", project.id);
+      return res.status(200).json({ ok: true, failed: true, sub_code: subCode });
     }
+
+    // ── transcript.done → retrieve transcript via download_url, generate brief ─
+    if (!transcriptId) {
+      console.error("transcript.done received but no transcript.id in payload");
+      return res.status(200).json({ ok: false, error: "no transcript id" });
+    }
+
+    // Step 1: get transcript metadata (contains download_url)
+    const metaRes = await fetch(
+      `https://${RECALL_REGION}.recall.ai/api/v1/transcript/${transcriptId}/`,
+      { headers: { "Authorization": `Token ${RECALL_KEY}` } }
+    );
+    const metaText = await metaRes.text();
+    console.log("Transcript meta status:", metaRes.status, "response:", metaText.slice(0, 500));
+
+    if (!metaRes.ok) {
+      console.error("Failed to fetch transcript metadata — status:", metaRes.status, "body:", metaText);
+      return res.status(200).json({ ok: false, error: "transcript meta fetch failed", status: metaRes.status });
+    }
+
+    const meta = JSON.parse(metaText);
+    const downloadUrl = meta.download_url;
+    if (!downloadUrl) {
+      console.error("No download_url in transcript metadata:", metaText);
+      return res.status(200).json({ ok: false, error: "no download_url" });
+    }
+
+    // Step 2: download the actual transcript content
+    const dlRes = await fetch(downloadUrl);
+    const dlText = await dlRes.text();
+    console.log("Transcript download status:", dlRes.status, "sample:", dlText.slice(0, 300));
+
+    if (!dlRes.ok) {
+      console.error("Failed to download transcript — status:", dlRes.status);
+      return res.status(200).json({ ok: false, error: "transcript download failed" });
+    }
+
+    // Parse transcript — supports array-of-segments or plain text
+    let text = "";
+    try {
+      const dlData = JSON.parse(dlText);
+      if (Array.isArray(dlData)) {
+        text = dlData
+          .map(seg => `${seg.speaker || "Speaker"}: ${(seg.words || []).map(w => w.text || w.word || "").join(" ")}`)
+          .filter(line => line.length > 10)
+          .join("\n\n");
+      } else if (dlData && typeof dlData.transcript === "string") {
+        text = dlData.transcript;
+      } else {
+        text = JSON.stringify(dlData);
+      }
+    } catch {
+      text = dlText; // fall back to raw text if not JSON
+    }
+
+    console.log("Parsed transcript length:", text.length, "preview:", text.slice(0, 200));
 
     await supabase.from("projects").update({
       recall_status: text.trim() ? "transcript_ready" : "empty_transcript",
