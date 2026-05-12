@@ -1027,16 +1027,18 @@ function FrameBriefApp(){
 
   // Poll for transcript/brief when bot is in a meeting
   useEffect(()=>{
-    const pollStatuses = ["bot_joined", "transcript_ready"];
+    const pollStatuses = ["bot_joined", "transcribing", "transcript_ready"];
     if(!activeProject?.id || !pollStatuses.includes(activeProject?.recall_status)) return;
     const interval = setInterval(async () => {
       const { data } = await supabase.from("projects").select("*").eq("id", activeProject.id).single();
-      if (data?.recall_status === "brief_ready" || data?.recall_status === "transcript_ready") {
+      if (!data) return;
+      // Always sync latest data so the UI reflects current status
+      setActiveProject(prev => ({...prev, ...data}));
+      setProjects(ps => ps.map(p => p.id === activeProject.id ? {...p, ...data} : p));
+      if (data.recall_status === "brief_ready" || data.recall_status === "transcription_failed" || data.recall_status === "transcription_error") {
         clearInterval(interval);
-        setActiveProject(prev => ({...prev, ...data}));
-        setProjects(ps => ps.map(p => p.id === activeProject.id ? {...p, ...data} : p));
       }
-    }, 8000); // poll every 8s
+    }, 5000); // poll every 5s
     return () => clearInterval(interval);
   },[activeProject?.id, activeProject?.recall_status]);
 

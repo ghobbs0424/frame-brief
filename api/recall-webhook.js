@@ -285,13 +285,23 @@ async function generateBrief(projectId, transcriptText) {
     });
 
     const aiData = await aiRes.json();
+    console.log("Anthropic response status:", aiRes.status, "stop_reason:", aiData.stop_reason, "error:", aiData.error);
+
+    if (!aiRes.ok || aiData.error) {
+      console.error("Anthropic API error:", JSON.stringify(aiData));
+      return;
+    }
+
     const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
+    console.log("Raw Claude response length:", raw.length, "preview:", raw.slice(0, 200));
 
     let brief = null;
     try {
       const s = raw.indexOf("{");
       const e = raw.lastIndexOf("}");
-      if (s !== -1 && e !== -1) {
+      if (s === -1 || e === -1) {
+        console.error("No JSON object found in Claude response. Raw:", raw.slice(0, 500));
+      } else {
         let jsonStr = raw.slice(s, e + 1).replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
         brief = JSON.parse(jsonStr);
         if (!Array.isArray(brief.concepts)) brief.concepts = [];
@@ -299,20 +309,23 @@ async function generateBrief(projectId, transcriptText) {
         if (!brief.internalTodos) brief.internalTodos = [];
       }
     } catch (parseErr) {
-      console.error("Brief parse error:", parseErr.message);
+      console.error("Brief parse error:", parseErr.message, "raw:", raw.slice(0, 500));
     }
 
     if (brief) {
-      await supabase.from("projects").update({
+      const { error: dbErr } = await supabase.from("projects").update({
         title: brief.projectTitle || "Untitled",
         client_name: brief.clientName || "",
         brief: brief,
         recall_status: "brief_ready",
         updated_at: new Date().toISOString(),
       }).eq("id", projectId);
-      console.log("Brief generated for project:", projectId);
+      if (dbErr) console.error("Supabase brief update error:", dbErr.message);
+      else console.log("Brief generated for project:", projectId);
+    } else {
+      console.error("Brief is null — not saving. Check Claude response above.");
     }
   } catch (err) {
-    console.error("generateBrief error:", err.message);
+    console.error("generateBrief error:", err.message, err.stack);
   }
 }
