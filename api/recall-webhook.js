@@ -136,7 +136,7 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: false, error: "no recording id" });
       }
 
-      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/create_transcript/`;
+      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/async_transcription/`;
       const asyncBody = { provider: { assembly_ai: {} } };
       console.log("Triggering async transcription — url:", asyncUrl, "body:", JSON.stringify(asyncBody));
 
@@ -170,64 +170,39 @@ export default async function handler(req, res) {
       const subCode = event.data && event.data.data && event.data.data.sub_code;
       console.error("TRANSCRIPT FAILED — sub_code:", subCode, "botId:", botId, "recordingId:", recordingId);
       await supabase.from("projects").update({
-        recall_status: "transcript_failed",
+        recall_status: "transcription_failed",
         updated_at: new Date().toISOString(),
       }).eq("id", project.id);
       return res.status(200).json({ ok: true, failed: true, sub_code: subCode });
     }
 
-    // ── transcript.done → retrieve transcript via download_url, generate brief ─
-    if (!transcriptId) {
-      console.error("transcript.done received but no transcript.id in payload");
-      return res.status(200).json({ ok: false, error: "no transcript id" });
-    }
-
-    // Step 1: get transcript metadata (contains download_url)
-    const metaRes = await fetch(
-      `https://${RECALL_REGION}.recall.ai/api/v1/transcript/${transcriptId}/`,
+    // ── transcript.done → fetch transcript from bot, generate brief ───────────
+    const tRes = await fetch(
+      `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/transcript/`,
       { headers: { "Authorization": `Token ${RECALL_KEY}` } }
     );
-    const metaText = await metaRes.text();
-    console.log("Transcript meta status:", metaRes.status, "response:", metaText.slice(0, 500));
+    const tRaw = await tRes.text();
+    console.log("Bot transcript fetch — status:", tRes.status, "sample:", tRaw.slice(0, 400));
 
-    if (!metaRes.ok) {
-      console.error("Failed to fetch transcript metadata — status:", metaRes.status, "body:", metaText);
-      return res.status(200).json({ ok: false, error: "transcript meta fetch failed", status: metaRes.status });
+    if (!tRes.ok) {
+      console.error("Failed to fetch bot transcript — status:", tRes.status, "body:", tRaw);
+      return res.status(200).json({ ok: false, error: "bot transcript fetch failed", status: tRes.status });
     }
 
-    const meta = JSON.parse(metaText);
-    const downloadUrl = meta.download_url;
-    if (!downloadUrl) {
-      console.error("No download_url in transcript metadata:", metaText);
-      return res.status(200).json({ ok: false, error: "no download_url" });
-    }
-
-    // Step 2: download the actual transcript content
-    const dlRes = await fetch(downloadUrl);
-    const dlText = await dlRes.text();
-    console.log("Transcript download status:", dlRes.status, "sample:", dlText.slice(0, 300));
-
-    if (!dlRes.ok) {
-      console.error("Failed to download transcript — status:", dlRes.status);
-      return res.status(200).json({ ok: false, error: "transcript download failed" });
-    }
-
-    // Parse transcript — supports array-of-segments or plain text
+    // Parse: Recall returns an array of speaker segments with word arrays
     let text = "";
     try {
-      const dlData = JSON.parse(dlText);
-      if (Array.isArray(dlData)) {
-        text = dlData
+      const tData = JSON.parse(tRaw);
+      if (Array.isArray(tData)) {
+        text = tData
           .map(seg => `${seg.speaker || "Speaker"}: ${(seg.words || []).map(w => w.text || w.word || "").join(" ")}`)
           .filter(line => line.length > 10)
           .join("\n\n");
-      } else if (dlData && typeof dlData.transcript === "string") {
-        text = dlData.transcript;
-      } else {
-        text = JSON.stringify(dlData);
+      } else if (tData && typeof tData.transcript === "string") {
+        text = tData.transcript;
       }
     } catch {
-      text = dlText; // fall back to raw text if not JSON
+      text = tRaw;
     }
 
     console.log("Parsed transcript length:", text.length, "preview:", text.slice(0, 200));
