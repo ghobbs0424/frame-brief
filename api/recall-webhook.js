@@ -165,7 +165,7 @@ export default async function handler(req, res) {
       }
 
       const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/create_transcript/`;
-      const asyncBody = { provider: { assembly_ai_async: { language_code: "en" } } };
+      const asyncBody = { provider: { recallai_async: { language_code: "en" } } };
       console.log("Triggering async transcription — url:", asyncUrl, "body:", JSON.stringify(asyncBody));
 
       const asyncRes = await fetch(asyncUrl, {
