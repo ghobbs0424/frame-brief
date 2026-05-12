@@ -164,8 +164,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ ok: false, error: "no recording_id found" });
       }
 
-      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/async_transcription/`;
-      const asyncBody = { provider: { assembly_ai: {} } };
+      const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/create_transcript/`;
+      const asyncBody = { provider: { assembly_ai_async: { language_code: "en" } } };
       console.log("Triggering async transcription — url:", asyncUrl, "body:", JSON.stringify(asyncBody));
 
       const asyncRes = await fetch(asyncUrl, {
@@ -196,7 +196,7 @@ export default async function handler(req, res) {
     // ── transcript.failed → log and mark error ───────────────────────────────
     if (eventName === "transcript.failed") {
       const subCode = event.data && event.data.data && event.data.data.sub_code;
-      console.error("TRANSCRIPT FAILED — sub_code:", subCode, "botId:", botId, "recordingId:", recordingId);
+      console.error("TRANSCRIPT FAILED — sub_code:", subCode, "botId:", botId, "recordingId:", recordingIdFromEvent);
       await supabase.from("projects").update({
         recall_status: "transcription_failed",
         updated_at: new Date().toISOString(),
