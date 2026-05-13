@@ -1171,7 +1171,9 @@ EDITING RULES:
 
 Current brief:
 ${JSON.stringify(brief)}`;
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:8000,system,messages:updatedLog})});
+      // Filter out role:"system" messages — Anthropic only accepts "user" and "assistant"
+      const apiMessages=updatedLog.filter(m=>m.role==="user"||m.role==="assistant");
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:8000,system,messages:apiMessages})});
       const data=await res.json();
       const text=(data.content||[]).map(b=>b.text||"").join("").trim();
       let parsed=null;
