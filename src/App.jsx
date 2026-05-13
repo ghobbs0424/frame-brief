@@ -1212,11 +1212,22 @@ function ClientList({clients,projects,onNew,onOpen,onBack,user}){
 }
 
 // ─── CLIENT PROFILE ───────────────────────────────────────────────────────────
-function ClientProfile({clientId,clients,setClients,projects,onBack,onOpenProject,onNewProject}){
+function ClientProfile({clientId,clients,setClients,projects,onBack,onOpenProject,onNewProject,onLinkProject}){
   const[deleteConfirm,setDeleteConfirm]=useState(false);
+  const[showLink,setShowLink]=useState(false);
+  const[linkId,setLinkId]=useState("");
+  const[linking,setLinking]=useState(false);
   const client=clients.find(c=>c.id===clientId)||null;
   if(!client)return null;
   const clientProjects=projects.filter(p=>p.client_id===client.id).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
+  const unlinkableProjects=projects.filter(p=>p.client_id!==client.id);
+  async function linkProject(){
+    if(!linkId)return;
+    setLinking(true);
+    await supabase.from("projects").update({client_id:client.id,updated_at:new Date().toISOString()}).eq("id",linkId);
+    onLinkProject(linkId,client.id);
+    setLinking(false);setShowLink(false);setLinkId("");
+  }
   async function save(field,value){
     const updates={[field]:value||null,updated_at:new Date().toISOString()};
     await supabase.from("clients").update(updates).eq("id",client.id);
@@ -1293,14 +1304,33 @@ function ClientProfile({clientId,clients,setClients,projects,onBack,onOpenProjec
           <textarea key={client.id+"notes"} defaultValue={client.notes||""} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>{e.target.style.borderColor="#e8e4dc";if(e.target.value!==(client.notes||""))save("notes",e.target.value);}} placeholder="Notes about this client…" rows={3} style={{...fStyle,resize:"vertical"}}/>
         </div>
         <div>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:showLink?10:14,flexWrap:"wrap",gap:8}}>
             <div style={{fontSize:13,fontWeight:700,color:"#37352f"}}>Projects ({clientProjects.length})</div>
-            <button onClick={onNewProject} style={{background:"#37352f",color:"#fff",border:"none",padding:"7px 14px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer"}}>+ New Project</button>
+            <div style={{display:"flex",gap:8}}>
+              {unlinkableProjects.length>0&&<button onClick={()=>{setShowLink(o=>!o);setLinkId("");}} style={{background:"transparent",border:"1px solid #e8e4dc",padding:"7px 14px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",color:"#9b9a97"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#37352f";e.currentTarget.style.color="#37352f";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e8e4dc";e.currentTarget.style.color="#9b9a97";}}>🔗 Link existing</button>}
+              <button onClick={onNewProject} style={{background:"#37352f",color:"#fff",border:"none",padding:"7px 14px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer"}}>+ New Project</button>
+            </div>
           </div>
-          {clientProjects.length===0?(
+          {showLink&&(
+            <div style={{border:"1px solid #e8e4dc",borderRadius:8,padding:"14px",marginBottom:14,background:"#fafaf9"}}>
+              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Link an existing project</div>
+              <div style={{display:"flex",gap:8}}>
+                <select value={linkId} onChange={e=>setLinkId(e.target.value)} style={{flex:1,border:"1px solid #e8e4dc",borderRadius:6,padding:"9px 12px",fontSize:13,fontFamily:"'Lora',serif",color:"#37352f",background:"#fff",outline:"none"}}>
+                  <option value="">Select a project…</option>
+                  {unlinkableProjects.map(p=><option key={p.id} value={p.id}>{p.brief?.coverEmoji||"🎬"} {p.title||"Untitled"}{p.client_id?` (currently linked to another client)`:""}</option>)}
+                </select>
+                <button onClick={linkProject} disabled={!linkId||linking} style={{background:"#37352f",color:"#fff",border:"none",padding:"9px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:linkId&&!linking?"pointer":"not-allowed",opacity:linkId&&!linking?1:0.5,whiteSpace:"nowrap"}}>{linking?"Linking…":"Link"}</button>
+                <button onClick={()=>{setShowLink(false);setLinkId("");}} style={{background:"transparent",border:"1px solid #e8e4dc",padding:"8px 12px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",color:"#9b9a97"}}>✕</button>
+              </div>
+            </div>
+          )}
+          {clientProjects.length===0&&!showLink?(
             <div style={{textAlign:"center",padding:"32px 20px",border:"1px dashed #e8e4dc",borderRadius:10}}>
               <p style={{fontSize:13,color:"#9b9a97",marginBottom:10}}>No projects linked to this client yet.</p>
-              <button onClick={onNewProject} style={{background:"transparent",border:"1px solid #e8e4dc",padding:"7px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",color:"#9b9a97"}}>Create first project</button>
+              <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+                {unlinkableProjects.length>0&&<button onClick={()=>setShowLink(true)} style={{background:"transparent",border:"1px solid #e8e4dc",padding:"7px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",color:"#9b9a97"}}>🔗 Link existing</button>}
+                <button onClick={onNewProject} style={{background:"transparent",border:"1px solid #e8e4dc",padding:"7px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",color:"#9b9a97"}}>+ Create new project</button>
+              </div>
             </div>
           ):(
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
@@ -1857,7 +1887,7 @@ ${JSON.stringify(brief)}`;
 
   if(screen==="clients")return(<div><style>{CSS}</style><ClientList clients={clients} projects={projects} user={user} onBack={()=>setScreen("dashboard")} onNew={c=>setClients(prev=>[...prev,c].sort((a,b)=>a.name.localeCompare(b.name)))} onOpen={c=>{setActiveClientId(c.id);setScreen("clientProfile");}}/></div>);
 
-  if(screen==="clientProfile")return(<div><style>{CSS}</style><ClientProfile clientId={activeClientId} clients={clients} setClients={setClients} projects={projects} onBack={()=>setScreen("clients")} onOpenProject={p=>{setMyRole("owner");setActiveProject(p);setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNewProject={()=>{setInputClientId(activeClientId);setNewClientNameInput("");setTranscript("");setDocs([]);setErrMsg("");setScreen("input");}}/></div>);
+  if(screen==="clientProfile")return(<div><style>{CSS}</style><ClientProfile clientId={activeClientId} clients={clients} setClients={setClients} projects={projects} onBack={()=>setScreen("clients")} onOpenProject={p=>{setMyRole("owner");setActiveProject(p);setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNewProject={()=>{setInputClientId(activeClientId);setNewClientNameInput("");setTranscript("");setDocs([]);setErrMsg("");setScreen("input");}} onLinkProject={(projectId,clientId)=>setProjects(ps=>ps.map(p=>p.id===projectId?{...p,client_id:clientId}:p))}/></div>);
 
   if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")}/></div>);
 
