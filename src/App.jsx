@@ -1169,6 +1169,13 @@ EDITING RULES:
 - Keep message brief (1-2 sentences)
 - For hooks: update concept.hooks array and optionally concept.selectedHook
 
+REQUIRED FIELD SCHEMAS — use exactly these field names:
+- concept.locations items: {"name":"","vibe":"","description":"","shots":""}
+- overallLocations items: {"name":"","description":""}
+- shotList items: {"number":"01","type":"","description":"","lens":"","notes":""}
+- clientActionItems / internalTodos items: {"id":"ca-1","text":"","done":false}
+- wardrobe / props / moodKeywords / references: plain strings in an array
+
 Current brief:
 ${JSON.stringify(brief)}`;
       // Filter out role:"system" messages — Anthropic only accepts "user" and "assistant"
