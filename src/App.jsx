@@ -944,11 +944,12 @@ function MeetingBotPanel({ projectId, onBotStarted, recallStatus, recallBotId, o
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({projects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas}){
+function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas}){
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
   const[sidebarOpen,setSidebarOpen]=useState(true);
   const filtered=[...projects].filter(p=>{const q=search.toLowerCase();const ms=!q||[p.title,p.client_name,p.brief?.projectType].some(s=>s?.toLowerCase().includes(q));return ms&&(filter==="All"||p.status===filter);}).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
+  const filteredShared=arr(sharedProjects).filter(p=>{const q=search.toLowerCase();return!q||[p.title,p.client_name,p.brief?.projectType].some(s=>s?.toLowerCase().includes(q));}).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
 
   function DashSidebar(){return(<>
     <button onClick={()=>setSidebarOpen(false)} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"10px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,color:"#9b9a97",fontFamily:"'Lora',serif",borderBottom:"1px solid #f1f0ef",marginBottom:16}}>← Close Menu</button>
@@ -986,7 +987,10 @@ function Dashboard({projects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["All",...STATUSES].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"7px 12px",borderRadius:20,border:"1px solid",borderColor:filter===s?"#37352f":"#e8e4dc",background:filter===s?"#37352f":"transparent",color:filter===s?"#fff":"#9b9a97",fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>{s}</button>)}</div>
           </div>
           {filtered.length===0?(<div style={{textAlign:"center",padding:"60px 20px"}}><div style={{fontSize:44,marginBottom:14}}>🎬</div><p style={{fontSize:17,fontWeight:600,color:"#37352f",marginBottom:8}}>{search||filter!=="All"?"No projects match":"No projects yet"}</p><p style={{fontSize:14,color:"#9b9a97",marginBottom:20}}>{search||filter!=="All"?"Try different filters":"Create your first production brief."}</p>{!search&&filter==="All"&&<button onClick={onNew} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer"}}>+ Create First Brief</button>}</div>)
-          :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))",gap:14}}>{filtered.map(p=>(<div key={p.id} onClick={()=>onOpen(p)} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"18px",background:"#fafaf9",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#f0ede8";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fafaf9";e.currentTarget.style.borderColor="#f1f0ef";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><div style={{display:"flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}><StatusBadge status={p.status} onChange={s=>onStatusChange(p.id,s)}/><button onClick={e=>{e.stopPropagation();if(window.confirm("Delete this project?"))onDelete(p.id);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"2px 4px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>🗑</button></div></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{arr(p.brief?.concepts).map((c,i)=><span key={i} style={{fontSize:11,background:"#f1f0ef",borderRadius:20,padding:"2px 8px",color:"#9b9a97"}}>{c.emoji} {c.title}</span>)}</div>{p.doc_count>0&&<div style={{fontSize:11,color:"#9b9a97",marginBottom:4}}>📎 {p.doc_count} doc{p.doc_count>1?"s":""}</div>}<div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div>)}
+          :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))",gap:14}}>{filtered.map(p=>(<div key={p.id} onClick={()=>onOpen(p)} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"18px",background:"#fafaf9",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#f0ede8";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fafaf9";e.currentTarget.style.borderColor="#f1f0ef";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><div style={{display:"flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}>{p.share_enabled&&<span style={{fontSize:10,background:"#e8f0fe",color:"#1a56c4",borderRadius:20,padding:"2px 8px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em"}}>👥 Shared</span>}<StatusBadge status={p.status} onChange={s=>onStatusChange(p.id,s)}/><button onClick={e=>{e.stopPropagation();if(window.confirm("Delete this project?"))onDelete(p.id);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"2px 4px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>🗑</button></div></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{arr(p.brief?.concepts).map((c,i)=><span key={i} style={{fontSize:11,background:"#f1f0ef",borderRadius:20,padding:"2px 8px",color:"#9b9a97"}}>{c.emoji} {c.title}</span>)}</div>{p.doc_count>0&&<div style={{fontSize:11,color:"#9b9a97",marginBottom:4}}>📎 {p.doc_count} doc{p.doc_count>1?"s":""}</div>}<div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div>)}
+
+          {/* Shared with you section */}
+          {filteredShared.length>0&&(<div style={{marginTop:40}}><h2 style={{fontSize:18,fontWeight:700,color:"#37352f",marginBottom:16,letterSpacing:"-0.02em",display:"flex",alignItems:"center",gap:8}}>👥 Shared with you</h2><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))",gap:14}}>{filteredShared.map(p=>(<div key={p.id} onClick={()=>onOpen({...p,_sharedRole:p.myRole})} style={{border:"1px solid #e8f0fe",borderRadius:10,padding:"18px",background:"#f5f8ff",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#ebf1ff";e.currentTarget.style.borderColor="#c5d8fb";}} onMouseLeave={e=>{e.currentTarget.style.background="#f5f8ff";e.currentTarget.style.borderColor="#e8f0fe";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><span style={{fontSize:10,background:p.myRole==="editor"?"#fdeee4":"#e8f0fe",color:p.myRole==="editor"?"#b94a1a":"#1a56c4",borderRadius:20,padding:"2px 8px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em",textTransform:"capitalize"}}>{p.myRole==="editor"?"✏️ Editor":"👁 Viewer"}</span></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{arr(p.brief?.concepts).map((c,i)=><span key={i} style={{fontSize:11,background:"#e8f0fe",borderRadius:20,padding:"2px 8px",color:"#1a56c4"}}>{c.emoji} {c.title}</span>)}</div><div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div></div>)}
         </div>
       </div>
     </div>
@@ -1027,6 +1031,114 @@ function AIChatPanel({chatLog,onSend,busy,onClose}){
   );
 }
 
+// ─── SHARE MODAL ──────────────────────────────────────────────────────────────
+function ShareModal({project,user,onClose,onProjectUpdate}){
+  const[members,setMembers]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[shareEnabled,setShareEnabled]=useState(project?.share_enabled||false);
+  const[copied,setCopied]=useState(false);
+  const[inviteEmail,setInviteEmail]=useState("");
+  const[inviteRole,setInviteRole]=useState("editor");
+  const[inviting,setInviting]=useState(false);
+  const[inviteMsg,setInviteMsg]=useState("");
+  const[removing,setRemoving]=useState(null);
+  const shareUrl=`https://frame-brief.vercel.app/share/${project?.id}`;
+  useEffect(()=>{if(project?.id)loadMembers();},[project?.id]);
+  async function loadMembers(){
+    setLoading(true);
+    const{data}=await supabase.from("project_members").select("*").eq("project_id",project.id).order("created_at");
+    setMembers(data||[]);setLoading(false);
+  }
+  async function toggleShare(){
+    const v=!shareEnabled;setShareEnabled(v);
+    const{data}=await supabase.from("projects").update({share_enabled:v,updated_at:new Date().toISOString()}).eq("id",project.id).select().single();
+    if(data)onProjectUpdate(data);
+  }
+  async function copyLink(){
+    if(!shareEnabled){const v=true;setShareEnabled(v);const{data}=await supabase.from("projects").update({share_enabled:v,updated_at:new Date().toISOString()}).eq("id",project.id).select().single();if(data)onProjectUpdate(data);}
+    navigator.clipboard.writeText(shareUrl).catch(()=>{});setCopied(true);setTimeout(()=>setCopied(false),2500);
+  }
+  async function sendInvite(){
+    if(!inviteEmail.trim())return;
+    setInviting(true);setInviteMsg("");
+    try{
+      const res=await fetch("/api/invite",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({projectId:project.id,invitedEmail:inviteEmail.trim().toLowerCase(),role:inviteRole,invitedBy:user.id,projectTitle:project.title})});
+      const data=await res.json();
+      if(!res.ok){setInviteMsg(data.error||"Failed to invite");}
+      else{setInviteMsg("✓ Invite sent!");setInviteEmail("");loadMembers();}
+    }catch(e){setInviteMsg("Error: "+e.message);}
+    setInviting(false);
+  }
+  async function removeMember(memberId){
+    setRemoving(memberId);
+    await fetch("/api/invite",{method:"DELETE",headers:{"Content-Type":"application/json"},body:JSON.stringify({memberId,requesterId:user.id,projectId:project.id})});
+    await loadMembers();setRemoving(null);
+  }
+  const pill={fontSize:11,borderRadius:20,padding:"2px 8px",fontWeight:600};
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"#fff",borderRadius:12,width:"100%",maxWidth:460,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.22)"}}>
+        <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div><div style={{fontWeight:700,fontSize:15,color:"#37352f"}}>Share Brief</div><div style={{fontSize:12,color:"#9b9a97",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:300}}>{project?.title}</div></div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97",padding:"4px",lineHeight:1,flexShrink:0}}>✕</button>
+        </div>
+        <div style={{padding:"20px 24px"}}>
+          {/* Share link */}
+          <div style={{marginBottom:22}}>
+            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>View-Only Link</div>
+            <div style={{display:"flex",gap:8,marginBottom:10}}>
+              <input readOnly value={shareUrl} style={{flex:1,border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:11,color:shareEnabled?"#37352f":"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace",background:"#fafaf9",outline:"none",minWidth:0}}/>
+              <button onClick={copyLink} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:6,padding:"8px 16px",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap"}}>{copied?"✓ Copied!":"Copy Link"}</button>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div onClick={toggleShare} style={{width:34,height:20,borderRadius:10,background:shareEnabled?"#e97942":"#d4d0c8",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+                <div style={{position:"absolute",top:3,left:shareEnabled?15:3,width:14,height:14,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",transition:"left .2s"}}/>
+              </div>
+              <span style={{fontSize:12,color:"#55534e"}}>{shareEnabled?"Anyone with this link can view this project":"Enable link to share"}</span>
+            </div>
+          </div>
+          {/* Invite */}
+          <div style={{marginBottom:22}}>
+            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Invite Collaborator</div>
+            <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+              <input value={inviteEmail} onChange={e=>setInviteEmail(e.target.value)} onKeyDown={e=>e.key==="Enter"&&sendInvite()} placeholder="Email address" type="email" style={{flex:"1 1 160px",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",minWidth:0}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+              <select value={inviteRole} onChange={e=>setInviteRole(e.target.value)} style={{border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",background:"#fff",outline:"none",color:"#37352f",cursor:"pointer",flexShrink:0}}>
+                <option value="editor">Editor</option>
+                <option value="viewer">Viewer</option>
+              </select>
+              <button onClick={sendInvite} disabled={!inviteEmail.trim()||inviting} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:6,padding:"8px 14px",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",flexShrink:0,opacity:!inviteEmail.trim()||inviting?0.4:1}}>{inviting?"Sending…":"Invite"}</button>
+            </div>
+            {inviteMsg&&<div style={{fontSize:12,color:inviteMsg.startsWith("✓")?"#1e7e34":"#c0392b",marginBottom:4}}>{inviteMsg}</div>}
+            <div style={{fontSize:11,color:"#c4c3bf"}}>Editor can make changes · Viewer can only read</div>
+          </div>
+          {/* Access list */}
+          <div>
+            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Who Has Access</div>
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid #f1f0ef"}}>
+              <div style={{width:32,height:32,borderRadius:"50%",background:"#37352f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>👑</div>
+              <div style={{flex:1}}><div style={{fontSize:13,fontWeight:600,color:"#37352f"}}>{user?.email}</div><div style={{fontSize:11,color:"#9b9a97"}}>Owner</div></div>
+            </div>
+            {loading?<div style={{fontSize:12,color:"#c4c3bf",padding:"14px 0",textAlign:"center"}}>Loading…</div>:members.map(m=>(
+              <div key={m.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 0",borderBottom:"1px solid #f1f0ef"}}>
+                <div style={{width:32,height:32,borderRadius:"50%",background:m.role==="editor"?"#fdeee4":"#e8f0fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{m.role==="editor"?"✏️":"👁"}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:13,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.invited_email}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginTop:2}}>
+                    <span style={{...pill,background:m.role==="editor"?"#fdeee4":"#e8f0fe",color:m.role==="editor"?"#b94a1a":"#1a56c4",textTransform:"capitalize"}}>{m.role}</span>
+                    <span style={{fontSize:11,color:m.user_id?"#1e7e34":"#9b9a97"}}>{m.user_id?"✓ Joined":"Invite pending"}</span>
+                  </div>
+                </div>
+                <button onClick={()=>removeMember(m.id)} disabled={removing===m.id} style={{background:"none",border:"1px solid #f1f0ef",borderRadius:6,padding:"4px 10px",fontSize:11,color:"#9b9a97",cursor:"pointer",fontFamily:"'Lora',serif",flexShrink:0,transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#c0392b";e.currentTarget.style.color="#c0392b";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#f1f0ef";e.currentTarget.style.color="#9b9a97";}}>{removing===m.id?"…":"Remove"}</button>
+              </div>
+            ))}
+            {!loading&&members.length===0&&<div style={{fontSize:12,color:"#c4c3bf",padding:"14px 0",textAlign:"center",fontStyle:"italic"}}>No collaborators yet.</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 function FrameBriefApp(){
   const[user,setUser]=useState(null);
@@ -1045,6 +1157,10 @@ function FrameBriefApp(){
   const[chatLog,setChatLog]=useState([]);
   const[chatBusy,setChatBusy]=useState(false);
   const[aiEditing,setAiEditing]=useState(false);
+  const[showShareModal,setShowShareModal]=useState(false);
+  const[sharedProjects,setSharedProjects]=useState([]);
+  const[myRole,setMyRole]=useState("owner");
+  const[shareProjectId,setShareProjectId]=useState(null);
   const[copied,setCopied]=useState(false);
   const[dbSaving,setDbSaving]=useState(false);
   const brief=activeProject?.brief||null;
@@ -1058,7 +1174,19 @@ function FrameBriefApp(){
     return()=>{ subscription.unsubscribe(); window.removeEventListener('resize', handleResize); };
   },[]);
 
-  useEffect(()=>{if(user)loadProjects();},[user]);
+  // Detect /share/{id} URL on mount
+  useEffect(()=>{
+    const m=window.location.pathname.match(/^\/share\/([^/?]+)/);
+    if(m)setShareProjectId(m[1]);
+  },[]);
+
+  useEffect(()=>{if(user){loadProjects();loadSharedProjects();}},[user]);
+
+  // Load shared project once auth resolves
+  useEffect(()=>{
+    if(!shareProjectId||authLoading)return;
+    loadShareRoute(shareProjectId);
+  },[shareProjectId,authLoading]); // eslint-disable-line
 
   // Poll for transcript/brief when bot is in a meeting
   useEffect(()=>{
@@ -1082,9 +1210,40 @@ function FrameBriefApp(){
     if(!error&&data)setProjects(data);
   }
 
+  async function loadSharedProjects(){
+    if(!user)return;
+    const{data}=await supabase.from("project_members").select("role,projects(*)").eq("user_id",user.id);
+    if(data)setSharedProjects(data.filter(m=>m.projects).map(m=>({...m.projects,myRole:m.role})));
+  }
+
+  async function loadShareRoute(pid){
+    const{data,error}=await supabase.from("projects").select("*").eq("id",pid).single();
+    if(error||!data){setScreen("dashboard");return;}
+    let role="viewer";
+    if(user){
+      if(data.user_id===user.id){role="owner";}
+      else{
+        const{data:mem}=await supabase.from("project_members").select("role").eq("project_id",pid).eq("user_id",user.id).single();
+        if(mem)role=mem.role;
+      }
+    }
+    setMyRole(role);
+    setActiveProject(data);
+    setPage("overview");
+    setShareMode(role==="viewer"||!user);
+    setChatLog([]);setChatOpen(false);setSidebarOpen(false);
+    setScreen("doc");
+  }
+
   async function saveProject(projectData){
     setDbSaving(true);
-    const{data,error}=await supabase.from("projects").upsert({id:projectData.id,user_id:user.id,title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",status:projectData.status||"Draft",brief:projectData.brief||{},doc_count:projectData.doc_count||0,updated_at:new Date().toISOString()}).select().single();
+    const isOwner=!user||user.id===projectData.user_id;
+    let data,error;
+    if(isOwner){
+      ({data,error}=await supabase.from("projects").upsert({id:projectData.id,user_id:user.id,title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",status:projectData.status||"Draft",brief:projectData.brief||{},doc_count:projectData.doc_count||0,updated_at:new Date().toISOString()}).select().single());
+    }else{
+      ({data,error}=await supabase.from("projects").update({title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",brief:projectData.brief||{},updated_at:new Date().toISOString()}).eq("id",projectData.id).select().single());
+    }
     setDbSaving(false);
     if(!error&&data){setProjects(ps=>{const existing=ps.find(p=>p.id===data.id);return existing?ps.map(p=>p.id===data.id?data:p):[data,...ps];});return data;}
     return null;
@@ -1263,8 +1422,9 @@ ${JSON.stringify(brief)}`;
     @media(min-width:769px){.mobile-hamburger{display:none !important;}}
   `;
 
-  if(authLoading)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{CSS}</style><div className="spin" style={{width:28,height:28,border:"2px solid #f1f0ef",borderTop:"2px solid #37352f",borderRadius:"50%"}}/></div>);
-  if(!user)return(<div><style>{CSS}</style><AuthScreen/></div>);
+  if(authLoading&&!activeProject)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{CSS}</style><div className="spin" style={{width:28,height:28,border:"2px solid #f1f0ef",borderTop:"2px solid #37352f",borderRadius:"50%"}}/></div>);
+  if(!user&&!shareProjectId)return(<div><style>{CSS}</style><AuthScreen/></div>);
+  if(!user&&shareProjectId&&screen!=="doc")return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{CSS}</style><div className="spin" style={{width:28,height:28,border:"2px solid #f1f0ef",borderTop:"2px solid #37352f",borderRadius:"50%"}}/></div>);
 
   if(screen==="doc"&&shareMode&&activeProject)return(
     <div style={{height:"100vh",display:"flex",flexDirection:"column",overflow:"hidden",background:"#fff"}}><style>{CSS}</style>
@@ -1287,7 +1447,7 @@ ${JSON.stringify(brief)}`;
 
   if(screen==="ideas")return(<div><style>{CSS}</style><IdeaCapture user={user} onBack={()=>setScreen("dashboard")}/></div>);
 
-  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} user={user} onOpen={p=>{setActiveProject(p);setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")}/></div>);
+  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")}/></div>);
 
   if(screen==="input")return(
     <div style={{minHeight:"100vh",background:"#fff"}}><style>{CSS}</style>
@@ -1350,11 +1510,16 @@ ${JSON.stringify(brief)}`;
           {!aiEditing&&dbSaving&&<span style={{fontSize:11,color:"#c4c3bf",fontStyle:"italic",flexShrink:0}}>Saving…</span>}
         </div>
         <div style={{display:"flex",gap:6,flexShrink:0}}>
-          <button className="tbtn" onClick={()=>{navigator.clipboard.writeText(window.location.href).catch(()=>{});setCopied(true);setTimeout(()=>setCopied(false),2000);}}>{copied?"✓ Copied!":"🔗 Share"}</button>
+          {myRole==="owner"&&<button className="tbtn" onClick={()=>setShowShareModal(true)}>🔗 Share{activeProject?.share_enabled&&<span style={{marginLeft:4,width:6,height:6,borderRadius:"50%",background:"#e97942",display:"inline-block",verticalAlign:"middle"}}/>}</button>}
           <button className="tbtn" onClick={()=>setShareMode(true)}>👁 Client</button>
-          <button className={`tbtn ${chatOpen?"on":""}`} onClick={()=>setChatOpen(o=>!o)}>{chatOpen?"✕ AI":"✦ AI"}</button>
+          {(myRole==="owner"||myRole==="editor")&&<button className={`tbtn ${chatOpen?"on":""}`} onClick={()=>setChatOpen(o=>!o)}>{chatOpen?"✕ AI":"✦ AI"}</button>}
         </div>
       </div>
+      {myRole!=="owner"&&<div style={{background:myRole==="editor"?"#fef3e2":"#e8f0fe",borderBottom:"1px solid",borderBottomColor:myRole==="editor"?"#fde8c8":"#d2e3fc",padding:"7px 20px",fontSize:12,color:myRole==="editor"?"#92400e":"#1a56c4",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <span>{myRole==="editor"?"✏️ You have editor access to this project":"👁 You have view-only access to this project"}</span>
+        {!user&&<button onClick={()=>{window.location.href=`/?redirect=/share/${activeProject?.id}`;}} style={{background:"none",border:"1px solid currentColor",borderRadius:4,padding:"3px 10px",fontSize:11,cursor:"pointer",fontFamily:"'Lora',serif",color:"inherit"}}>Log in to collaborate →</button>}
+      </div>}
+      {showShareModal&&user&&<ShareModal project={activeProject} user={user} onClose={()=>setShowShareModal(false)} onProjectUpdate={p=>{setActiveProject(prev=>({...prev,...p}));setProjects(ps=>ps.map(pp=>pp.id===p.id?{...pp,...p}:pp));}}/>}
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
