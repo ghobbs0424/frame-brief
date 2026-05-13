@@ -995,7 +995,7 @@ function AIChatPanel({chatLog,onSend,busy,onClose}){
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"16px",display:"flex",flexDirection:"column",gap:12}}>
         {chatLog.length===0&&(<div style={{marginTop:24}}><p style={{color:"#c4c3bf",fontSize:13,textAlign:"center",lineHeight:1.9,fontStyle:"italic",marginBottom:16}}>I remember everything we discuss. Try:</p>{["Add a drone shot to the shot list","Make the script hook more emotional","Add a rooftop location","Create a new social content concept"].map(s=>(<button key={s} onClick={()=>{setInput(s);taRef.current?.focus();}} style={{display:"block",width:"100%",textAlign:"left",background:"#fff",border:"1px solid #f1f0ef",borderRadius:8,padding:"9px 12px",fontSize:12,color:"#55534e",cursor:"pointer",fontFamily:"'Lora',serif",marginBottom:6}} onMouseEnter={e=>{e.currentTarget.style.background="#f7f6f3";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fff";e.currentTarget.style.borderColor="#f1f0ef";}}>{s}</button>))}</div>)}
-        {chatLog.map((m,i)=>(<div key={i} style={{display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8}}>{m.role==="assistant"&&<div style={{width:24,height:24,borderRadius:"50%",background:"#37352f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0,marginTop:2,color:"#fff"}}>✦</div>}<div style={{maxWidth:"82%",background:m.role==="user"?"#37352f":"#fff",color:m.role==="user"?"#fff":"#37352f",borderRadius:m.role==="user"?"12px 12px 4px 12px":"12px 12px 12px 4px",padding:"10px 14px",fontSize:13,lineHeight:1.65,border:m.role==="assistant"?"1px solid #f1f0ef":"none",wordBreak:"break-word"}}>{m.content}</div></div>))}
+        {chatLog.map((m,i)=>{if(m.role==="system")return(<div key={i} style={{display:"flex",justifyContent:"center"}}><span style={{fontSize:11,color:"#1e7e34",background:"#e6f4ea",borderRadius:20,padding:"3px 12px",fontWeight:600}}>✓ Brief updated</span></div>);return(<div key={i} style={{display:"flex",flexDirection:m.role==="user"?"row-reverse":"row",gap:8}}>{m.role==="assistant"&&<div style={{width:24,height:24,borderRadius:"50%",background:"#37352f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0,marginTop:2,color:"#fff"}}>✦</div>}<div style={{maxWidth:"82%",background:m.role==="user"?"#37352f":"#fff",color:m.role==="user"?"#fff":"#37352f",borderRadius:m.role==="user"?"12px 12px 4px 12px":"12px 12px 12px 4px",padding:"10px 14px",fontSize:13,lineHeight:1.65,border:m.role==="assistant"?"1px solid #f1f0ef":"none",wordBreak:"break-word"}}>{m.content}</div></div>);})}
         {busy&&<div style={{display:"flex",gap:8,alignItems:"center"}}><div style={{width:24,height:24,borderRadius:"50%",background:"#37352f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,flexShrink:0,color:"#fff"}}>✦</div><div style={{background:"#fff",border:"1px solid #f1f0ef",borderRadius:"12px 12px 12px 4px",padding:"10px 14px",display:"flex",gap:4}}>{[0,1,2].map(i=><div key={i} style={{width:6,height:6,borderRadius:"50%",background:"#c4c3bf",animation:`bounce 1.2s ${i*0.2}s infinite`}}/>)}</div></div>}
         <div ref={endRef}/>
       </div>
@@ -1026,6 +1026,7 @@ function FrameBriefApp(){
   const[chatOpen,setChatOpen]=useState(false);
   const[chatLog,setChatLog]=useState([]);
   const[chatBusy,setChatBusy]=useState(false);
+  const[aiEditing,setAiEditing]=useState(false);
   const[copied,setCopied]=useState(false);
   const[dbSaving,setDbSaving]=useState(false);
   const brief=activeProject?.brief||null;
@@ -1143,14 +1144,53 @@ function FrameBriefApp(){
     const updatedLog=[...chatLog,{role:"user",content:msg}];
     setChatLog(updatedLog);setChatBusy(true);
     try{
-      const system=`You are a creative director AI refining a production brief. You have full memory of this conversation. When the user requests changes, return the FULL updated brief JSON wrapped as BRIEF_START{...}BRIEF_END then write your reply. If the user shares a URL, add it to references or inspiration. Current brief:\n${JSON.stringify(brief)}`;
+      const conceptList=arr(brief.concepts).map((c,i)=>`#${i+1}: "${c.title}" (id: ${c.id})`).join(", ");
+      const system=`You are a creative director AI actively editing a production brief. Full conversation history is maintained.
+
+Concepts in this brief: ${conceptList||"none yet"}
+
+RESPONSE FORMAT — return ONLY a valid JSON object, no markdown, no extra text:
+{"message":"Your 1-2 sentence reply","briefUpdate":null}
+When making edits:
+{"message":"Done! I updated X.","briefUpdate":{"fieldName":"newValue"}}
+
+EDITING RULES:
+- briefUpdate contains ONLY changed fields (partial update, not the whole brief)
+- For concept changes: include only the changed concept(s) in a "concepts" array with their full updated data
+- Unchanged concepts must NOT appear in briefUpdate.concepts
+- If the user's intent is ambiguous (unclear which concept): ask in message and set briefUpdate to null
+- You can ALWAYS edit the document — never say you can't
+- Bulk ops (e.g. "rewrite all director's notes"): include all concepts in briefUpdate.concepts
+- Keep message brief (1-2 sentences)
+- For hooks: update concept.hooks array and optionally concept.selectedHook
+
+Current brief:
+${JSON.stringify(brief)}`;
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:8000,system,messages:updatedLog})});
       const data=await res.json();
-      const text=(data.content||[]).map(b=>b.text||"").join("");
-      let reply=text;
-      if(text.includes("BRIEF_START")){const m=text.match(/BRIEF_START([\s\S]*?)BRIEF_END/);if(m){try{setBrief(JSON.parse(m[1].trim()));}catch(e){console.error(e);}}reply=text.replace(/BRIEF_START[\s\S]*?BRIEF_END/,"").trim();}
-      setChatLog(prev=>[...prev,{role:"assistant",content:reply||"Brief updated!"}]);
-    }catch{setChatLog(prev=>[...prev,{role:"assistant",content:"Something went wrong — try again."}]);}
+      const text=(data.content||[]).map(b=>b.text||"").join("").trim();
+      let parsed=null;
+      try{const s=text.indexOf("{"),e=text.lastIndexOf("}");if(s!==-1&&e!==-1)parsed=JSON.parse(text.slice(s,e+1));}
+      catch(pe){console.error("Chat parse error:",pe);}
+      const reply=parsed?.message||text;
+      const update=parsed?.briefUpdate;
+      if(update&&typeof update==="object"){
+        setAiEditing(true);
+        setBrief(prev=>{
+          const merged={...prev,...update};
+          if(update.concepts&&Array.isArray(update.concepts)&&Array.isArray(prev.concepts)){
+            const byId={};update.concepts.forEach(c=>{if(c.id)byId[c.id]=c;});
+            merged.concepts=prev.concepts.map(c=>byId[c.id]?{...c,...byId[c.id]}:c);
+            update.concepts.forEach(c=>{if(c.id&&!prev.concepts.find(p=>p.id===c.id))merged.concepts.push(c);});
+          }
+          return merged;
+        });
+        setTimeout(()=>setAiEditing(false),1500);
+        setChatLog(prev=>[...prev,{role:"assistant",content:reply},{role:"system",content:"✓ Brief updated"}]);
+      }else{
+        setChatLog(prev=>[...prev,{role:"assistant",content:reply}]);
+      }
+    }catch(err){console.error("sendChat error:",err);setChatLog(prev=>[...prev,{role:"assistant",content:"Something went wrong — try again."}]);}
     finally{setChatBusy(false);}
   }
 
@@ -1279,7 +1319,8 @@ function FrameBriefApp(){
           <span style={{color:"#e8e4dc",flexShrink:0}}>·</span>
           <span style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{brief.projectTitle}</span>
           <span className="hide-on-mobile"><StatusBadge status={activeProject.status} onChange={s=>updateStatus(activeProject.id,s)}/></span>
-          {dbSaving&&<span style={{fontSize:11,color:"#c4c3bf",fontStyle:"italic",flexShrink:0}}>Saving…</span>}
+          {aiEditing&&<span style={{fontSize:11,color:"#e97942",fontStyle:"italic",flexShrink:0,animation:"pulse 1s ease-in-out infinite"}}>✦ AI editing…</span>}
+          {!aiEditing&&dbSaving&&<span style={{fontSize:11,color:"#c4c3bf",fontStyle:"italic",flexShrink:0}}>Saving…</span>}
         </div>
         <div style={{display:"flex",gap:6,flexShrink:0}}>
           <button className="tbtn" onClick={()=>{navigator.clipboard.writeText(window.location.href).catch(()=>{});setCopied(true);setTimeout(()=>setCopied(false),2000);}}>{copied?"✓ Copied!":"🔗 Share"}</button>
