@@ -983,10 +983,11 @@ function Dashboard({projects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut
 // ─── AI CHAT ─────────────────────────────────────────────────────────────────
 function AIChatPanel({chatLog,onSend,busy,onClose}){
   const[input,setInput]=useState("");
+  const[interimText,setInterimText]=useState("");
   const taRef=useRef();const endRef=useRef();
   useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"});},[chatLog,busy]);
   useEffect(()=>{const ta=taRef.current;if(!ta)return;ta.style.height="auto";ta.style.height=Math.min(ta.scrollHeight,160)+"px";},[input]);
-  function send(){if(!input.trim()||busy)return;onSend(input.trim());setInput("");if(taRef.current)taRef.current.style.height="auto";}
+  function send(){const text=(input+(interimText?" "+interimText:"")).trim();if(!text||busy)return;onSend(text);setInput("");setInterimText("");if(taRef.current)taRef.current.style.height="auto";}
   return(
     <div style={{display:"flex",flexDirection:"column",height:"100%",background:"#fafaf9"}}>
       <div style={{padding:"14px 18px",borderBottom:"1px solid #f1f0ef",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -1001,8 +1002,12 @@ function AIChatPanel({chatLog,onSend,busy,onClose}){
       </div>
       <div style={{padding:"12px 14px",borderTop:"1px solid #f1f0ef",background:"#fff",flexShrink:0}}>
         <div style={{border:"1px solid #e8e4dc",borderRadius:10,overflow:"hidden"}} onFocusCapture={e=>e.currentTarget.style.borderColor="#37352f"} onBlurCapture={e=>e.currentTarget.style.borderColor="#e8e4dc"}>
-          <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())} placeholder="Ask me to change anything… (Enter to send)" style={{width:"100%",border:"none",outline:"none",padding:"12px 14px",fontSize:13,color:"#37352f",fontFamily:"'Lora',serif",lineHeight:1.6,resize:"none",background:"transparent",minHeight:44,maxHeight:160,overflowY:"auto",display:"block"}}/>
-          {input&&<div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderTop:"1px solid #f1f0ef"}}><span style={{fontSize:11,color:"#c4c3bf"}}>Shift+Enter for new line</span><button onClick={send} disabled={!input.trim()||busy} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",opacity:!input.trim()||busy?0.4:1}}>Send ↑</button></div>}
+          <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())} placeholder="Ask or say anything… (Enter to send)" style={{width:"100%",border:"none",outline:"none",padding:"12px 14px",fontSize:13,color:"#37352f",fontFamily:"'Lora',serif",lineHeight:1.6,resize:"none",background:"transparent",minHeight:44,maxHeight:160,overflowY:"auto",display:"block"}}/>
+          {interimText&&<div style={{padding:"0 14px 8px",fontSize:12,color:"#9b9a97",fontStyle:"italic",lineHeight:1.5}}>{interimText}…</div>}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderTop:"1px solid #f1f0ef"}}>
+            <VoiceMicBtn onTranscript={(final,interim)=>{setInput(final);setInterimText(interim);}}/>
+            <button onClick={send} disabled={!(input+interimText).trim()||busy} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",opacity:!(input+interimText).trim()||busy?0.4:1}}>Send ↑</button>
+          </div>
         </div>
       </div>
     </div>
