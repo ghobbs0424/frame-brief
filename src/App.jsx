@@ -154,9 +154,45 @@ const IDEA_SYSTEM = `You are a creative director and content strategist. The use
 Return ONLY raw JSON, no markdown, no backticks:
 {"title":"","logline":"","format":"","targetAudience":"","hook":"","angle":"","outline":[{"act":"","description":""}],"keyPoints":[],"scriptNotes":"","locations":[{"name":"","notes":""}],"props":[],"shotList":[{"number":"01","type":"","description":""}],"toDoList":[{"text":"","done":false}],"estimatedLength":"","tags":[]}`;
 
+// ─── SHARED IDEA VIEW (read-only) ────────────────────────────────────────────
+function SharedIdeaView({idea}){
+  const brief=idea?.brief;
+  if(!idea)return null;
+  const Row=({label,value})=>value?<div style={{marginBottom:6}}><span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}: </span><span style={{fontSize:13,color:"#37352f",fontWeight:600}}>{value}</span></div>:null;
+  return(
+    <div style={{minHeight:"100vh",background:"#fff",display:"flex",flexDirection:"column"}}>
+      <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#9b9a97",letterSpacing:"0.08em"}}>FRAME BRIEF</span>
+        <span style={{color:"#e8e4dc"}}>·</span>
+        <span style={{fontSize:13,fontWeight:700,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{brief?.title||"Idea Brief"}</span>
+        <span style={{fontSize:11,background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"2px 8px",fontWeight:600,flexShrink:0}}>View Only</span>
+      </div>
+      <div style={{flex:1,overflowY:"auto",maxWidth:760,width:"100%",margin:"0 auto",padding:"40px 24px 100px"}}>
+        {idea.rawText&&<div style={{background:"#f7f6f3",borderLeft:"3px solid #e97942",padding:"14px 18px",borderRadius:"0 8px 8px 0",marginBottom:28,fontSize:14,color:"#55534e",lineHeight:1.7,fontStyle:"italic"}}><div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Original Idea</div>{idea.rawText}</div>}
+        {brief&&<>
+          <h1 style={{fontSize:30,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em",marginBottom:6,lineHeight:1.2}}>{brief.title||"Untitled Idea"}</h1>
+          <div style={{fontSize:15,color:"#9b9a97",fontStyle:"italic",marginBottom:12,lineHeight:1.6}}>{brief.logline}</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:24}}>
+            {[["Format",brief.format],["Audience",brief.targetAudience],["Est. Length",brief.estimatedLength]].filter(([,v])=>v).map(([l,v])=><div key={l} style={{background:"#f1f0ef",borderRadius:6,padding:"4px 10px"}}><span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em"}}>{l}: </span><span style={{fontSize:12,color:"#37352f",fontWeight:600}}>{v}</span></div>)}
+          </div>
+          {(brief.hook||brief.angle)&&<><HR/><Section emoji="🎣" title="Hook & Angle">{brief.hook&&<div style={{marginBottom:10}}><div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Hook</div><div style={{fontSize:14,lineHeight:1.8,background:"#fafaf9",borderRadius:6,padding:"10px 14px"}}>{brief.hook}</div></div>}{brief.angle&&<div><div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Angle / Perspective</div><div style={{fontSize:14,lineHeight:1.8,background:"#fafaf9",borderRadius:6,padding:"10px 14px"}}>{brief.angle}</div></div>}</Section></>}
+          {arr(brief.outline).length>0&&<><HR/><Section emoji="📋" title="Content Outline">{arr(brief.outline).map((act,i)=><div key={i} style={{background:"#f9f8f6",borderLeft:"3px solid #e8e4dc",padding:"12px 16px",borderRadius:"0 8px 8px 0",marginBottom:10}}><div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>{act.act}</div><div style={{fontSize:14,lineHeight:1.75}}>{act.description}</div></div>)}</Section></>}
+          {arr(brief.keyPoints).length>0&&<><HR/><Section emoji="💬" title="Key Points to Hit">{arr(brief.keyPoints).map((pt,i)=><div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"5px 0"}}><span style={{color:"#e97942",marginTop:4}}>→</span><div style={{flex:1,fontSize:14}}>{pt}</div></div>)}</Section></>}
+          {brief.scriptNotes&&<><HR/><Section emoji="📝" title="Script Notes"><div style={{fontSize:14,lineHeight:1.85,background:"#fafaf9",borderRadius:6,padding:"12px 16px"}}>{brief.scriptNotes}</div></Section></>}
+          {arr(brief.locations).length>0&&<><HR/><Section emoji="📍" title="Locations">{arr(brief.locations).map((loc,i)=><div key={i} style={{background:"#f7f6f3",borderRadius:8,padding:"12px 14px",marginBottom:8,border:"1px solid #eeece8"}}><div style={{fontWeight:700,fontSize:14,marginBottom:4}}>{loc.name}</div>{loc.notes&&<div style={{fontSize:13,color:"#55534e"}}>{loc.notes}</div>}</div>)}</Section></>}
+          {arr(brief.props).length>0&&<><HR/><Section emoji="🎪" title="Props & Equipment">{arr(brief.props).map((p,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"5px 0"}}><span style={{color:"#9b9a97"}}>·</span><div style={{flex:1,fontSize:14}}>{p}</div></div>)}</Section></>}
+          {arr(brief.shotList).length>0&&<><HR/><Section emoji="🎥" title="Shot List"><div style={{overflowX:"auto"}}><div style={{display:"grid",gridTemplateColumns:"36px 80px 1fr",gap:8,padding:"6px 0",borderBottom:"1px solid #e8e4dc",minWidth:280}}>{["#","Type","Description"].map(h=><div key={h} style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>)}</div>{arr(brief.shotList).map((shot,i)=><div key={i} style={{display:"grid",gridTemplateColumns:"36px 80px 1fr",gap:8,alignItems:"start",padding:"9px 0",borderBottom:"1px solid #f7f6f3",minWidth:280}}><div style={{fontSize:11,fontWeight:700,color:"#9b9a97",paddingTop:4}}>{shot.number||String(i+1).padStart(2,"0")}</div><div style={{fontSize:12,fontWeight:600,color:"#e97942"}}>{shot.type}</div><div style={{fontSize:13,lineHeight:1.6}}>{shot.description}</div></div>)}</div></Section></>}
+          {arr(brief.tags).length>0&&<><HR/><Section emoji="🏷" title="Tags" defaultOpen={false}><div style={{display:"flex",flexWrap:"wrap",gap:6}}>{arr(brief.tags).map((tag,i)=><span key={i} style={{background:"#f1f0ef",color:"#55534e",borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:500}}>{tag}</span>)}</div></Section></>}
+        </>}
+      </div>
+    </div>
+  );
+}
+
 // ─── IDEA PAGE (expanded view) ────────────────────────────────────────────────
-function IdeaPage({ idea, onBack, onUpdate }) {
+function IdeaPage({ idea, onBack, onUpdate, user }) {
   const [localIdea, setLocalIdea] = useState(idea);
+  const [shareState, setShareState] = useState("idle"); // idle | saving | copied
   const brief = localIdea.brief;
   const set = (k, v) => {
     const updated = { ...localIdea, brief: { ...brief, [k]: v } };
@@ -177,6 +213,22 @@ function IdeaPage({ idea, onBack, onUpdate }) {
     setLocalIdea(updated); onUpdate(updated);
   };
 
+  async function handleShare(){
+    if(!user||!brief)return;
+    setShareState("saving");
+    try{
+      let shareId=localIdea.shareId;
+      if(shareId){
+        await supabase.from("shared_ideas").update({idea:localIdea,title:brief.title||"Untitled",updated_at:new Date().toISOString()}).eq("id",shareId);
+      } else {
+        const{data}=await supabase.from("shared_ideas").insert({user_id:user.id,idea:localIdea,title:brief.title||"Untitled"}).select().single();
+        shareId=data?.id;
+        if(shareId){const updated={...localIdea,shareId};setLocalIdea(updated);onUpdate(updated);}
+      }
+      if(shareId){navigator.clipboard.writeText(`${window.location.origin}/idea/${shareId}`).catch(()=>{});setShareState("copied");setTimeout(()=>setShareState("idle"),2500);}
+      else setShareState("idle");
+    }catch{setShareState("idle");}
+  }
 
   return (
     <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column" }}>
@@ -184,7 +236,8 @@ function IdeaPage({ idea, onBack, onUpdate }) {
       <div style={{ borderBottom: "1px solid #f1f0ef", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
         <button onClick={onBack} style={{ background: "none", border: "none", color: "#9b9a97", cursor: "pointer", fontSize: 13, fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 4 }}>← Ideas</button>
         <span style={{ color: "#e8e4dc" }}>·</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#37352f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{brief?.title || localIdea.rawText?.slice(0, 40)}</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: "#37352f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{brief?.title || localIdea.rawText?.slice(0, 40)}</span>
+        {user&&brief&&<button onClick={handleShare} disabled={shareState==="saving"} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 12px",fontSize:12,color:shareState==="copied"?"#1e7e34":"#55534e",cursor:"pointer",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap"}}>{shareState==="saving"?"Saving…":shareState==="copied"?"✓ Link copied":"🔗 Share"}</button>}
       </div>
 
       {/* Content */}
@@ -487,7 +540,7 @@ ${text}` }] })
   if (openIdea) {
     const ideaData = wsIdeas.find(i => i.id === openIdea);
     if (ideaData) return (
-      <IdeaPage idea={ideaData} onBack={() => setOpenIdea(null)} onUpdate={updateIdea} />
+      <IdeaPage idea={ideaData} onBack={() => setOpenIdea(null)} onUpdate={updateIdea} user={user} />
     );
   }
 
@@ -1161,6 +1214,8 @@ function FrameBriefApp(){
   const[sharedProjects,setSharedProjects]=useState([]);
   const[myRole,setMyRole]=useState("owner");
   const[shareProjectId,setShareProjectId]=useState(null);
+  const[sharedIdeaData,setSharedIdeaData]=useState(null);
+  const[sharedIdeaLoading,setSharedIdeaLoading]=useState(false);
   const[copied,setCopied]=useState(false);
   const[dbSaving,setDbSaving]=useState(false);
   const brief=activeProject?.brief||null;
@@ -1174,10 +1229,19 @@ function FrameBriefApp(){
     return()=>{ subscription.unsubscribe(); window.removeEventListener('resize', handleResize); };
   },[]);
 
-  // Detect /share/{id} URL on mount
+  // Detect /share/{id} and /idea/{id} URLs on mount
   useEffect(()=>{
     const m=window.location.pathname.match(/^\/share\/([^/?]+)/);
     if(m)setShareProjectId(m[1]);
+    const mi=window.location.pathname.match(/^\/idea\/([^/?]+)/);
+    if(mi){
+      setSharedIdeaLoading(true);
+      supabase.from("shared_ideas").select("*").eq("id",mi[1]).single().then(({data,error})=>{
+        setSharedIdeaLoading(false);
+        if(!error&&data){setSharedIdeaData(data.idea);setScreen("sharedIdea");}
+        else setScreen("dashboard");
+      });
+    }
   },[]);
 
   useEffect(()=>{if(user){loadProjects();loadSharedProjects();}},[user]);
@@ -1422,6 +1486,8 @@ ${JSON.stringify(brief)}`;
     @media(min-width:769px){.mobile-hamburger{display:none !important;}}
   `;
 
+  if(sharedIdeaLoading)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{CSS}</style><div className="spin" style={{width:28,height:28,border:"2px solid #f1f0ef",borderTop:"2px solid #37352f",borderRadius:"50%"}}/></div>);
+  if(screen==="sharedIdea")return(<div><style>{CSS}</style><SharedIdeaView idea={sharedIdeaData}/></div>);
   if(authLoading&&!activeProject)return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{CSS}</style><div className="spin" style={{width:28,height:28,border:"2px solid #f1f0ef",borderTop:"2px solid #37352f",borderRadius:"50%"}}/></div>);
   if(!user&&!shareProjectId)return(<div><style>{CSS}</style><AuthScreen/></div>);
   if(!user&&shareProjectId&&screen!=="doc")return(<div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center"}}><style>{CSS}</style><div className="spin" style={{width:28,height:28,border:"2px solid #f1f0ef",borderTop:"2px solid #37352f",borderRadius:"50%"}}/></div>);
