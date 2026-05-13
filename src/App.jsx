@@ -311,7 +311,7 @@ ${JSON.stringify(brief)}`;
   const addEpArr=(ei,k,item)=>{const c=[...arr(brief.concepts)];c[ei]={...c[ei],[k]:[...arr(c[ei][k]),item]};set("concepts",c);};
 
   return (
-    <div style={{height:"100vh",background:"#fff",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+    <div style={{minHeight:"100vh",background:"#fff",display:"flex",flexDirection:"column"}}>
       {/* Header */}
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
         <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>← Ideas</button>
@@ -322,9 +322,9 @@ ${JSON.stringify(brief)}`;
       </div>
 
       {/* Body */}
-      <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+      <div style={{flex:1}}>
         {/* Main content */}
-        <div style={{flex:1,overflowY:"auto",padding:"40px 24px 100px"}}>
+        <div style={{padding:"40px 24px 100px",transition:"padding-right .2s",paddingRight:chatOpen?364:24}}>
           <div style={{maxWidth:760,margin:"0 auto"}}>
             {/* Raw idea */}
             <div style={{background:"#f7f6f3",borderLeft:"3px solid #e97942",padding:"14px 18px",borderRadius:"0 8px 8px 0",marginBottom:28,fontSize:14,color:"#55534e",lineHeight:1.7,fontStyle:"italic"}}>
@@ -525,12 +525,12 @@ ${JSON.stringify(brief)}`;
             )}
           </div>
         </div>
-
-        {/* AI Chat panel */}
-        {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}}>
-          <AIChatPanel chatLog={chatLog} onSend={sendIdeaChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/>
-        </div>}
       </div>
+
+      {/* AI Chat panel — fixed to viewport */}
+      {chatOpen&&<div style={{position:"fixed",top:0,right:0,width:340,height:"100vh",borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",background:"#fff",zIndex:200,boxShadow:"-2px 0 12px rgba(0,0,0,0.06)"}}>
+        <AIChatPanel chatLog={chatLog} onSend={sendIdeaChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/>
+      </div>}
     </div>
   );
 }
