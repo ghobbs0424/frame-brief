@@ -1123,7 +1123,7 @@ function MeetingBotPanel({ projectId, onBotStarted, recallStatus, recallBotId, o
 }
 
 // ─── CLIENT LIST ─────────────────────────────────────────────────────────────
-function ClientList({clients,projects,onNew,onOpen,onBack}){
+function ClientList({clients,projects,onNew,onOpen,onBack,user}){
   const[search,setSearch]=useState("");
   const[showNew,setShowNew]=useState(false);
   const[newName,setNewName]=useState("");
@@ -1134,7 +1134,7 @@ function ClientList({clients,projects,onNew,onOpen,onBack}){
   async function createClient(){
     if(!newName.trim())return;
     setSaving(true);
-    const{data,error}=await supabase.from("clients").insert({name:newName.trim(),company:newCompany.trim()||null,industry:newIndustry.trim()||null}).select().single();
+    const{data,error}=await supabase.from("clients").insert({name:newName.trim(),company:newCompany.trim()||null,industry:newIndustry.trim()||null,user_id:user.id}).select().single();
     setSaving(false);
     if(!error&&data){onNew(data);setShowNew(false);setNewName("");setNewCompany("");setNewIndustry("");}
   }
@@ -1690,7 +1690,7 @@ function FrameBriefApp(){
     setErrMsg("");setScreen("loading");
     let resolvedClientId=inputClientId;
     if(inputClientId==="__new__"&&newClientNameInput.trim()){
-      const{data}=await supabase.from("clients").insert({name:newClientNameInput.trim()}).select().single();
+      const{data}=await supabase.from("clients").insert({name:newClientNameInput.trim(),user_id:user.id}).select().single();
       if(data){setClients(prev=>[...prev,data].sort((a,b)=>a.name.localeCompare(b.name)));resolvedClientId=data.id;}
       else resolvedClientId=null;
     }else if(inputClientId==="__new__"){resolvedClientId=null;}
@@ -1855,7 +1855,7 @@ ${JSON.stringify(brief)}`;
 
   if(screen==="ideas")return(<div><style>{CSS}</style><IdeaCapture user={user} onBack={()=>setScreen("dashboard")}/></div>);
 
-  if(screen==="clients")return(<div><style>{CSS}</style><ClientList clients={clients} projects={projects} onBack={()=>setScreen("dashboard")} onNew={c=>setClients(prev=>[...prev,c].sort((a,b)=>a.name.localeCompare(b.name)))} onOpen={c=>{setActiveClientId(c.id);setScreen("clientProfile");}}/></div>);
+  if(screen==="clients")return(<div><style>{CSS}</style><ClientList clients={clients} projects={projects} user={user} onBack={()=>setScreen("dashboard")} onNew={c=>setClients(prev=>[...prev,c].sort((a,b)=>a.name.localeCompare(b.name)))} onOpen={c=>{setActiveClientId(c.id);setScreen("clientProfile");}}/></div>);
 
   if(screen==="clientProfile")return(<div><style>{CSS}</style><ClientProfile clientId={activeClientId} clients={clients} setClients={setClients} projects={projects} onBack={()=>setScreen("clients")} onOpenProject={p=>{setMyRole("owner");setActiveProject(p);setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNewProject={()=>{setInputClientId(activeClientId);setNewClientNameInput("");setTranscript("");setDocs([]);setErrMsg("");setScreen("input");}}/></div>);
 
