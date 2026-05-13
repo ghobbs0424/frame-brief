@@ -794,13 +794,12 @@ function ConceptPage({concept,onChange,readonly}){
   const generateHooks=async(append)=>{
     setHooksBusy(true);setHooksErr("");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:600,system:"Generate exactly 3 compelling opening hooks for a video/reel. Each hook is one punchy sentence that grabs attention in the first 3 seconds. Vary styles across: emotional, curiosity-driven, bold statement, question, cinematic. Return ONLY a JSON array of 3 strings — no other text.",messages:[{role:"user",content:`Concept: ${concept.title||""}\nType: ${concept.type||""}\nLogline: ${concept.logline||""}\nDescription: ${concept.description||""}\nMood: ${arr(concept.moodKeywords).join(", ")}`}]})});
+      const res=await fetch("/api/generate-hooks",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({concept})});
       const data=await res.json();
-      if(!res.ok){setHooksErr(`API error ${res.status}: ${data?.error?.message||JSON.stringify(data)}`);setHooksBusy(false);return;}
-      const raw=(data.content||[]).map(b=>b.text||"").join("").trim();
-      const s=raw.indexOf("["),e=raw.lastIndexOf("]");
-      if(s!==-1&&e!==-1){const newHooks=JSON.parse(raw.slice(s,e+1));onChange({...concept,hooks:[...(append?arr(concept.hooks):[]),...newHooks]});}
-      else{setHooksErr("Unexpected response — try again.");}
+      if(!res.ok){setHooksErr(`Error: ${data?.error||res.status}`);setHooksBusy(false);return;}
+      const newHooks=data.hooks||[];
+      if(newHooks.length){onChange({...concept,hooks:[...(append?arr(concept.hooks):[]),...newHooks]});}
+      else{setHooksErr("No hooks returned — try again.");}
     }catch(err){setHooksErr(`Error: ${err.message}`);}
     setHooksBusy(false);
   };
