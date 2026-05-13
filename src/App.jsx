@@ -192,7 +192,12 @@ function SharedIdeaView({idea}){
 // ─── IDEA PAGE (expanded view) ────────────────────────────────────────────────
 function IdeaPage({ idea, onBack, onUpdate, user }) {
   const [localIdea, setLocalIdea] = useState(idea);
-  const [shareState, setShareState] = useState("idle"); // idle | saving | copied
+  const [shareState, setShareState] = useState("idle");
+  const [chatLog, setChatLog] = useState([]);
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [hooksBusy, setHooksBusy] = useState(false);
+  const [hooksErr, setHooksErr] = useState("");
   const brief = localIdea.brief;
   const set = (k, v) => {
     const updated = { ...localIdea, brief: { ...brief, [k]: v } };
@@ -230,186 +235,301 @@ function IdeaPage({ idea, onBack, onUpdate, user }) {
     }catch{setShareState("idle");}
   }
 
+  async function generateHooks(append){
+    setHooksBusy(true);setHooksErr("");
+    try{
+      const res=await fetch("/api/generate-hooks",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({concept:{title:brief.title,logline:brief.logline,hook:brief.hook,angle:brief.angle,keyPoints:brief.keyPoints,moodKeywords:brief.tags}})});
+      const data=await res.json();
+      if(data.hooks){const existing=append?arr(brief.hooks):[];set("hooks",[...existing,...data.hooks]);}
+      else setHooksErr("Generation failed. Try again.");
+    }catch{setHooksErr("Network error.");}
+    setHooksBusy(false);
+  }
+
+  async function sendIdeaChat(msg){
+    const updatedLog=[...chatLog,{role:"user",content:msg}];
+    setChatLog(updatedLog);setChatBusy(true);
+    try{
+      const epList=arr(brief.concepts).map((c,i)=>`#${i+1}: "${c.title}" (id: ${c.id})`).join(", ");
+      const system=`You are a creative director AI actively editing an idea brief. Full conversation history is maintained.
+${epList?`Episodes in this series: ${epList}`:""}
+
+RESPONSE FORMAT — return ONLY a valid JSON object, no markdown, no extra text:
+{"message":"Your 1-2 sentence reply","briefUpdate":null}
+When making edits:
+{"message":"Done! I updated X.","briefUpdate":{"fieldName":"newValue"}}
+
+EDITING RULES:
+- briefUpdate contains ONLY changed fields (partial update)
+- For episode changes: include only changed episodes in "concepts" array with full updated data, merged by id
+- Keep message brief (1-2 sentences)
+- You can ALWAYS edit — never say you can't
+
+FIELD SCHEMAS:
+- outline: [{"act":"","description":""}]
+- keyPoints / props / tags / hooks: ["string"]
+- locations: [{"name":"","notes":""}]
+- shotList: [{"number":"01","type":"","description":""}]
+- toDoList: [{"text":"","done":false}]
+- concepts (episodes): [{"id":"","title":"","hook":"","angle":"","outline":[...],"keyPoints":[...],"scriptNotes":"","locations":[...],"shotList":[...],"hooks":[]}]
+
+Current brief:
+${JSON.stringify(brief)}`;
+      const apiMessages=updatedLog.filter(m=>m.role==="user"||m.role==="assistant");
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:4000,system,messages:apiMessages})});
+      const data=await res.json();
+      const text=(data.content||[]).map(b=>b.text||"").join("").trim();
+      let parsed=null;
+      try{const s=text.indexOf("{"),e=text.lastIndexOf("}");if(s!==-1&&e!==-1)parsed=JSON.parse(text.slice(s,e+1));}catch{}
+      const reply=parsed?.message||text;
+      const update=parsed?.briefUpdate;
+      if(update&&typeof update==="object"){
+        const merged={...brief,...update};
+        if(update.concepts&&Array.isArray(update.concepts)&&Array.isArray(brief.concepts)){
+          const byId={};update.concepts.forEach(c=>{if(c.id)byId[c.id]=c;});
+          merged.concepts=brief.concepts.map(c=>byId[c.id]?{...c,...byId[c.id]}:c);
+          update.concepts.forEach(c=>{if(c.id&&!brief.concepts.find(p=>p.id===c.id))merged.concepts.push(c);});
+        }
+        const updated={...localIdea,brief:merged};
+        setLocalIdea(updated);onUpdate(updated);
+        setChatLog([...updatedLog,{role:"assistant",content:reply},{role:"system",content:"✓ Brief updated"}]);
+      }else{
+        setChatLog([...updatedLog,{role:"assistant",content:reply}]);
+      }
+    }catch(err){console.error(err);setChatLog(prev=>[...prev,{role:"assistant",content:"Something went wrong — try again."}]);}
+    finally{setChatBusy(false);}
+  }
+
+  function addEpisode(){
+    addArr("concepts",{id:`ep-${Date.now()}`,title:`Episode ${arr(brief.concepts).length+1}`,hook:"",angle:"",outline:[],keyPoints:[],scriptNotes:"",locations:[],props:[],shotList:[],hooks:[],selectedHook:""});
+  }
+
+  // Episode field helpers
+  const upEp=(ei,k,v)=>{const c=[...arr(brief.concepts)];c[ei]={...c[ei],[k]:v};set("concepts",c);};
+  const upEpArr=(ei,k,i,v)=>{const c=[...arr(brief.concepts)];const a=[...arr(c[ei][k])];a[i]=v;c[ei]={...c[ei],[k]:a};set("concepts",c);};
+  const delEpArr=(ei,k,i)=>{const c=[...arr(brief.concepts)];c[ei]={...c[ei],[k]:arr(c[ei][k]).filter((_,j)=>j!==i)};set("concepts",c);};
+  const addEpArr=(ei,k,item)=>{const c=[...arr(brief.concepts)];c[ei]={...c[ei],[k]:[...arr(c[ei][k]),item]};set("concepts",c);};
+
   return (
-    <div style={{ minHeight: "100vh", background: "#fff", display: "flex", flexDirection: "column" }}>
+    <div style={{minHeight:"100vh",background:"#fff",display:"flex",flexDirection:"column"}}>
       {/* Header */}
-      <div style={{ borderBottom: "1px solid #f1f0ef", padding: "12px 20px", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
-        <button onClick={onBack} style={{ background: "none", border: "none", color: "#9b9a97", cursor: "pointer", fontSize: 13, fontFamily: "'Lora',serif", display: "flex", alignItems: "center", gap: 4 }}>← Ideas</button>
-        <span style={{ color: "#e8e4dc" }}>·</span>
-        <span style={{ fontSize: 13, fontWeight: 700, color: "#37352f", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>{brief?.title || localIdea.rawText?.slice(0, 40)}</span>
-        {user&&brief&&<button onClick={handleShare} disabled={shareState==="saving"} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 12px",fontSize:12,color:shareState==="copied"?"#1e7e34":"#55534e",cursor:"pointer",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap"}}>{shareState==="saving"?"Saving…":shareState==="copied"?"✓ Link copied":"🔗 Share"}</button>}
+      <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>← Ideas</button>
+        <span style={{color:"#e8e4dc",flexShrink:0}}>·</span>
+        <span style={{fontSize:13,fontWeight:700,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{brief?.title||localIdea.rawText?.slice(0,40)}</span>
+        {user&&brief&&<button className={`tbtn${chatOpen?" on":""}`} onClick={()=>setChatOpen(o=>!o)} style={{flexShrink:0}}>{chatOpen?"✕ AI":"✦ AI"}</button>}
+        {user&&brief&&<button onClick={handleShare} disabled={shareState==="saving"} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 12px",fontSize:12,color:shareState==="copied"?"#1e7e34":"#55534e",cursor:"pointer",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap"}}>{shareState==="saving"?"Saving…":shareState==="copied"?"✓ Copied":"🔗 Share"}</button>}
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, overflowY: "auto", maxWidth: 760, width: "100%", margin: "0 auto", padding: "40px 24px 100px" }}>
-        {/* Raw idea */}
-        <div style={{ background: "#f7f6f3", borderLeft: "3px solid #e97942", padding: "14px 18px", borderRadius: "0 8px 8px 0", marginBottom: 28, fontSize: 14, color: "#55534e", lineHeight: 1.7, fontStyle: "italic" }}>
-          <div style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 6 }}>Original Idea</div>
-          {localIdea.rawText}
+      {/* Body */}
+      <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+        {/* Main content */}
+        <div style={{flex:1,overflowY:"auto",padding:"40px 24px 100px"}}>
+          <div style={{maxWidth:760,margin:"0 auto"}}>
+            {/* Raw idea */}
+            <div style={{background:"#f7f6f3",borderLeft:"3px solid #e97942",padding:"14px 18px",borderRadius:"0 8px 8px 0",marginBottom:28,fontSize:14,color:"#55534e",lineHeight:1.7,fontStyle:"italic"}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Original Idea</div>
+              {localIdea.rawText}
+            </div>
+
+            {!brief?(
+              <div style={{textAlign:"center",padding:"40px 0",color:"#c4c3bf"}}>
+                <div className="spin" style={{width:24,height:24,border:"2px solid #f1f0ef",borderTop:"2px solid #37352f",borderRadius:"50%",margin:"0 auto 12px"}}/>
+                <p style={{fontSize:13,fontStyle:"italic"}}>Generating your creative brief…</p>
+              </div>
+            ):(
+              <>
+                <h1 style={{fontSize:30,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em",marginBottom:6,lineHeight:1.2}}><Editable value={brief.title} onChange={v=>set("title",v)} placeholder="Untitled Idea"/></h1>
+                <div style={{fontSize:15,color:"#9b9a97",fontStyle:"italic",marginBottom:8,lineHeight:1.6}}><Editable value={brief.logline} onChange={v=>set("logline",v)} placeholder="One-sentence pitch…"/></div>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:24}}>
+                  {[["Format","format"],["Audience","targetAudience"],["Est. Length","estimatedLength"]].map(([l,k])=>(
+                    <div key={k} style={{background:"#f1f0ef",borderRadius:6,padding:"4px 10px"}}>
+                      <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em"}}>{l}: </span>
+                      <span style={{fontSize:12,color:"#37352f",fontWeight:600}}><Editable value={brief[k]} onChange={v=>set(k,v)} placeholder="—"/></span>
+                    </div>
+                  ))}
+                </div>
+
+                <HR/>
+                <Section emoji="🎣" title="Hook & Angle">
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Hook</div>
+                    <div style={{fontSize:14,lineHeight:1.8,background:"#fafaf9",borderRadius:6,padding:"10px 14px"}}><Editable value={brief.hook} onChange={v=>set("hook",v)} multiline placeholder="What grabs attention in the first 3 seconds?"/></div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Angle / Perspective</div>
+                    <div style={{fontSize:14,lineHeight:1.8,background:"#fafaf9",borderRadius:6,padding:"10px 14px"}}><Editable value={brief.angle} onChange={v=>set("angle",v)} multiline placeholder="What's the unique point of view?"/></div>
+                  </div>
+                </Section>
+                <HR/>
+
+                <Section emoji="💡" title="Hook Options" defaultOpen={arr(brief.hooks).length>0}>
+                  {arr(brief.hooks).length===0?<><button onClick={()=>generateHooks(false)} disabled={hooksBusy} style={{background:"#f9f8f6",border:"1px dashed #e8e4dc",borderRadius:8,padding:"12px 20px",fontSize:13,color:hooksBusy?"#c4c3bf":"#55534e",cursor:hooksBusy?"wait":"pointer",fontFamily:"inherit",width:"100%",textAlign:"center"}}>{hooksBusy?"Generating…":"✦ Generate Hook Options"}</button>{hooksErr&&<div style={{fontSize:12,color:"#c0392b",marginTop:8}}>{hooksErr}</div>}</>:<>{arr(brief.hooks).map((hook,i)=>{const sel=brief.selectedHook===hook;return(<div key={i} onClick={()=>set("selectedHook",sel?"":hook)} style={{padding:"14px 16px",borderRadius:8,marginBottom:8,border:sel?"2px solid #e97942":"1px solid #eeece8",background:sel?"#fffbf7":"#f7f6f3",cursor:"pointer",position:"relative"}}>{sel&&<div style={{position:"absolute",top:10,right:12,fontSize:10,color:"#e97942",fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.08em"}}>SELECTED</div>}<div style={{fontSize:14,lineHeight:1.65,color:"#37352f",paddingRight:sel?76:0}}><Editable value={hook} onChange={v=>upArr("hooks",i,v)}/></div><button onClick={e=>{e.stopPropagation();set("hooks",arr(brief.hooks).filter((_,j)=>j!==i));}} style={{position:"absolute",bottom:8,right:10,background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:11}}>✕</button></div>);})} <div style={{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}><button onClick={()=>generateHooks(true)} disabled={hooksBusy} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 14px",fontSize:12,color:hooksBusy?"#c4c3bf":"#55534e",cursor:hooksBusy?"wait":"pointer",fontFamily:"inherit"}}>{hooksBusy?"Generating…":"+ Generate More"}</button><button onClick={()=>addArr("hooks","Write your hook here…")} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 14px",fontSize:12,color:"#55534e",cursor:"pointer",fontFamily:"inherit"}}>+ Write Custom</button></div>{hooksErr&&<div style={{fontSize:12,color:"#c0392b",marginTop:6}}>{hooksErr}</div>}</>}
+                </Section>
+                <HR/>
+
+                <Section emoji="📋" title="Content Outline">
+                  {arr(brief.outline).map((act,i)=>(
+                    <div key={i} style={{background:"#f9f8f6",borderLeft:"3px solid #e8e4dc",padding:"12px 16px",borderRadius:"0 8px 8px 0",marginBottom:10}}>
+                      <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}><Editable value={act.act} onChange={v=>upArr("outline",i,{...act,act:v})} placeholder="Section name"/></div>
+                      <div style={{fontSize:14,lineHeight:1.75}}><Editable value={act.description} onChange={v=>upArr("outline",i,{...act,description:v})} multiline placeholder="Describe this section…"/></div>
+                    </div>
+                  ))}
+                  <button onClick={()=>addArr("outline",{act:"New Section",description:""})} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add section</button>
+                </Section>
+                <HR/>
+
+                <Section emoji="💬" title="Key Points to Hit">
+                  {arr(brief.keyPoints).map((pt,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"5px 0"}}>
+                      <span style={{color:"#e97942",marginTop:4}}>→</span>
+                      <div style={{flex:1,fontSize:14}}><Editable value={pt} onChange={v=>upArr("keyPoints",i,v)} placeholder="Key point…"/></div>
+                      <button onClick={()=>delArr("keyPoints",i)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+                    </div>
+                  ))}
+                  <button onClick={()=>addArr("keyPoints","New point")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add point</button>
+                </Section>
+                <HR/>
+
+                <Section emoji="📝" title="Script Notes">
+                  <div style={{fontSize:14,lineHeight:1.85,background:"#fafaf9",borderRadius:6,padding:"12px 16px"}}><Editable value={brief.scriptNotes} onChange={v=>set("scriptNotes",v)} multiline placeholder="Tone, delivery notes, phrases to use or avoid…"/></div>
+                </Section>
+                <HR/>
+
+                <Section emoji="📍" title="Locations">
+                  {arr(brief.locations).map((loc,i)=>(
+                    <div key={i} style={{background:"#f7f6f3",borderRadius:8,padding:"12px 14px",marginBottom:8,border:"1px solid #eeece8"}}>
+                      <div style={{display:"flex",justifyContent:"space-between"}}>
+                        <div style={{flex:1}}>
+                          <div style={{fontWeight:700,fontSize:14,marginBottom:4}}><Editable value={loc.name} onChange={v=>upArr("locations",i,{...loc,name:v})} placeholder="Location name"/></div>
+                          <div style={{fontSize:13,color:"#55534e"}}><Editable value={loc.notes} onChange={v=>upArr("locations",i,{...loc,notes:v})} multiline placeholder="Notes…"/></div>
+                        </div>
+                        <button onClick={()=>delArr("locations",i)} style={{background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:13,marginLeft:8}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ccc"}>✕</button>
+                      </div>
+                    </div>
+                  ))}
+                  <button onClick={()=>addArr("locations",{name:"New Location",notes:""})} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add location</button>
+                </Section>
+                <HR/>
+
+                <Section emoji="🎪" title="Props & Equipment">
+                  {arr(brief.props).map((p,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"5px 0"}}>
+                      <span style={{color:"#9b9a97"}}>·</span>
+                      <div style={{flex:1,fontSize:14}}><Editable value={p} onChange={v=>upArr("props",i,v)}/></div>
+                      <button onClick={()=>delArr("props",i)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+                    </div>
+                  ))}
+                  <button onClick={()=>addArr("props","New item")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
+                </Section>
+                <HR/>
+
+                <Section emoji="🎥" title="Shot List">
+                  <div style={{overflowX:"auto"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"36px 80px 1fr 24px",gap:8,padding:"6px 0",borderBottom:"1px solid #e8e4dc",minWidth:320}}>
+                      {["#","Type","Description",""].map((h,i)=><div key={i} style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em"}}>{h}</div>)}
+                    </div>
+                    {arr(brief.shotList).map((shot,i)=>(
+                      <div key={i} style={{display:"grid",gridTemplateColumns:"36px 80px 1fr 24px",gap:8,alignItems:"start",padding:"9px 0",borderBottom:"1px solid #f7f6f3",minWidth:320}}>
+                        <div style={{fontSize:11,fontWeight:700,color:"#9b9a97",paddingTop:4}}>{shot.number||String(i+1).padStart(2,"0")}</div>
+                        <div style={{fontSize:12,fontWeight:600,color:"#e97942"}}><Editable value={shot.type} onChange={v=>upArr("shotList",i,{...shot,type:v})} placeholder="Type"/></div>
+                        <div style={{fontSize:13,lineHeight:1.6}}><Editable value={shot.description} onChange={v=>upArr("shotList",i,{...shot,description:v})} multiline placeholder="Describe the shot…"/></div>
+                        <button onClick={()=>delArr("shotList",i)} style={{background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:13,paddingTop:4}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ccc"}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={()=>addArr("shotList",{number:String((arr(brief.shotList).length)+1).padStart(2,"0"),type:"B-Roll",description:""})} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"4px 0",marginTop:8}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add shot</button>
+                </Section>
+                <HR/>
+
+                <Section emoji="✅" title="To-Do List">
+                  {arr(brief.toDoList).map((item,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"5px 0"}}>
+                      <input type="checkbox" checked={item.done} onChange={e=>upArr("toDoList",i,{...item,done:e.target.checked})} style={{marginTop:3,cursor:"pointer",flexShrink:0,width:15,height:15,accentColor:"#37352f"}}/>
+                      <div style={{flex:1,fontSize:14,color:item.done?"#9b9a97":"#37352f",textDecoration:item.done?"line-through":"none",lineHeight:1.6}}><Editable value={item.text} onChange={v=>upArr("toDoList",i,{...item,text:v})}/></div>
+                      <button onClick={()=>delArr("toDoList",i)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+                    </div>
+                  ))}
+                  <button onClick={()=>addArr("toDoList",{text:"New task",done:false})} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add task</button>
+                </Section>
+                <HR/>
+
+                <Section emoji="🏷" title="Tags" defaultOpen={false}>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                    {arr(brief.tags).map((tag,i)=>(
+                      <span key={i} style={{background:"#f1f0ef",color:"#55534e",borderRadius:20,padding:"3px 12px",fontSize:12,fontWeight:500,display:"inline-flex",alignItems:"center",gap:6}}>
+                        {tag}<button onClick={()=>delArr("tags",i)} style={{background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:10,padding:0}}>✕</button>
+                      </span>
+                    ))}
+                    <button onClick={()=>addArr("tags","new tag")} style={{background:"none",border:"1px dashed #e8e4dc",color:"#9b9a97",borderRadius:20,padding:"3px 12px",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>+ Tag</button>
+                  </div>
+                </Section>
+
+                {/* Series Episodes */}
+                {arr(brief.concepts).length>0&&<>
+                  <HR/>
+                  <Section emoji="📺" title={`Series Episodes (${arr(brief.concepts).length})`} defaultOpen>
+                    {arr(brief.concepts).map((ep,ei)=>(
+                      <div key={ep.id} style={{border:"1px solid #e8e4dc",borderRadius:10,marginBottom:16,overflow:"hidden"}}>
+                        <div style={{background:"#f7f6f3",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:"1px solid #e8e4dc"}}>
+                          <div style={{fontWeight:700,fontSize:14,flex:1,marginRight:12}}><Editable value={ep.title} onChange={v=>upEp(ei,"title",v)} placeholder={`Episode ${ei+1}`}/></div>
+                          <button onClick={()=>{if(window.confirm("Remove this episode?"))delArr("concepts",ei);}} style={{background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ccc"}>✕ Remove</button>
+                        </div>
+                        <div style={{padding:"16px"}}>
+                          <div style={{marginBottom:10}}>
+                            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Hook</div>
+                            <div style={{fontSize:14,lineHeight:1.8,background:"#fafaf9",borderRadius:6,padding:"10px 14px"}}><Editable value={ep.hook} onChange={v=>upEp(ei,"hook",v)} multiline placeholder="Episode hook…"/></div>
+                          </div>
+                          <div style={{marginBottom:14}}>
+                            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Angle</div>
+                            <div style={{fontSize:14,lineHeight:1.8,background:"#fafaf9",borderRadius:6,padding:"10px 14px"}}><Editable value={ep.angle} onChange={v=>upEp(ei,"angle",v)} multiline placeholder="This episode's unique angle…"/></div>
+                          </div>
+                          {/* Episode outline */}
+                          <div style={{marginBottom:14}}>
+                            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Outline</div>
+                            {arr(ep.outline).map((act,i)=>(
+                              <div key={i} style={{background:"#f9f8f6",borderLeft:"3px solid #e8e4dc",padding:"10px 14px",borderRadius:"0 6px 6px 0",marginBottom:8}}>
+                                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",marginBottom:3}}><Editable value={act.act} onChange={v=>upEpArr(ei,"outline",i,{...act,act:v})} placeholder="Section"/></div>
+                                <div style={{fontSize:13,lineHeight:1.7}}><Editable value={act.description} onChange={v=>upEpArr(ei,"outline",i,{...act,description:v})} multiline placeholder="Description…"/></div>
+                              </div>
+                            ))}
+                            <button onClick={()=>addEpArr(ei,"outline",{act:"New Section",description:""})} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"3px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add section</button>
+                          </div>
+                          {/* Episode shot list */}
+                          <div>
+                            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:8}}>Shot List</div>
+                            {arr(ep.shotList).map((shot,i)=>(
+                              <div key={i} style={{display:"grid",gridTemplateColumns:"36px 80px 1fr 24px",gap:8,alignItems:"start",padding:"7px 0",borderBottom:"1px solid #f7f6f3"}}>
+                                <div style={{fontSize:11,fontWeight:700,color:"#9b9a97",paddingTop:3}}>{shot.number||String(i+1).padStart(2,"0")}</div>
+                                <div style={{fontSize:12,fontWeight:600,color:"#e97942"}}><Editable value={shot.type} onChange={v=>upEpArr(ei,"shotList",i,{...shot,type:v})} placeholder="Type"/></div>
+                                <div style={{fontSize:13,lineHeight:1.5}}><Editable value={shot.description} onChange={v=>upEpArr(ei,"shotList",i,{...shot,description:v})} multiline placeholder="Shot description…"/></div>
+                                <button onClick={()=>delEpArr(ei,"shotList",i)} style={{background:"none",border:"none",color:"#ccc",cursor:"pointer",fontSize:12,paddingTop:3}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ccc"}>✕</button>
+                              </div>
+                            ))}
+                            <button onClick={()=>addEpArr(ei,"shotList",{number:String(arr(ep.shotList).length+1).padStart(2,"0"),type:"B-Roll",description:""})} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"3px 0",marginTop:6}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add shot</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                    <button onClick={addEpisode} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"10px 20px",fontSize:13,color:"#55534e",cursor:"pointer",fontFamily:"inherit",width:"100%",textAlign:"center"}} onMouseEnter={e=>{e.currentTarget.style.background="#f7f6f3";}} onMouseLeave={e=>{e.currentTarget.style.background="none";}}>+ Add Episode</button>
+                  </Section>
+                </>}
+
+                {arr(brief.concepts).length===0&&<>
+                  <HR/>
+                  <div style={{textAlign:"center",padding:"20px 0 8px"}}>
+                    <button onClick={addEpisode} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"10px 20px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit"}} onMouseEnter={e=>{e.currentTarget.style.color="#37352f";e.currentTarget.style.borderColor="#c4c3bf";}} onMouseLeave={e=>{e.currentTarget.style.color="#9b9a97";e.currentTarget.style.borderColor="#e8e4dc";}}>📺 Convert to Series — Add Episode</button>
+                  </div>
+                </>}
+              </>
+            )}
+          </div>
         </div>
 
-        {!brief ? (
-          <div style={{ textAlign: "center", padding: "40px 0", color: "#c4c3bf" }}>
-            <div className="spin" style={{ width: 24, height: 24, border: "2px solid #f1f0ef", borderTop: "2px solid #37352f", borderRadius: "50%", margin: "0 auto 12px" }} />
-            <p style={{ fontSize: 13, fontStyle: "italic" }}>Generating your creative brief…</p>
-          </div>
-        ) : (
-          <>
-            {/* Title + logline */}
-            <h1 style={{ fontSize: 30, fontWeight: 700, color: "#37352f", letterSpacing: "-0.02em", marginBottom: 6, lineHeight: 1.2 }}>
-              <Editable value={brief.title} onChange={v => set("title", v)} placeholder="Untitled Idea" />
-            </h1>
-            <div style={{ fontSize: 15, color: "#9b9a97", fontStyle: "italic", marginBottom: 8, lineHeight: 1.6 }}>
-              <Editable value={brief.logline} onChange={v => set("logline", v)} placeholder="One-sentence pitch…" />
-            </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 24 }}>
-              {[["Format", "format"], ["Audience", "targetAudience"], ["Est. Length", "estimatedLength"]].map(([l, k]) => (
-                <div key={k} style={{ background: "#f1f0ef", borderRadius: 6, padding: "4px 10px" }}>
-                  <span style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em" }}>{l}: </span>
-                  <span style={{ fontSize: 12, color: "#37352f", fontWeight: 600 }}><Editable value={brief[k]} onChange={v => set(k, v)} placeholder="—" /></span>
-                </div>
-              ))}
-            </div>
-
-            <HR />
-            <Section emoji="🎣" title="Hook & Angle">
-              <div style={{ marginBottom: 10 }}>
-                <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Hook</div>
-                <div style={{ fontSize: 14, lineHeight: 1.8, background: "#fafaf9", borderRadius: 6, padding: "10px 14px" }}>
-                  <Editable value={brief.hook} onChange={v => set("hook", v)} multiline placeholder="What grabs attention in the first 3 seconds?" />
-                </div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>Angle / Perspective</div>
-                <div style={{ fontSize: 14, lineHeight: 1.8, background: "#fafaf9", borderRadius: 6, padding: "10px 14px" }}>
-                  <Editable value={brief.angle} onChange={v => set("angle", v)} multiline placeholder="What's the unique point of view?" />
-                </div>
-              </div>
-            </Section>
-            <HR />
-
-            <Section emoji="📋" title="Content Outline">
-              {(brief.outline || []).map((act, i) => (
-                <div key={i} style={{ background: "#f9f8f6", borderLeft: "3px solid #e8e4dc", padding: "12px 16px", borderRadius: "0 8px 8px 0", marginBottom: 10 }}>
-                  <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
-                    <Editable value={act.act} onChange={v => upArr("outline", i, { ...act, act: v })} placeholder="Section name" />
-                  </div>
-                  <div style={{ fontSize: 14, lineHeight: 1.75 }}>
-                    <Editable value={act.description} onChange={v => upArr("outline", i, { ...act, description: v })} multiline placeholder="Describe this section…" />
-                  </div>
-                </div>
-              ))}
-              <button onClick={() => addArr("outline", { act: "New Section", description: "" })} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
-                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>
-                + Add section
-              </button>
-            </Section>
-            <HR />
-
-            <Section emoji="💬" title="Key Points to Hit">
-              {(brief.keyPoints || []).map((pt, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "5px 0" }}>
-                  <span style={{ color: "#e97942", marginTop: 4 }}>→</span>
-                  <div style={{ flex: 1, fontSize: 14 }}><Editable value={pt} onChange={v => upArr("keyPoints", i, v)} placeholder="Key point…" /></div>
-                  <button onClick={() => delArr("keyPoints", i)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13 }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
-                </div>
-              ))}
-              <button onClick={() => addArr("keyPoints", "New point")} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
-                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add point</button>
-            </Section>
-            <HR />
-
-            <Section emoji="📝" title="Script Notes">
-              <div style={{ fontSize: 14, lineHeight: 1.85, background: "#fafaf9", borderRadius: 6, padding: "12px 16px" }}>
-                <Editable value={brief.scriptNotes} onChange={v => set("scriptNotes", v)} multiline placeholder="Tone, delivery notes, phrases to use or avoid…" />
-              </div>
-            </Section>
-            <HR />
-
-            <Section emoji="📍" title="Locations">
-              {(brief.locations || []).map((loc, i) => (
-                <div key={i} style={{ background: "#f7f6f3", borderRadius: 8, padding: "12px 14px", marginBottom: 8, border: "1px solid #eeece8" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}><Editable value={loc.name} onChange={v => upArr("locations", i, { ...loc, name: v })} placeholder="Location name" /></div>
-                      <div style={{ fontSize: 13, color: "#55534e" }}><Editable value={loc.notes} onChange={v => upArr("locations", i, { ...loc, notes: v })} multiline placeholder="Notes…" /></div>
-                    </div>
-                    <button onClick={() => delArr("locations", i)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 13, marginLeft: 8 }}
-                      onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ccc"}>✕</button>
-                  </div>
-                </div>
-              ))}
-              <button onClick={() => addArr("locations", { name: "New Location", notes: "" })} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
-                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add location</button>
-            </Section>
-            <HR />
-
-            <Section emoji="🎪" title="Props & Equipment">
-              {(brief.props || []).map((p, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0" }}>
-                  <span style={{ color: "#9b9a97" }}>·</span>
-                  <div style={{ flex: 1, fontSize: 14 }}><Editable value={p} onChange={v => upArr("props", i, v)} /></div>
-                  <button onClick={() => delArr("props", i)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13 }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
-                </div>
-              ))}
-              <button onClick={() => addArr("props", "New item")} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
-                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add item</button>
-            </Section>
-            <HR />
-
-            <Section emoji="🎥" title="Shot List">
-              <div style={{ overflowX: "auto" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "36px 80px 1fr 24px", gap: 8, padding: "6px 0", borderBottom: "1px solid #e8e4dc", minWidth: 320 }}>
-                  {["#", "Type", "Description", ""].map((h, i) => <div key={i} style={{ fontSize: 10, fontFamily: "'IBM Plex Mono',monospace", color: "#9b9a97", textTransform: "uppercase", letterSpacing: "0.06em" }}>{h}</div>)}
-                </div>
-                {(brief.shotList || []).map((shot, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "36px 80px 1fr 24px", gap: 8, alignItems: "start", padding: "9px 0", borderBottom: "1px solid #f7f6f3", minWidth: 320 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#9b9a97", paddingTop: 4 }}>{shot.number || String(i + 1).padStart(2, "0")}</div>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "#e97942" }}><Editable value={shot.type} onChange={v => upArr("shotList", i, { ...shot, type: v })} placeholder="Type" /></div>
-                    <div style={{ fontSize: 13, lineHeight: 1.6 }}><Editable value={shot.description} onChange={v => upArr("shotList", i, { ...shot, description: v })} multiline placeholder="Describe the shot…" /></div>
-                    <button onClick={() => delArr("shotList", i)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 13, paddingTop: 4 }}
-                      onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ccc"}>✕</button>
-                  </div>
-                ))}
-              </div>
-              <button onClick={() => addArr("shotList", { number: String((brief.shotList?.length || 0) + 1).padStart(2, "0"), type: "B-Roll", description: "" })}
-                style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0", marginTop: 8 }}
-                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add shot</button>
-            </Section>
-            <HR />
-
-            <Section emoji="✅" title="To-Do List">
-              {(brief.toDoList || []).map((item, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: 10, padding: "5px 0" }}>
-                  <input type="checkbox" checked={item.done} onChange={e => upArr("toDoList", i, { ...item, done: e.target.checked })}
-                    style={{ marginTop: 3, cursor: "pointer", flexShrink: 0, width: 15, height: 15, accentColor: "#37352f" }} />
-                  <div style={{ flex: 1, fontSize: 14, color: item.done ? "#9b9a97" : "#37352f", textDecoration: item.done ? "line-through" : "none", lineHeight: 1.6 }}>
-                    <Editable value={item.text} onChange={v => upArr("toDoList", i, { ...item, text: v })} />
-                  </div>
-                  <button onClick={() => delArr("toDoList", i)} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13 }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>✕</button>
-                </div>
-              ))}
-              <button onClick={() => addArr("toDoList", { text: "New task", done: false })} style={{ background: "none", border: "none", color: "#9b9a97", fontSize: 13, cursor: "pointer", fontFamily: "inherit", padding: "4px 0" }}
-                onMouseEnter={e => e.currentTarget.style.color = "#37352f"} onMouseLeave={e => e.currentTarget.style.color = "#9b9a97"}>+ Add task</button>
-            </Section>
-            <HR />
-
-            <Section emoji="🏷" title="Tags" defaultOpen={false}>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {(brief.tags || []).map((tag, i) => (
-                  <span key={i} style={{ background: "#f1f0ef", color: "#55534e", borderRadius: 20, padding: "3px 12px", fontSize: 12, fontWeight: 500, display: "inline-flex", alignItems: "center", gap: 6 }}>
-                    {tag}
-                    <button onClick={() => delArr("tags", i)} style={{ background: "none", border: "none", color: "#ccc", cursor: "pointer", fontSize: 10, padding: 0 }}>✕</button>
-                  </span>
-                ))}
-                <button onClick={() => addArr("tags", "new tag")} style={{ background: "none", border: "1px dashed #e8e4dc", color: "#9b9a97", borderRadius: 20, padding: "3px 12px", fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>+ Tag</button>
-              </div>
-            </Section>
-          </>
-        )}
+        {/* AI Chat panel */}
+        {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}}>
+          <AIChatPanel chatLog={chatLog} onSend={sendIdeaChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/>
+        </div>}
       </div>
     </div>
   );
