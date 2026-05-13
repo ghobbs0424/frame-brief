@@ -926,8 +926,73 @@ function MapLinks({address}){
   );
 }
 
+// ─── CLIENT COMBOBOX ─────────────────────────────────────────────────────────
+function ClientCombobox({value,clientId,clients,onChange,onLink,onUnlink,onGoToProfile,onCreateAndLink}){
+  const[input,setInput]=useState(value||"");
+  const[open,setOpen]=useState(false);
+  const[creating,setCreating]=useState(false);
+  const wrapRef=useRef();
+  useEffect(()=>{setInput(value||"");},[value]);
+  useEffect(()=>{
+    function down(e){if(!wrapRef.current?.contains(e.target))setOpen(false);}
+    document.addEventListener("mousedown",down);
+    return()=>document.removeEventListener("mousedown",down);
+  },[]);
+  const filtered=arr(clients).filter(c=>{
+    const q=input.trim().toLowerCase();
+    return!q||c.name.toLowerCase().includes(q)||(c.company||"").toLowerCase().includes(q);
+  }).slice(0,6);
+  const exactMatch=arr(clients).find(c=>c.name.toLowerCase()===input.trim().toLowerCase());
+  const showCreate=input.trim()&&!exactMatch;
+  async function handleCreate(){
+    if(!input.trim()||creating)return;
+    setCreating(true);
+    await onCreateAndLink(input.trim());
+    setCreating(false);setOpen(false);
+  }
+  return(
+    <div ref={wrapRef} style={{position:"relative",flex:1}}>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <input value={input} onChange={e=>{setInput(e.target.value);onChange(e.target.value);setOpen(true);}} onFocus={()=>setOpen(true)} placeholder="Search or type client name…" style={{flex:1,border:"none",outline:"none",fontSize:14,color:"#37352f",fontFamily:"'Lora',serif",background:"transparent",padding:0,minWidth:0}}/>
+        {clientId&&(
+          <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+            <span style={{fontSize:10,background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"2px 7px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em"}}>Linked</span>
+            {onGoToProfile&&<button onClick={onGoToProfile} style={{background:"none",border:"none",color:"#1a56c4",cursor:"pointer",fontSize:12,padding:"0 2px",lineHeight:1}} title="View client profile">↗</button>}
+            <button onClick={()=>{setInput("");onChange("");onUnlink();}} style={{background:"none",border:"none",color:"#c4c3bf",cursor:"pointer",fontSize:13,padding:"0 2px",lineHeight:1}} title="Unlink client">✕</button>
+          </div>
+        )}
+      </div>
+      {open&&(filtered.length>0||showCreate)&&(
+        <div style={{position:"absolute",top:"calc(100% + 8px)",left:-16,right:-16,background:"#fff",border:"1px solid #e8e4dc",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,0.1)",zIndex:200,overflow:"hidden",maxHeight:240,overflowY:"auto"}}>
+          {filtered.length>0&&(
+            <>
+              <div style={{padding:"8px 12px 4px",fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em"}}>Existing clients</div>
+              {filtered.map(c=>(
+                <div key={c.id} onClick={()=>{setInput(c.name);onLink(c);setOpen(false);}} style={{padding:"9px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:8}} onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div style={{width:26,height:26,borderRadius:6,background:"#37352f",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:11,flexShrink:0}}>{(c.name||"?").charAt(0).toUpperCase()}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,color:"#37352f",fontWeight:600}}>{c.name}</div>
+                    {c.company&&<div style={{fontSize:11,color:"#9b9a97"}}>{c.company}</div>}
+                  </div>
+                  {c.id===clientId&&<span style={{fontSize:10,color:"#1e7e34",background:"#e6f4ea",borderRadius:20,padding:"1px 7px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",flexShrink:0}}>Current</span>}
+                </div>
+              ))}
+            </>
+          )}
+          {showCreate&&(
+            <div onClick={handleCreate} style={{padding:"10px 14px",cursor:creating?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:8,borderTop:filtered.length>0?"1px solid #f1f0ef":"none",opacity:creating?0.6:1}} onMouseEnter={e=>{if(!creating)e.currentTarget.style.background="#f7f6f3";}} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+              <div style={{width:26,height:26,borderRadius:6,background:"#e97942",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:16,flexShrink:0}}>+</div>
+              <div style={{fontSize:13,color:"#37352f"}}>{creating?`Creating…`:`Create "${input.trim()}"`}</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── OVERVIEW PAGE ────────────────────────────────────────────────────────────
-function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,projectId,onTranscriptReady,clientId,onClientClick}){
+function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,projectId,onTranscriptReady,clientId,onClientClick,clients,onClientLink,onClientUnlink,onClientCreateAndLink}){
   const set=(k,v)=>setBrief(b=>({...b,[k]:v}));
   const upArr=(k,i,v)=>setBrief(b=>{const a=[...(b[k]||[])];a[i]=v;return{...b,[k]:a};});
   const delArr=(k,i)=>setBrief(b=>({...b,[k]:(b[k]||[]).filter((_,j)=>j!==i)}));
@@ -940,9 +1005,9 @@ function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,pro
       <div style={{fontSize:15,color:"#9b9a97",fontStyle:"italic",marginBottom:20,lineHeight:1.6}}>{readonly?<p style={{margin:0}}>{brief.logline}</p>:<Editable value={brief.logline} onChange={v=>set("logline",v)} placeholder="Project logline…"/>}</div>
       <div style={{border:"1px solid #f1f0ef",borderRadius:10,overflow:"hidden",marginBottom:28}}>
         <PropRow label="Client">
-          {clientId&&onClientClick
-            ?<span style={{cursor:"pointer",color:"#1a56c4",display:"inline-flex",alignItems:"center",gap:4}} onClick={onClientClick}>{brief.clientName||"View Client"}<span style={{fontSize:11,color:"#9b9a97"}}>↗</span></span>
-            :readonly?brief.clientName:<Editable value={brief.clientName} onChange={v=>set("clientName",v)}/>
+          {readonly
+            ?(clientId&&onClientClick?<span style={{cursor:"pointer",color:"#1a56c4",display:"inline-flex",alignItems:"center",gap:4}} onClick={onClientClick}>{brief.clientName||"View Client"}<span style={{fontSize:11,color:"#9b9a97"}}>↗</span></span>:brief.clientName)
+            :<ClientCombobox value={brief.clientName||""} clientId={clientId} clients={clients||[]} onChange={v=>set("clientName",v)} onLink={onClientLink} onUnlink={onClientUnlink} onGoToProfile={clientId&&onClientClick?onClientClick:null} onCreateAndLink={onClientCreateAndLink}/>
           }
         </PropRow>
         {[["Project Type","projectType"],["Date","date"],["Timeline","timeline"],["Budget","budget"]].map(([l,k])=>(<PropRow key={k} label={l}>{readonly?brief[k]:<Editable value={brief[k]} onChange={v=>set(k,v)}/>}</PropRow>))}
@@ -1685,6 +1750,35 @@ function FrameBriefApp(){
     if(activeProject?.id===id){setActiveProject(null);setScreen("dashboard");}
   }
 
+  function linkClientToProject(client){
+    setActiveProject(prev=>{
+      const updatedBrief={...prev.brief,clientName:client.name};
+      const updated={...prev,client_id:client.id,brief:updatedBrief};
+      clearTimeout(window._briefSaveTimer);
+      window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);
+      return updated;
+    });
+    setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,client_id:client.id,client_name:client.name}:p));
+  }
+
+  function unlinkClientFromProject(){
+    setActiveProject(prev=>{
+      const updated={...prev,client_id:null};
+      clearTimeout(window._briefSaveTimer);
+      window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);
+      return updated;
+    });
+    setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,client_id:null}:p));
+  }
+
+  async function createAndLinkClient(name){
+    const{data}=await supabase.from("clients").insert({name,user_id:user.id}).select().single();
+    if(data){
+      setClients(prev=>[...prev,data].sort((a,b)=>a.name.localeCompare(b.name)));
+      linkClientToProject(data);
+    }
+  }
+
   async function updateStatus(id,status){
     await supabase.from("projects").update({status,updated_at:new Date().toISOString()}).eq("id",id);
     setProjects(ps=>ps.map(p=>p.id===id?{...p,status}:p));
@@ -1978,7 +2072,7 @@ ${JSON.stringify(brief)}`;
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
-          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}}/>}
+          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}} clients={clients} onClientLink={linkClientToProject} onClientUnlink={unlinkClientFromProject} onClientCreateAndLink={createAndLinkClient}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
         </div>
         {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}} className="hide-on-mobile"><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div>}
