@@ -927,7 +927,7 @@ function MapLinks({address}){
 }
 
 // ─── OVERVIEW PAGE ────────────────────────────────────────────────────────────
-function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,projectId,onTranscriptReady}){
+function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,projectId,onTranscriptReady,clientId,onClientClick}){
   const set=(k,v)=>setBrief(b=>({...b,[k]:v}));
   const upArr=(k,i,v)=>setBrief(b=>{const a=[...(b[k]||[])];a[i]=v;return{...b,[k]:a};});
   const delArr=(k,i)=>setBrief(b=>({...b,[k]:(b[k]||[]).filter((_,j)=>j!==i)}));
@@ -939,7 +939,13 @@ function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,pro
       {readonly?<h1 style={{fontSize:34,fontWeight:700,letterSpacing:"-0.025em",margin:"0 0 8px",color:"#37352f",lineHeight:1.2}}>{brief.projectTitle}</h1>:<h1 contentEditable suppressContentEditableWarning onBlur={e=>set("projectTitle",e.target.innerText)} style={{fontSize:34,fontWeight:700,letterSpacing:"-0.025em",margin:"0 0 8px",outline:"none",color:"#37352f",lineHeight:1.2}}>{brief.projectTitle}</h1>}
       <div style={{fontSize:15,color:"#9b9a97",fontStyle:"italic",marginBottom:20,lineHeight:1.6}}>{readonly?<p style={{margin:0}}>{brief.logline}</p>:<Editable value={brief.logline} onChange={v=>set("logline",v)} placeholder="Project logline…"/>}</div>
       <div style={{border:"1px solid #f1f0ef",borderRadius:10,overflow:"hidden",marginBottom:28}}>
-        {[["Client","clientName"],["Project Type","projectType"],["Date","date"],["Timeline","timeline"],["Budget","budget"]].map(([l,k])=>(<PropRow key={k} label={l}>{readonly?brief[k]:<Editable value={brief[k]} onChange={v=>set(k,v)}/>}</PropRow>))}
+        <PropRow label="Client">
+          {clientId&&onClientClick
+            ?<span style={{cursor:"pointer",color:"#1a56c4",display:"inline-flex",alignItems:"center",gap:4}} onClick={onClientClick}>{brief.clientName||"View Client"}<span style={{fontSize:11,color:"#9b9a97"}}>↗</span></span>
+            :readonly?brief.clientName:<Editable value={brief.clientName} onChange={v=>set("clientName",v)}/>
+          }
+        </PropRow>
+        {[["Project Type","projectType"],["Date","date"],["Timeline","timeline"],["Budget","budget"]].map(([l,k])=>(<PropRow key={k} label={l}>{readonly?brief[k]:<Editable value={brief[k]} onChange={v=>set(k,v)}/>}</PropRow>))}
       </div>
       <div style={{marginBottom:28}}>
         <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Concepts</div>
@@ -1116,8 +1122,208 @@ function MeetingBotPanel({ projectId, onBotStarted, recallStatus, recallBotId, o
   );
 }
 
+// ─── CLIENT LIST ─────────────────────────────────────────────────────────────
+function ClientList({clients,projects,onNew,onOpen,onBack}){
+  const[search,setSearch]=useState("");
+  const[showNew,setShowNew]=useState(false);
+  const[newName,setNewName]=useState("");
+  const[newCompany,setNewCompany]=useState("");
+  const[newIndustry,setNewIndustry]=useState("");
+  const[saving,setSaving]=useState(false);
+  const filtered=clients.filter(c=>{const q=search.toLowerCase();return!q||[c.name,c.company,c.email,c.industry].some(s=>s?.toLowerCase().includes(q));});
+  async function createClient(){
+    if(!newName.trim())return;
+    setSaving(true);
+    const{data,error}=await supabase.from("clients").insert({name:newName.trim(),company:newCompany.trim()||null,industry:newIndustry.trim()||null}).select().single();
+    setSaving(false);
+    if(!error&&data){onNew(data);setShowNew(false);setNewName("");setNewCompany("");setNewIndustry("");}
+  }
+  return(
+    <div style={{minHeight:"100vh",background:"#fff"}}>
+      <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4}}>← Dashboard</button>
+          <span style={{color:"#e8e4dc"}}>·</span>
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:"0.08em",color:"#37352f",fontWeight:500}}>CLIENTS</span>
+        </div>
+        <button onClick={()=>setShowNew(true)} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ New Client</button>
+      </div>
+      <div style={{maxWidth:960,margin:"0 auto",padding:"32px 24px"}}>
+        <h1 style={{fontSize:26,fontWeight:700,color:"#37352f",marginBottom:20,letterSpacing:"-0.02em"}}>Clients</h1>
+        <div style={{position:"relative",marginBottom:24,maxWidth:380}}>
+          <span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#9b9a97"}}>🔍</span>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search clients…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px 10px 36px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",background:"#fafaf9",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+        </div>
+        {showNew&&(
+          <div style={{border:"1px solid #e8e4dc",borderRadius:10,padding:"20px",marginBottom:24,background:"#fafaf9"}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#37352f",marginBottom:14}}>New Client</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+              <div>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Name *</div>
+                <input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Client name" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"9px 12px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"} onKeyDown={e=>e.key==="Enter"&&createClient()}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Company</div>
+                <input value={newCompany} onChange={e=>setNewCompany(e.target.value)} placeholder="Company" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"9px 12px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+              </div>
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:5}}>Industry</div>
+              <input value={newIndustry} onChange={e=>setNewIndustry(e.target.value)} placeholder="e.g. Music, Corporate, Wedding…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"9px 12px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"} onKeyDown={e=>e.key==="Enter"&&createClient()}/>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={createClient} disabled={!newName.trim()||saving} style={{background:"#37352f",color:"#fff",border:"none",padding:"9px 20px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:newName.trim()&&!saving?"pointer":"not-allowed",opacity:newName.trim()&&!saving?1:0.5}}>{saving?"Saving…":"Create Client"}</button>
+              <button onClick={()=>{setShowNew(false);setNewName("");setNewCompany("");setNewIndustry("");}} style={{background:"transparent",color:"#9b9a97",border:"1px solid #e8e4dc",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>Cancel</button>
+            </div>
+          </div>
+        )}
+        {filtered.length===0?(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:44,marginBottom:14}}>👥</div>
+            <p style={{fontSize:17,fontWeight:600,color:"#37352f",marginBottom:8}}>{search?"No clients match":"No clients yet"}</p>
+            <p style={{fontSize:14,color:"#9b9a97",marginBottom:20}}>{search?"Try a different search.":"Add your first client to get started."}</p>
+            {!search&&<button onClick={()=>setShowNew(true)} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer"}}>+ Add First Client</button>}
+          </div>
+        ):(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))",gap:14}}>
+            {filtered.map(c=>{
+              const cp=projects.filter(p=>p.client_id===c.id);
+              return(
+                <div key={c.id} onClick={()=>onOpen(c)} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"20px",background:"#fafaf9",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#f0ede8";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fafaf9";e.currentTarget.style.borderColor="#f1f0ef";}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10}}>
+                    <div style={{width:40,height:40,borderRadius:10,background:"#37352f",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:16,flexShrink:0}}>{(c.name||"?").charAt(0).toUpperCase()}</div>
+                    {c.industry&&<span style={{fontSize:10,background:"#fdeee4",color:"#b94a1a",borderRadius:20,padding:"2px 8px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em"}}>{c.industry}</span>}
+                  </div>
+                  <div style={{fontWeight:700,fontSize:15,color:"#37352f",marginBottom:2,lineHeight:1.3}}>{c.name}</div>
+                  {c.company&&<div style={{fontSize:12,color:"#9b9a97",marginBottom:6}}>{c.company}</div>}
+                  <div style={{display:"flex",gap:12,fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace",marginTop:10,paddingTop:10,borderTop:"1px solid #f1f0ef"}}>
+                    <span>{cp.length} project{cp.length!==1?"s":""}</span>
+                    {c.email&&<span title={c.email}>✉️</span>}
+                    {c.phone&&<span title={c.phone}>📞</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── CLIENT PROFILE ───────────────────────────────────────────────────────────
+function ClientProfile({clientId,clients,setClients,projects,onBack,onOpenProject,onNewProject}){
+  const[deleteConfirm,setDeleteConfirm]=useState(false);
+  const client=clients.find(c=>c.id===clientId)||null;
+  if(!client)return null;
+  const clientProjects=projects.filter(p=>p.client_id===client.id).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
+  async function save(field,value){
+    const updates={[field]:value||null,updated_at:new Date().toISOString()};
+    await supabase.from("clients").update(updates).eq("id",client.id);
+    setClients(prev=>prev.map(c=>c.id===client.id?{...c,...updates}:c));
+  }
+  async function deleteClient(){
+    await supabase.from("clients").delete().eq("id",client.id);
+    setClients(prev=>prev.filter(c=>c.id!==client.id));
+    onBack();
+  }
+  const lastProject=clientProjects.length>0?new Date(Math.max(...clientProjects.map(p=>new Date(p.updated_at)))):null;
+  const activeClientProject=clientProjects.find(p=>["Draft","In Progress","Review"].includes(p.status));
+  const fStyle={width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 12px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box",background:"#fafaf9"};
+  const lStyle={fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4};
+  return(
+    <div style={{minHeight:"100vh",background:"#fff"}}>
+      <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4}}>← Clients</button>
+          <span style={{color:"#e8e4dc"}}>·</span>
+          <span style={{fontSize:13,fontWeight:700,color:"#37352f"}}>{client.name}</span>
+        </div>
+        <button onClick={()=>setDeleteConfirm(true)} style={{background:"none",border:"1px solid #f1f0ef",padding:"6px 14px",borderRadius:6,fontSize:12,color:"#9b9a97",cursor:"pointer",fontFamily:"'Lora',serif"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#c0392b";e.currentTarget.style.color="#c0392b";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#f1f0ef";e.currentTarget.style.color="#9b9a97";}}>Delete</button>
+      </div>
+      {deleteConfirm&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500}}>
+          <div style={{background:"#fff",borderRadius:12,padding:"28px 32px",maxWidth:360,width:"90%",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+            <div style={{fontSize:22,marginBottom:10}}>⚠️</div>
+            <div style={{fontWeight:700,fontSize:16,color:"#37352f",marginBottom:8}}>Delete {client.name}?</div>
+            <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.65,marginBottom:20}}>This permanently deletes this client profile. Linked projects remain but will be unlinked.</p>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={deleteClient} style={{flex:1,background:"#c0392b",color:"#fff",border:"none",padding:"10px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>Delete</button>
+              <button onClick={()=>setDeleteConfirm(false)} style={{flex:1,background:"transparent",border:"1px solid #e8e4dc",padding:"9px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer",color:"#37352f"}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+      <div style={{maxWidth:760,margin:"0 auto",padding:"40px 24px 80px"}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+          <div style={{width:64,height:64,borderRadius:16,background:"#37352f",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontWeight:700,fontSize:28,flexShrink:0}}>{(client.name||"?").charAt(0).toUpperCase()}</div>
+          <div>
+            <h1 style={{fontSize:28,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em",margin:"0 0 4px"}}>{client.name}</h1>
+            {(client.company||client.industry)&&<div style={{fontSize:14,color:"#9b9a97"}}>{[client.company,client.industry].filter(Boolean).join(" · ")}</div>}
+          </div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12,marginBottom:28}}>
+          {[["Total Projects",clientProjects.length],["Last Activity",lastProject?lastProject.toLocaleDateString("en-US",{month:"short",year:"numeric"}):"—"],["Active Project",activeClientProject?activeClientProject.title:"—"]].map(([label,val])=>(
+            <div key={label} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"16px",background:"#fafaf9",textAlign:"center"}}>
+              <div style={{fontSize:typeof val==="number"?22:13,fontWeight:700,color:"#37352f",marginBottom:4,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{val}</div>
+              <div style={{fontSize:10,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"20px",marginBottom:28,background:"#fafaf9"}}>
+          <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:16}}>Contact & Info</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+            {[["Name","name","Client name"],["Company","company","Company"],["Email","email","email@example.com"],["Phone","phone","+1 (555) 000-0000"],["Industry","industry","e.g. Music, Wedding…"],["How Found","how_found","Referral, Instagram, etc."]].map(([label,field,placeholder])=>(
+              <div key={field}>
+                <div style={lStyle}>{label}</div>
+                <input key={client.id+field} defaultValue={client[field]||""} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>{e.target.style.borderColor="#e8e4dc";if(e.target.value!==(client[field]||""))save(field,e.target.value);}} placeholder={placeholder} style={fStyle}/>
+              </div>
+            ))}
+          </div>
+          <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:12}}>Social</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+            {[["Instagram","instagram","@handle"],["TikTok","tiktok","@handle"],["YouTube","youtube","Channel URL"],["Website","website","https://"]].map(([label,field,placeholder])=>(
+              <div key={field}>
+                <div style={lStyle}>{label}</div>
+                <input key={client.id+field} defaultValue={client[field]||""} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>{e.target.style.borderColor="#e8e4dc";if(e.target.value!==(client[field]||""))save(field,e.target.value);}} placeholder={placeholder} style={fStyle}/>
+              </div>
+            ))}
+          </div>
+          <div style={lStyle}>Notes</div>
+          <textarea key={client.id+"notes"} defaultValue={client.notes||""} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>{e.target.style.borderColor="#e8e4dc";if(e.target.value!==(client.notes||""))save("notes",e.target.value);}} placeholder="Notes about this client…" rows={3} style={{...fStyle,resize:"vertical"}}/>
+        </div>
+        <div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#37352f"}}>Projects ({clientProjects.length})</div>
+            <button onClick={onNewProject} style={{background:"#37352f",color:"#fff",border:"none",padding:"7px 14px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer"}}>+ New Project</button>
+          </div>
+          {clientProjects.length===0?(
+            <div style={{textAlign:"center",padding:"32px 20px",border:"1px dashed #e8e4dc",borderRadius:10}}>
+              <p style={{fontSize:13,color:"#9b9a97",marginBottom:10}}>No projects linked to this client yet.</p>
+              <button onClick={onNewProject} style={{background:"transparent",border:"1px solid #e8e4dc",padding:"7px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",color:"#9b9a97"}}>Create first project</button>
+            </div>
+          ):(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              {clientProjects.map(p=>(
+                <div key={p.id} onClick={()=>onOpenProject(p)} style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",border:"1px solid #f1f0ef",borderRadius:8,background:"#fafaf9",cursor:"pointer",transition:"background .12s"}} onMouseEnter={e=>e.currentTarget.style.background="#f0ede8"} onMouseLeave={e=>e.currentTarget.style.background="#fafaf9"}>
+                  <span style={{fontSize:22,flexShrink:0}}>{p.brief?.coverEmoji||"🎬"}</span>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontWeight:600,fontSize:14,color:"#37352f",marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title||"Untitled"}</div>
+                    <div style={{fontSize:12,color:"#9b9a97"}}>{[p.brief?.projectType,p.brief?.date].filter(Boolean).join(" · ")}</div>
+                  </div>
+                  <StatusBadge status={p.status} readonly/>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas}){
+function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients}){
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
   const[sidebarOpen,setSidebarOpen]=useState(true);
@@ -1130,6 +1336,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
       <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:12}}>Navigation</div>
       <button onClick={onNew} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 10px",border:"none",background:"#37352f",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}>🎬 <span>New Brief</span></button>
       <button onClick={onIdeas} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💡</span><span>Idea Capture</span></button>
+      <button onClick={onClients} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>👥</span><span>Clients</span></button>
       <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Account</div>
       <div style={{fontSize:12,color:"#9b9a97",padding:"4px 10px",marginBottom:8,lineHeight:1.5,wordBreak:"break-all"}}>{user?.email}</div>
       <button onClick={onSignOut} className="nb"><span style={{fontSize:15}}>🚪</span><span>Sign Out</span></button>
@@ -1338,6 +1545,10 @@ function FrameBriefApp(){
   const[sharedIdeaLoading,setSharedIdeaLoading]=useState(false);
   const[copied,setCopied]=useState(false);
   const[dbSaving,setDbSaving]=useState(false);
+  const[clients,setClients]=useState([]);
+  const[activeClientId,setActiveClientId]=useState(null);
+  const[inputClientId,setInputClientId]=useState(null);
+  const[newClientNameInput,setNewClientNameInput]=useState("");
   const brief=activeProject?.brief||null;
 
   useEffect(()=>{
@@ -1364,7 +1575,7 @@ function FrameBriefApp(){
     }
   },[]);
 
-  useEffect(()=>{if(user){loadProjects();loadSharedProjects();}},[user]);
+  useEffect(()=>{if(user){loadProjects();loadSharedProjects();loadClients();}},[user]);
 
   // Load shared project once auth resolves
   useEffect(()=>{
@@ -1400,6 +1611,11 @@ function FrameBriefApp(){
     if(data)setSharedProjects(data.filter(m=>m.projects).map(m=>({...m.projects,myRole:m.role})));
   }
 
+  async function loadClients(){
+    const{data,error}=await supabase.from("clients").select("*").order("name",{ascending:true});
+    if(!error&&data)setClients(data);
+  }
+
   async function loadShareRoute(pid){
     const{data,error}=await supabase.from("projects").select("*").eq("id",pid).single();
     if(error||!data){setScreen("dashboard");return;}
@@ -1424,7 +1640,7 @@ function FrameBriefApp(){
     const isOwner=!user||user.id===projectData.user_id;
     let data,error;
     if(isOwner){
-      ({data,error}=await supabase.from("projects").upsert({id:projectData.id,user_id:user.id,title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",status:projectData.status||"Draft",brief:projectData.brief||{},doc_count:projectData.doc_count||0,updated_at:new Date().toISOString()}).select().single());
+      ({data,error}=await supabase.from("projects").upsert({id:projectData.id,user_id:user.id,title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",status:projectData.status||"Draft",brief:projectData.brief||{},doc_count:projectData.doc_count||0,client_id:projectData.client_id||null,updated_at:new Date().toISOString()}).select().single());
     }else{
       ({data,error}=await supabase.from("projects").update({title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",brief:projectData.brief||{},updated_at:new Date().toISOString()}).eq("id",projectData.id).select().single());
     }
@@ -1472,6 +1688,12 @@ function FrameBriefApp(){
     const validDocs=docs.filter(d=>!d.error);
     if(!transcript.trim()&&validDocs.length===0)return;
     setErrMsg("");setScreen("loading");
+    let resolvedClientId=inputClientId;
+    if(inputClientId==="__new__"&&newClientNameInput.trim()){
+      const{data}=await supabase.from("clients").insert({name:newClientNameInput.trim()}).select().single();
+      if(data){setClients(prev=>[...prev,data].sort((a,b)=>a.name.localeCompare(b.name)));resolvedClientId=data.id;}
+      else resolvedClientId=null;
+    }else if(inputClientId==="__new__"){resolvedClientId=null;}
     try{
       const userContent=[];
       for(const doc of validDocs.filter(d=>d.type==="pdf"))userContent.push({type:"document",source:{type:"base64",media_type:"application/pdf",data:doc.base64},title:doc.name});
@@ -1493,10 +1715,10 @@ function FrameBriefApp(){
       if(!Array.isArray(parsed.concepts))parsed.concepts=[];
       if(!parsed.clientActionItems)parsed.clientActionItems=[];
       if(!parsed.internalTodos)parsed.internalTodos=[];
-      const newProject={id:crypto.randomUUID(),user_id:user.id,title:parsed.projectTitle||"Untitled",client_name:parsed.clientName||"",status:"Draft",brief:parsed,doc_count:validDocs.length,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+      const newProject={id:crypto.randomUUID(),user_id:user.id,title:parsed.projectTitle||"Untitled",client_name:parsed.clientName||"",status:"Draft",brief:parsed,doc_count:validDocs.length,client_id:resolvedClientId||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
       const saved=await saveProject(newProject);
       setActiveProject(saved||newProject);
-      setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setDocs([]);setTranscript("");setScreen("doc");
+      setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setDocs([]);setTranscript("");setInputClientId(null);setNewClientNameInput("");setScreen("doc");
     }catch(err){console.error(err);setErrMsg(err.message||"Something went wrong.");setScreen("input");}
   }
 
@@ -1633,7 +1855,11 @@ ${JSON.stringify(brief)}`;
 
   if(screen==="ideas")return(<div><style>{CSS}</style><IdeaCapture user={user} onBack={()=>setScreen("dashboard")}/></div>);
 
-  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")}/></div>);
+  if(screen==="clients")return(<div><style>{CSS}</style><ClientList clients={clients} projects={projects} onBack={()=>setScreen("dashboard")} onNew={c=>setClients(prev=>[...prev,c].sort((a,b)=>a.name.localeCompare(b.name)))} onOpen={c=>{setActiveClientId(c.id);setScreen("clientProfile");}}/></div>);
+
+  if(screen==="clientProfile")return(<div><style>{CSS}</style><ClientProfile clientId={activeClientId} clients={clients} setClients={setClients} projects={projects} onBack={()=>setScreen("clients")} onOpenProject={p=>{setMyRole("owner");setActiveProject(p);setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNewProject={()=>{setInputClientId(activeClientId);setNewClientNameInput("");setTranscript("");setDocs([]);setErrMsg("");setScreen("input");}}/></div>);
+
+  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")}/></div>);
 
   if(screen==="input")return(
     <div style={{minHeight:"100vh",background:"#fff"}}><style>{CSS}</style>
@@ -1643,12 +1869,12 @@ ${JSON.stringify(brief)}`;
         <MeetingBotPanel projectId={null} onBotStarted={async (botId)=>{
           // Create project with bot ID already included
           const projectId = crypto.randomUUID();
-          const newProject={id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,recall_bot_id:botId,recall_status:"bot_joined",created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+          const newProject={id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,client_id:(inputClientId&&inputClientId!=="__new__"?inputClientId:null),recall_bot_id:botId,recall_status:"bot_joined",created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
           // Save to Supabase directly with upsert to ensure bot ID is stored
           const{data}=await supabase.from("projects").insert({
             id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",
             status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},
-            doc_count:0,recall_bot_id:botId,recall_status:"bot_joined",
+            doc_count:0,client_id:(inputClientId&&inputClientId!=="__new__"?inputClientId:null),recall_bot_id:botId,recall_status:"bot_joined",
             created_at:new Date().toISOString(),updated_at:new Date().toISOString()
           }).select().single();
           const project = data || newProject;
@@ -1658,6 +1884,19 @@ ${JSON.stringify(brief)}`;
           setScreen("doc");
         }} recallStatus={null}/>
         <div style={{display:"flex",alignItems:"center",gap:12,margin:"20px 0"}}><div style={{flex:1,height:1,background:"#f1f0ef"}}/><span style={{fontSize:12,color:"#c4c3bf"}}>or paste notes manually</span><div style={{flex:1,height:1,background:"#f1f0ef"}}/></div>
+        {clients.length>0&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>Link to Client (Optional)</div>
+            <select value={inputClientId||""} onChange={e=>setInputClientId(e.target.value||null)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",background:"#fafaf9",outline:"none",cursor:"pointer"}}>
+              <option value="">No client</option>
+              {clients.map(c=><option key={c.id} value={c.id}>{c.name}{c.company?` (${c.company})`:""}</option>)}
+              <option value="__new__">+ Create new client…</option>
+            </select>
+            {inputClientId==="__new__"&&(
+              <input value={newClientNameInput} onChange={e=>setNewClientNameInput(e.target.value)} placeholder="New client name" style={{width:"100%",marginTop:8,border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box",background:"#fafaf9"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            )}
+          </div>
+        )}
         {errMsg&&<div style={{background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#c0392b",lineHeight:1.65}}><strong>Error:</strong> {errMsg}</div>}
         <div style={{border:`1px solid ${transcript.length>=HARD_LIMIT?"#ffc9c9":transcript.length>STANDARD_LIMIT?"#fde8c8":"#e8e4dc"}`,borderRadius:10,padding:"20px",marginBottom:14,background:"#fafaf9"}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -1709,7 +1948,7 @@ ${JSON.stringify(brief)}`;
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
-          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}}/>}
+          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
         </div>
         {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}} className="hide-on-mobile"><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div>}
