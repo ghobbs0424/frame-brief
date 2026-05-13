@@ -311,7 +311,7 @@ ${JSON.stringify(brief)}`;
   const addEpArr=(ei,k,item)=>{const c=[...arr(brief.concepts)];c[ei]={...c[ei],[k]:[...arr(c[ei][k]),item]};set("concepts",c);};
 
   return (
-    <div style={{minHeight:"100vh",background:"#fff",display:"flex",flexDirection:"column"}}>
+    <div style={{height:"100vh",background:"#fff",display:"flex",flexDirection:"column",overflow:"hidden"}}>
       {/* Header */}
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
         <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>← Ideas</button>
