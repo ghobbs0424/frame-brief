@@ -2117,6 +2117,10 @@ function FrameBriefApp(){
   const[showAddMeeting,setShowAddMeeting]=useState(false);
   const[addMeetingTranscript,setAddMeetingTranscript]=useState("");
   const[addMeetingLoading,setAddMeetingLoading]=useState(false);
+  const[showJoinCall,setShowJoinCall]=useState(false);
+  const[joinCallUrl,setJoinCallUrl]=useState("");
+  const[joinCallLoading,setJoinCallLoading]=useState(false);
+  const[joinCallError,setJoinCallError]=useState("");
   const brief=activeProject?.brief||null;
 
   useEffect(()=>{
@@ -2268,6 +2272,24 @@ function FrameBriefApp(){
     if(data){
       setClients(prev=>[...prev,data].sort((a,b)=>a.name.localeCompare(b.name)));
       linkClientToProject(data);
+    }
+  }
+
+  async function handleJoinCall(){
+    if(!joinCallUrl.trim()||!activeProject)return;
+    setJoinCallLoading(true);setJoinCallError("");
+    try{
+      const bot=await startRecallBot(joinCallUrl.trim(),activeProject.id);
+      const botId=bot.botId||bot.id;
+      const updated={...activeProject,recall_bot_id:botId,recall_status:"bot_joined"};
+      setActiveProject(updated);
+      setProjects(ps=>ps.map(p=>p.id===activeProject.id?updated:p));
+      await supabase.from("projects").update({recall_bot_id:botId,recall_status:"bot_joined",updated_at:new Date().toISOString()}).eq("id",activeProject.id);
+      // Close modal after short delay so user sees the "joining" state
+      setTimeout(()=>{setShowJoinCall(false);setJoinCallUrl("");setJoinCallLoading(false);},1800);
+    }catch(err){
+      setJoinCallError(err.message||"Failed to start bot — check the meeting URL");
+      setJoinCallLoading(false);
     }
   }
 
@@ -2535,7 +2557,8 @@ ${JSON.stringify(brief)}`;
           );
         })}
       </>)}
-      <button onClick={()=>{setShowAddMeeting(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#9b9a97",fontFamily:"'Lora',serif",marginTop:6,borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add Meeting Notes</button>
+      {myRole!=="viewer"&&<button onClick={()=>{setShowJoinCall(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#1a56c4",fontFamily:"'Lora',serif",marginTop:6,borderRadius:6,fontWeight:600}} onMouseEnter={e=>e.currentTarget.style.background="#e8f0fe"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>📞 Join Call</button>}
+      <button onClick={()=>{setShowAddMeeting(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#9b9a97",fontFamily:"'Lora',serif",marginTop:2,borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add Meeting Notes</button>
       {((brief?.clientActionItems?.length||0)+(brief?.internalTodos?.length||0))>0&&(<div style={{marginTop:16,padding:"12px 10px",borderTop:"1px solid #f1f0ef"}}><div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Progress</div>{brief.clientActionItems?.length>0&&(<div style={{marginBottom:6}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>✅ Client</span><span>{arr(brief.clientActionItems).filter(t=>t.done).length}/{arr(brief.clientActionItems).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#1e7e34",width:`${(arr(brief.clientActionItems).filter(t=>t.done).length/arr(brief.clientActionItems).length)*100}%`,transition:"width .3s"}}/></div></div>)}{brief.internalTodos?.length>0&&(<div><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>🔒 Team</span><span>{arr(brief.internalTodos).filter(t=>t.done).length}/{arr(brief.internalTodos).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#e97942",width:`${(arr(brief.internalTodos).filter(t=>t.done).length/arr(brief.internalTodos).length)*100}%`,transition:"width .3s"}}/></div></div>)}</div>)}
     </>);
   }
@@ -2696,6 +2719,38 @@ ${JSON.stringify(brief)}`;
       {showShareModal&&user&&<ShareModal project={activeProject} user={user} onClose={()=>setShowShareModal(false)} onProjectUpdate={p=>{setActiveProject(prev=>({...prev,...p}));setProjects(ps=>ps.map(pp=>pp.id===p.id?{...pp,...p}:pp));}}/>}
       {viewingMeeting&&<MeetingHistoryPanel meeting={viewingMeeting} onClose={()=>setViewingMeeting(null)}/>}
       {reviewingMeeting&&myRole!=="viewer"&&<SuggestedChangesModal meeting={reviewingMeeting} currentBrief={brief} onApply={(indices)=>{applyMeetingChanges(reviewingMeeting,indices);setReviewingMeeting(null);}} onDismiss={()=>{dismissMeeting(reviewingMeeting);setReviewingMeeting(null);}}/>}
+      {showJoinCall&&(
+        <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setShowJoinCall(false);setJoinCallUrl("");setJoinCallError("");}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:"28px 28px 24px",width:"min(480px,100%)",boxShadow:"0 8px 32px rgba(0,0,0,0.15)"}}>
+            {joinCallLoading?(
+              <div style={{textAlign:"center",padding:"20px 0"}}>
+                <div className="spin" style={{width:28,height:28,border:"3px solid #e8e4dc",borderTop:"3px solid #1a56c4",borderRadius:"50%",margin:"0 auto 14px"}}/>
+                <div style={{fontWeight:700,fontSize:15,color:"#37352f",marginBottom:6}}>Bot is joining…</div>
+                <div style={{fontSize:13,color:"#9b9a97"}}>Frame Brief will automatically generate your brief when the call ends.</div>
+              </div>
+            ):(
+              <>
+                <div style={{fontSize:18,fontWeight:700,color:"#37352f",marginBottom:6}}>📞 Join This Call</div>
+                <div style={{fontSize:13,color:"#9b9a97",marginBottom:20,lineHeight:1.6}}>Paste a Google Meet, Zoom, or Teams link. The bot will join, record, and auto-generate meeting notes tied to this project.</div>
+                <input
+                  autoFocus
+                  value={joinCallUrl}
+                  onChange={e=>{setJoinCallUrl(e.target.value);setJoinCallError("");}}
+                  onKeyDown={e=>e.key==="Enter"&&handleJoinCall()}
+                  placeholder="https://meet.google.com/abc-defg-hij"
+                  style={{width:"100%",border:`1px solid ${joinCallError?"#ffc9c9":"#e8e4dc"}`,borderRadius:8,padding:"12px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",marginBottom:joinCallError?8:16,boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor=joinCallError?"#ffc9c9":"#e8e4dc"}
+                />
+                {joinCallError&&<div style={{fontSize:12,color:"#c0392b",marginBottom:12}}>{joinCallError}</div>}
+                <div style={{display:"flex",gap:10}}>
+                  <button onClick={handleJoinCall} disabled={!joinCallUrl.trim()} style={{background:"#1a56c4",color:"#fff",border:"none",padding:"10px 20px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:joinCallUrl.trim()?"pointer":"not-allowed",opacity:joinCallUrl.trim()?1:0.5}}>Send Bot</button>
+                  <button onClick={()=>{setShowJoinCall(false);setJoinCallUrl("");setJoinCallError("");}} style={{background:"transparent",border:"1px solid #e8e4dc",padding:"10px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer",color:"#9b9a97"}}>Cancel</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {showAddMeeting&&(
         <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowAddMeeting(false)}>
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:"28px 28px 24px",width:"min(560px,100%)",boxShadow:"0 8px 32px rgba(0,0,0,0.15)"}}>
