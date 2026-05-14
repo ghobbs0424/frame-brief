@@ -62,29 +62,38 @@ export default async function handler(req, res) {
     }
 
     // 2. Connect to Recall.ai Calendar API using the OAuth tokens
-    const recallRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/calendar/google-oauth/`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Token ${RECALL_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
-        client_id: process.env.GOOGLE_CLIENT_ID,
-        client_secret: process.env.GOOGLE_CLIENT_SECRET,
-        notetaker_preferences: {
-          bot_name: "Frame Brief",
-          webhook_url: "https://framebriefai.com/api/recall-webhook",
+    let recallCalendarId = null;
+    try {
+      const recallRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/calendar/google-oauth/`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Token ${RECALL_KEY}`,
+          "Content-Type": "application/json",
         },
-      }),
-    });
+        body: JSON.stringify({
+          access_token: tokens.access_token,
+          refresh_token: tokens.refresh_token,
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          notetaker_preferences: {
+            bot_name: "Frame Brief",
+            webhook_url: "https://framebriefai.com/api/recall-webhook",
+          },
+        }),
+      });
 
-    const recallData = await recallRes.json();
-    console.log("Recall calendar connect status:", recallRes.status, "response:", JSON.stringify(recallData).slice(0, 300));
+      const recallRaw = await recallRes.text();
+      console.log("Recall calendar connect status:", recallRes.status, "response:", recallRaw.slice(0, 300));
 
-    // Accept both success and already-connected responses
-    const recallCalendarId = recallData.id || recallData.calendar_id || null;
+      try {
+        const recallData = JSON.parse(recallRaw);
+        recallCalendarId = recallData.id || recallData.calendar_id || null;
+      } catch {
+        console.error("Recall response was not JSON — status:", recallRes.status);
+      }
+    } catch (recallErr) {
+      console.error("Recall calendar connect error (non-fatal):", recallErr.message);
+    }
 
     // 3. Upsert into user_settings
     const { error: dbErr } = await supabase.from("user_settings").upsert({
