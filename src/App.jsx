@@ -2008,7 +2008,14 @@ function MeetingsScreen({user,projects,onBack}){
   const[reconnecting,setReconnecting]=useState(false);
   const[reconnectError,setReconnectError]=useState("");
 
-  useEffect(()=>{loadData();},[]);
+  useEffect(()=>{
+    loadData();
+    // Poll every 30s — detects when user has joined a meeting early so bot gets triggered immediately
+    const interval=setInterval(()=>{
+      if(document.visibilityState==="visible") loadData();
+    },30000);
+    return()=>clearInterval(interval);
+  },[]);
 
   async function loadData(){
     setLoading(true);

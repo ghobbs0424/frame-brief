@@ -99,37 +99,43 @@ export default async function handler(req, res) {
       const eventsData = await eventsRes.json();
       const rawEvents = eventsData.results || eventsData || [];
 
-      // Auto-schedule bots for meetings that don't have one yet
+      // Schedule or immediately trigger bots
       for (const m of rawEvents) {
         const hasBot = (m.bots?.length > 0) || !!(m.bot || m.bot_id || m.scheduled_bot);
         const hasMeetingUrl = !!(m.meeting_url);
         if (!hasBot && hasMeetingUrl) {
+          const alreadyStarted = new Date(m.start_time) <= new Date();
+          const body = {
+            bot_config: {
+              bot_name: "Frame Brief",
+              webhook_url: "https://framebriefai.com/api/recall-webhook",
+              metadata: {
+                calendar_event_id: m.id,
+                user_id: userId,
+                event_title: m.raw?.summary || "Calendar Meeting",
+              },
+              automatic_leave: {
+                waiting_room_timeout: 3600,
+              },
+            },
+          };
+          // If meeting already started (user joined early), send bot in now without
+          // deduplication so it joins immediately rather than at the old scheduled time
+          if (alreadyStarted) {
+            body.join_at = new Date().toISOString();
+          } else {
+            body.deduplication_key = `framebrief-${m.id}`;
+          }
           const botRes = await fetch(
             `https://${RECALL_REGION}.recall.ai/api/v2/calendar-events/${m.id}/bot/`,
             {
               method: "POST",
               headers: { Authorization: `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                deduplication_key: `framebrief-${m.id}`,
-                // Join 2 minutes before start so bot is ready when participants arrive early
-                join_at: new Date(new Date(m.start_time).getTime() - 2 * 60 * 1000).toISOString(),
-                bot_config: {
-                  bot_name: "Frame Brief",
-                  webhook_url: "https://framebriefai.com/api/recall-webhook",
-                  metadata: {
-                    calendar_event_id: m.id,
-                    user_id: userId,
-                    event_title: m.raw?.summary || "Calendar Meeting",
-                  },
-                  automatic_leave: {
-                    waiting_room_timeout: 3600, // wait up to 1 hour if host hasn't arrived yet
-                  },
-                },
-              }),
+              body: JSON.stringify(body),
             }
           );
           const botRaw = await botRes.text();
-          console.log("Auto-scheduled bot for event:", m.id, "status:", botRes.status, "response:", botRaw.slice(0, 200));
+          console.log("Bot", alreadyStarted ? "immediate" : "scheduled", "for event:", m.id, "status:", botRes.status, "response:", botRaw.slice(0, 200));
           try { if (botRes.ok) m._scheduledBot = JSON.parse(botRaw); } catch {}
         }
       }

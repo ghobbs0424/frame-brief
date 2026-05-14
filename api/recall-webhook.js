@@ -166,7 +166,6 @@ export default async function handler(req, res) {
             headers: { Authorization: `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
               deduplication_key: `framebrief-${evt.id}`,
-              join_at: new Date(new Date(evt.start_time).getTime() - 2 * 60 * 1000).toISOString(),
               bot_config: {
                 bot_name: "Frame Brief",
                 webhook_url: "https://framebriefai.com/api/recall-webhook",
