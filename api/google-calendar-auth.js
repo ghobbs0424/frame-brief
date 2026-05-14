@@ -124,16 +124,18 @@ export default async function handler(req, res) {
         }
       }
 
-      const meetings = rawEvents.map((m) => ({
-        id: m.id,
-        title: m.summary || m.title || "Untitled Meeting",
-        startTime: m.start_time,
-        endTime: m.end_time,
-        meetingUrl: m.meeting_url || null,
-        attendees: (m.attendees || []).map((a) => a.email || a.name || a),
-        linkedProjectId: settings.meeting_project_links?.[m.id] || null,
-        botScheduled: !!(m.bot || m.bot_id || m.scheduled_bot),
-      }));
+      const meetings = rawEvents
+        .filter((m) => !!m.meeting_url)
+        .map((m) => ({
+          id: m.id,
+          title: m.summary || m.title || "Untitled Meeting",
+          startTime: m.start_time,
+          endTime: m.end_time,
+          meetingUrl: m.meeting_url,
+          attendees: (m.attendees || []).map((a) => a.email || a.name || a),
+          linkedProjectId: settings.meeting_project_links?.[m.id] || null,
+          botScheduled: !!(m.bot || m.bot_id || m.scheduled_bot),
+        }));
 
       return res.status(200).json({ meetings, connected: true });
     }

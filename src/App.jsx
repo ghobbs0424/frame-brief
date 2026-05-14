@@ -2109,7 +2109,10 @@ function MeetingsScreen({user,projects,onBack}){
                           <span style={{fontSize:11,fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",borderRadius:20,padding:"3px 10px",background:isConsultation?"#e8f0fe":"#e6f4ea",color:isConsultation?"#1a56c4":"#1e7e34",whiteSpace:"nowrap"}}>
                             {isConsultation?`📝 Consultation → ${linkedProject?.title||"Project"}`:"🆕 New Brief"}
                           </span>
-                          <span style={{fontSize:11,background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"3px 10px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>🤖 Auto-joining</span>
+                          {m.botScheduled
+                            ? <span style={{fontSize:11,background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"3px 10px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>🤖 Auto-joining</span>
+                            : <span style={{fontSize:11,background:"#fff8e6",color:"#b36d00",borderRadius:20,padding:"3px 10px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>⏳ Scheduling bot…</span>
+                          }
                         </div>
                         <div style={{fontWeight:700,fontSize:15,color:"#37352f",marginBottom:4}}>{m.title}</div>
                         <div style={{fontSize:12,color:"#9b9a97",marginBottom:4}}>{start.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})} · {start.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
