@@ -1031,7 +1031,7 @@ function ClientCombobox({value,clientId,clients,onChange,onLink,onUnlink,onGoToP
 }
 
 // ─── OVERVIEW PAGE ────────────────────────────────────────────────────────────
-function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,projectId,onTranscriptReady,onGenerateBrief,clientId,onClientClick,clients,onClientLink,onClientUnlink,onClientCreateAndLink,meetingStage,onStageChange}){
+function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,projectId,onTranscriptReady,onGenerateBrief,briefGenError,clientId,onClientClick,clients,onClientLink,onClientUnlink,onClientCreateAndLink,meetingStage,onStageChange}){
   const set=(k,v)=>setBrief(b=>({...b,[k]:v}));
   const upArr=(k,i,v)=>setBrief(b=>{const a=[...(b[k]||[])];a[i]=v;return{...b,[k]:a};});
   const delArr=(k,i)=>setBrief(b=>({...b,[k]:(b[k]||[]).filter((_,j)=>j!==i)}));
@@ -1039,15 +1039,21 @@ function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,pro
   const cT=brief.clientActionItems||[];const iT=brief.internalTodos||[];
   return(
     <div style={{maxWidth:760,padding:"40px 24px 120px",margin:"0 auto"}}>
-      {(recallStatus==="transcript_ready"||recallStatus==="transcribing")&&!readonly&&(
-        <div style={{background:recallStatus==="transcribing"?"#fef3e2":"#e8f0fe",border:`1px solid ${recallStatus==="transcribing"?"#fde8c8":"#d2e3fc"}`,borderRadius:10,padding:"14px 18px",marginBottom:24,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+      {recallStatus==="transcribing"&&!readonly&&(
+        <div style={{background:"#fef3e2",border:"1px solid #fde8c8",borderRadius:10,padding:"12px 16px",marginBottom:24,display:"flex",alignItems:"center",gap:8}}>
+          <div className="spin" style={{width:13,height:13,border:"2px solid #fde8c8",borderTop:"2px solid #b45309",borderRadius:"50%",flexShrink:0}}/>
+          <span style={{fontSize:13,color:"#92400e",fontWeight:600}}>Transcribing your meeting…</span>
+        </div>
+      )}
+      {briefGenError&&!readonly&&(
+        <div style={{background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:10,padding:"14px 18px",marginBottom:24,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            {recallStatus==="transcribing"?<><div className="spin" style={{width:14,height:14,border:"2px solid #fde8c8",borderTop:"2px solid #b45309",borderRadius:"50%",flexShrink:0}}/><span style={{fontSize:13,color:"#92400e",fontWeight:600}}>Transcribing your meeting…</span></>
-            :<><span style={{fontSize:14}}>📝</span><div><span style={{fontSize:13,fontWeight:700,color:"#1a56c4"}}>Transcript ready</span><span style={{fontSize:12,color:"#9b9a97",marginLeft:8}}>Brief generation didn't complete — click to retry</span></div></>}
+            <span style={{fontSize:14}}>⚠️</span>
+            <div><span style={{fontSize:13,fontWeight:700,color:"#c0392b"}}>Brief generation failed</span><span style={{fontSize:12,color:"#9b9a97",marginLeft:8}}>Tap to retry</span></div>
           </div>
-          {recallStatus==="transcript_ready"&&onGenerateBrief&&(
-            <button onClick={onGenerateBrief} style={{background:"#1a56c4",color:"#fff",border:"none",padding:"7px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-              ✦ Generate Brief Now
+          {onGenerateBrief&&(
+            <button onClick={onGenerateBrief} style={{background:"#c0392b",color:"#fff",border:"none",padding:"7px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+              ↺ Retry
             </button>
           )}
         </div>
@@ -2106,6 +2112,7 @@ function FrameBriefApp(){
   const[newClientNameInput,setNewClientNameInput]=useState("");
   const[viewingMeeting,setViewingMeeting]=useState(null);
   const[pendingMeeting,setPendingMeeting]=useState(null);
+  const[briefGenError,setBriefGenError]=useState(false);
   const[reviewingMeeting,setReviewingMeeting]=useState(null);
   const[showAddMeeting,setShowAddMeeting]=useState(false);
   const[addMeetingTranscript,setAddMeetingTranscript]=useState("");
@@ -2163,6 +2170,13 @@ function FrameBriefApp(){
         const pending = history.find(m => m.status === "pending_review");
         if (pending) setPendingMeeting(pending);
         clearInterval(interval);
+      }
+      // Auto-trigger brief generation when transcript is ready
+      if (data.recall_status === "transcript_ready" && data.recall_transcript) {
+        clearInterval(interval);
+        setActiveProject(prev => ({...prev, ...data}));
+        setProjects(ps => ps.map(p => p.id === data.id ? {...p, ...data} : p));
+        generateBriefFromTranscript(data);
       }
     }, 5000); // poll every 5s
     return () => clearInterval(interval);
@@ -2349,9 +2363,11 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
   const STEPS=["Reading your transcript…","Reading documents…","Identifying deliverables…","Building concept pages…","Writing shot lists…","Almost ready…"];
   useEffect(()=>{if(screen!=="loading")return;let i=0;const t=setInterval(()=>{i=(i+1)%STEPS.length;setLoadMsg(STEPS[i]);},2000);return()=>clearInterval(t);},[screen]);
 
-  async function generateBriefFromSavedTranscript(){
-    const transcriptText=activeProject?.recall_transcript;
-    if(!transcriptText||!activeProject)return;
+  async function generateBriefFromTranscript(project){
+    const proj=project||activeProject;
+    const transcriptText=proj?.recall_transcript;
+    if(!transcriptText||!proj)return;
+    setBriefGenError(false);
     setLoadMsg("Generating brief from transcript…");
     setScreen("loading");
     try{
@@ -2368,17 +2384,19 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       if(!Array.isArray(parsed.concepts))parsed.concepts=[];
       if(!parsed.clientActionItems)parsed.clientActionItems=[];
       if(!parsed.internalTodos)parsed.internalTodos=[];
-      const updated={...activeProject,brief:parsed,recall_status:"brief_ready"};
+      const updated={...proj,brief:parsed,recall_status:"brief_ready"};
       setActiveProject(updated);
-      setProjects(ps=>ps.map(p=>p.id===activeProject.id?updated:p));
+      setProjects(ps=>ps.map(p=>p.id===proj.id?updated:p));
       await saveProject(updated);
-      await supabase.from("projects").update({recall_status:"brief_ready",updated_at:new Date().toISOString()}).eq("id",activeProject.id);
+      await supabase.from("projects").update({recall_status:"brief_ready",updated_at:new Date().toISOString()}).eq("id",proj.id);
       setPage("overview");setScreen("doc");
     }catch(err){
-      console.error("generateBriefFromSavedTranscript error:",err);
+      console.error("generateBriefFromTranscript error:",err);
+      setBriefGenError(true);
       setScreen("doc");
     }
   }
+  const generateBriefFromSavedTranscript=()=>generateBriefFromTranscript(activeProject);
 
   async function generate(){
     const validDocs=docs.filter(d=>!d.error);
@@ -2697,7 +2715,7 @@ ${JSON.stringify(brief)}`;
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
-          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} onGenerateBrief={generateBriefFromSavedTranscript} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}} clients={clients} onClientLink={linkClientToProject} onClientUnlink={unlinkClientFromProject} onClientCreateAndLink={createAndLinkClient} meetingStage={activeProject?.meeting_stage||"discovery"} onStageChange={stage=>{setActiveProject(prev=>{const updated={...prev,meeting_stage:stage};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_stage:stage}:p));}}/>}
+          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} onGenerateBrief={generateBriefFromSavedTranscript} briefGenError={briefGenError} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}} clients={clients} onClientLink={linkClientToProject} onClientUnlink={unlinkClientFromProject} onClientCreateAndLink={createAndLinkClient} meetingStage={activeProject?.meeting_stage||"discovery"} onStageChange={stage=>{setActiveProject(prev=>{const updated={...prev,meeting_stage:stage};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_stage:stage}:p));}}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
           {page==="shootday"&&<CallSheetPanel brief={brief} callSheet={activeProject?.call_sheet||{}} onUpdate={cs=>{setActiveProject(prev=>{const updated={...prev,call_sheet:cs};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
           {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>{const updated={...prev,post_production:pp};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
