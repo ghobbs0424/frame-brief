@@ -2004,6 +2004,7 @@ function MeetingsScreen({user,projects,onBack}){
   const[loading,setLoading]=useState(true);
   const[calendarConnected,setCalendarConnected]=useState(false);
   const[linking,setLinking]=useState(null);
+  const[connecting,setConnecting]=useState(false);
 
   useEffect(()=>{loadData();},[]);
 
@@ -2016,6 +2017,12 @@ function MeetingsScreen({user,projects,onBack}){
       catch(e){console.error(e);}
     }
     setLoading(false);
+  }
+
+  async function handleConnect(){
+    setConnecting(true);
+    try{const res=await fetch(`/api/google-calendar-auth?action=oauth-url&userId=${user.id}`);const d=await res.json();if(d.url)window.location.href=d.url;}
+    catch(e){console.error(e);setConnecting(false);}
   }
 
   async function handleLink(meetingId,projectId){
@@ -2036,11 +2043,15 @@ function MeetingsScreen({user,projects,onBack}){
       </div>
       <div style={{flex:1,padding:"32px 24px",maxWidth:760,margin:"0 auto",width:"100%",boxSizing:"border-box"}}>
         {!calendarConnected?(
-          <div style={{textAlign:"center",padding:"60px 20px"}}>
-            <div style={{fontSize:48,marginBottom:14}}>📅</div>
-            <p style={{fontSize:17,fontWeight:700,color:"#37352f",marginBottom:8}}>Connect Google Calendar</p>
-            <p style={{fontSize:14,color:"#9b9a97",marginBottom:20,lineHeight:1.7}}>Connect your calendar from the Dashboard sidebar so Frame Brief can auto-join your meetings and generate briefs automatically.</p>
-            <button onClick={onBack} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer"}}>← Back to Dashboard</button>
+          <div style={{textAlign:"center",padding:"60px 20px",maxWidth:480,margin:"0 auto"}}>
+            <div style={{fontSize:56,marginBottom:16}}>📅</div>
+            <p style={{fontSize:20,fontWeight:700,color:"#37352f",marginBottom:10,letterSpacing:"-0.02em"}}>Connect Google Calendar</p>
+            <p style={{fontSize:14,color:"#9b9a97",marginBottom:28,lineHeight:1.8}}>Frame Brief will auto-join every meeting on your calendar, transcribe the conversation, and automatically generate or update your production brief.</p>
+            <button onClick={handleConnect} disabled={connecting} style={{background:"#37352f",color:"#fff",border:"none",padding:"13px 28px",borderRadius:8,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:10,marginBottom:16,opacity:connecting?0.7:1}}>
+              <span style={{fontSize:18}}>📅</span>
+              {connecting?"Connecting…":"Connect Google Calendar"}
+            </button>
+            <div style={{fontSize:12,color:"#c4c3bf",lineHeight:1.7}}>Read-only access · No emails sent · Disconnect anytime</div>
           </div>
         ):loading?(
           <div style={{textAlign:"center",padding:"60px 20px",color:"#9b9a97",fontSize:14,fontStyle:"italic"}}>Loading meetings…</div>
@@ -2267,20 +2278,17 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
       <button onClick={onNew} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 10px",border:"none",background:"#37352f",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}>🎬 <span>New Brief</span></button>
       <button onClick={onIdeas} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💡</span><span>Idea Capture</span></button>
       <button onClick={onClients} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>👥</span><span>Clients</span></button>
-      <button onClick={onMeetings} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>📅</span><span>Meetings</span></button>
-      <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Calendar</div>
+      <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Calendar</div>
+      <button onClick={onMeetings} className="nb" style={{marginBottom:4,position:"relative"}}>
+        <span style={{fontSize:15}}>📅</span>
+        <span>Meetings</span>
+        {calendarSettings?.calendar_connected&&<span style={{width:7,height:7,borderRadius:"50%",background:"#1e7e34",display:"inline-block",marginLeft:"auto",flexShrink:0}}/>}
+      </button>
       {calendarSettings?.calendar_connected
-        ?(<div>
-          <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",background:"#e6f4ea",borderRadius:6,marginBottom:6}}>
-            <span style={{width:8,height:8,borderRadius:"50%",background:"#1e7e34",display:"inline-block",flexShrink:0}}/>
-            <span style={{fontSize:12,color:"#1e7e34",fontWeight:600,lineHeight:1.3}}>Calendar Connected</span>
-          </div>
-          <div style={{fontSize:11,color:"#9b9a97",padding:"2px 10px",marginBottom:6,lineHeight:1.5}}>🤖 Auto-joining your meetings</div>
-          <button onClick={handleDisconnectCalendar} className="nb" style={{color:"#9b9a97",fontSize:11}}><span>Disconnect</span></button>
-        </div>)
-        :(<button onClick={handleConnectCalendar} className="nb" style={{marginBottom:4,background:"#e8f0fe",color:"#1a56c4",border:"none",borderRadius:6,padding:"9px 10px",width:"100%",display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:"'Lora',serif",fontSize:13}}><span style={{fontSize:15}}>📅</span><span>Connect Calendar</span></button>)
+        ?<div style={{fontSize:11,color:"#9b9a97",padding:"2px 10px 6px",lineHeight:1.5}}>🤖 Auto-joining · <span style={{cursor:"pointer",textDecoration:"underline"}} onClick={handleDisconnectCalendar}>Disconnect</span></div>
+        :null
       }
-      {calendarMsg&&<div style={{fontSize:11,padding:"4px 10px",marginTop:4,color:calendarMsg.startsWith("✓")?"#1e7e34":"#c0392b",lineHeight:1.4}}>{calendarMsg}</div>}
+      {calendarMsg&&<div style={{fontSize:11,padding:"4px 10px",color:calendarMsg.startsWith("✓")?"#1e7e34":"#c0392b",lineHeight:1.4}}>{calendarMsg}</div>}
       <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Account</div>
       <div style={{fontSize:12,color:"#9b9a97",padding:"4px 10px",marginBottom:8,lineHeight:1.5,wordBreak:"break-all"}}>{user?.email}</div>
       <button onClick={onSignOut} className="nb"><span style={{fontSize:15}}>🚪</span><span>Sign Out</span></button>
