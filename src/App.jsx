@@ -1998,8 +1998,220 @@ function PostProductionPanel({postProduction,onUpdate,readonly}){
   );
 }
 
+// ─── MEETINGS SCREEN ──────────────────────────────────────────────────────────
+function MeetingsScreen({user,projects,onBack}){
+  const[meetings,setMeetings]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[calendarConnected,setCalendarConnected]=useState(false);
+  const[linking,setLinking]=useState(null);
+
+  useEffect(()=>{loadData();},[]);
+
+  async function loadData(){
+    setLoading(true);
+    const{data}=await supabase.from("user_settings").select("calendar_connected").eq("id",user.id).single();
+    setCalendarConnected(!!data?.calendar_connected);
+    if(data?.calendar_connected){
+      try{const res=await fetch(`/api/google-calendar-auth?action=upcoming-meetings&userId=${user.id}`);const d=await res.json();setMeetings(d.meetings||[]);}
+      catch(e){console.error(e);}
+    }
+    setLoading(false);
+  }
+
+  async function handleLink(meetingId,projectId){
+    setLinking(meetingId);
+    try{
+      await fetch("/api/google-calendar-auth?action=link-meeting",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:user.id,meetingId,projectId:projectId||null})});
+      setMeetings(prev=>prev.map(m=>m.id===meetingId?{...m,linkedProjectId:projectId||null}:m));
+    }catch(e){console.error(e);}
+    setLinking(null);
+  }
+
+  return(
+    <div style={{minHeight:"100vh",background:"#fff",display:"flex",flexDirection:"column"}}>
+      <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+        <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif"}}>← Dashboard</button>
+        <span style={{color:"#e8e4dc"}}>|</span>
+        <span style={{fontSize:14,fontWeight:700,color:"#37352f"}}>📅 Meetings</span>
+      </div>
+      <div style={{flex:1,padding:"32px 24px",maxWidth:760,margin:"0 auto",width:"100%",boxSizing:"border-box"}}>
+        {!calendarConnected?(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:48,marginBottom:14}}>📅</div>
+            <p style={{fontSize:17,fontWeight:700,color:"#37352f",marginBottom:8}}>Connect Google Calendar</p>
+            <p style={{fontSize:14,color:"#9b9a97",marginBottom:20,lineHeight:1.7}}>Connect your calendar from the Dashboard sidebar so Frame Brief can auto-join your meetings and generate briefs automatically.</p>
+            <button onClick={onBack} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer"}}>← Back to Dashboard</button>
+          </div>
+        ):loading?(
+          <div style={{textAlign:"center",padding:"60px 20px",color:"#9b9a97",fontSize:14,fontStyle:"italic"}}>Loading meetings…</div>
+        ):meetings.length===0?(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:48,marginBottom:14}}>🗓</div>
+            <p style={{fontSize:17,fontWeight:700,color:"#37352f",marginBottom:8}}>No upcoming meetings</p>
+            <p style={{fontSize:14,color:"#9b9a97",lineHeight:1.7}}>No meetings in the next 7 days. Frame Brief will auto-join when one appears on your calendar.</p>
+          </div>
+        ):(
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:24}}>
+              <h1 style={{fontSize:26,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em"}}>Upcoming Meetings</h1>
+              <button onClick={loadData} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 12px",fontSize:12,color:"#9b9a97",cursor:"pointer",fontFamily:"'Lora',serif"}}>↺ Refresh</button>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              {meetings.map(m=>{
+                const start=new Date(m.startTime);
+                const linkedProject=projects.find(p=>p.id===m.linkedProjectId);
+                const isConsultation=!!m.linkedProjectId;
+                return(
+                  <div key={m.id} style={{border:`1px solid ${isConsultation?"#c5d8fb":"#f1f0ef"}`,borderRadius:12,padding:"18px 20px",background:isConsultation?"#f5f8ff":"#fafaf9"}}>
+                    <div style={{display:"flex",alignItems:"flex-start",gap:16,flexWrap:"wrap"}}>
+                      <div style={{flex:1,minWidth:180}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                          <span style={{fontSize:11,fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",borderRadius:20,padding:"3px 10px",background:isConsultation?"#e8f0fe":"#e6f4ea",color:isConsultation?"#1a56c4":"#1e7e34",whiteSpace:"nowrap"}}>
+                            {isConsultation?`📝 Consultation → ${linkedProject?.title||"Project"}`:"🆕 New Brief"}
+                          </span>
+                          <span style={{fontSize:11,background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"3px 10px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>🤖 Auto-joining</span>
+                        </div>
+                        <div style={{fontWeight:700,fontSize:15,color:"#37352f",marginBottom:4}}>{m.title}</div>
+                        <div style={{fontSize:12,color:"#9b9a97",marginBottom:4}}>{start.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})} · {start.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
+                        {m.attendees?.length>0&&<div style={{fontSize:11,color:"#c4c3bf"}}>{m.attendees.slice(0,3).join(", ")}{m.attendees.length>3?` +${m.attendees.length-3} more`:""}</div>}
+                      </div>
+                      <div style={{display:"flex",flexDirection:"column",gap:4,alignItems:"flex-end",flexShrink:0}}>
+                        <select value={m.linkedProjectId||""} onChange={e=>handleLink(m.id,e.target.value||null)} disabled={linking===m.id}
+                          style={{border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 10px",fontSize:12,fontFamily:"'Lora',serif",background:"#fff",outline:"none",color:m.linkedProjectId?"#1a56c4":"#9b9a97",cursor:"pointer",maxWidth:230}}>
+                          <option value="">Follow-up? Link to project…</option>
+                          {projects.map(p=><option key={p.id} value={p.id}>{p.brief?.coverEmoji||"🎬"} {p.title||"Untitled"}</option>)}
+                        </select>
+                        {m.linkedProjectId&&<span style={{fontSize:10,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>transcript → existing brief</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── CONSULTATION MODAL ────────────────────────────────────────────────────────
+function ConsultationModal({user,project,projects,onClose,onScheduled}){
+  const[tab,setTab]=useState("calendar");
+  const[meetings,setMeetings]=useState([]);
+  const[loading,setLoading]=useState(true);
+  const[calendarConnected,setCalendarConnected]=useState(false);
+  const[selectedMeetingId,setSelectedMeetingId]=useState(null);
+  const[url,setUrl]=useState("");
+  const[scheduling,setScheduling]=useState(false);
+  const[error,setError]=useState("");
+
+  useEffect(()=>{loadMeetings();},[]);
+
+  async function loadMeetings(){
+    setLoading(true);
+    const{data}=await supabase.from("user_settings").select("calendar_connected").eq("id",user.id).single();
+    setCalendarConnected(!!data?.calendar_connected);
+    if(data?.calendar_connected){
+      try{
+        const res=await fetch(`/api/google-calendar-auth?action=upcoming-meetings&userId=${user.id}`);
+        const d=await res.json();
+        setMeetings((d.meetings||[]).filter(m=>!m.linkedProjectId||m.linkedProjectId===project.id));
+      }catch(e){console.error(e);}
+    }else{
+      setTab("url");
+    }
+    setLoading(false);
+  }
+
+  async function handleScheduleCalendar(){
+    if(!selectedMeetingId)return;
+    setScheduling(true);setError("");
+    try{
+      await fetch("/api/google-calendar-auth?action=link-meeting",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:user.id,meetingId:selectedMeetingId,projectId:project.id})});
+      await supabase.from("projects").update({meeting_stage:"consultation",updated_at:new Date().toISOString()}).eq("id",project.id);
+      onScheduled("consultation");onClose();
+    }catch(e){setError(e.message);}
+    setScheduling(false);
+  }
+
+  async function handleScheduleUrl(){
+    if(!url.trim())return;
+    setScheduling(true);setError("");
+    try{
+      const bot=await startRecallBot(url.trim(),project.id);
+      const botId=bot.botId||bot.id;
+      await supabase.from("projects").update({recall_bot_id:botId,recall_status:"bot_joined",meeting_stage:"consultation",updated_at:new Date().toISOString()}).eq("id",project.id);
+      onScheduled("consultation");onClose();
+    }catch(e){setError(e.message);}
+    setScheduling(false);
+  }
+
+  const canSubmit=tab==="calendar"&&calendarConnected?!!selectedMeetingId:!!url.trim();
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:500,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.22)"}}>
+        <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:16,color:"#37352f",marginBottom:4}}>📅 Schedule Consultation</div>
+            <div style={{fontSize:12,color:"#9b9a97",lineHeight:1.5}}>{project?.title} — Frame Brief will join and suggest revisions to this brief</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97",flexShrink:0,lineHeight:1,padding:"2px 4px"}}>✕</button>
+        </div>
+        {calendarConnected&&(
+          <div style={{display:"flex",borderBottom:"1px solid #f1f0ef"}}>
+            {[["calendar","📅 Pick from Calendar"],["url","🔗 Paste Meeting URL"]].map(([t,label])=>(
+              <button key={t} onClick={()=>setTab(t)} style={{flex:1,padding:"12px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",color:tab===t?"#1a56c4":"#9b9a97",fontWeight:tab===t?700:400,borderBottom:tab===t?"2px solid #1a56c4":"2px solid transparent",transition:"all .15s"}}>{label}</button>
+            ))}
+          </div>
+        )}
+        <div style={{padding:"20px 24px"}}>
+          {tab==="calendar"&&calendarConnected&&(
+            loading?(<div style={{textAlign:"center",padding:"30px",color:"#9b9a97",fontSize:13,fontStyle:"italic"}}>Loading meetings…</div>)
+            :meetings.length===0?(<div style={{textAlign:"center",padding:"24px"}}>
+              <div style={{fontSize:32,marginBottom:10}}>🗓</div>
+              <p style={{fontSize:13,color:"#9b9a97",marginBottom:16,lineHeight:1.6}}>No upcoming calendar meetings found. Try pasting the meeting URL instead.</p>
+              <button onClick={()=>setTab("url")} style={{background:"#37352f",color:"#fff",border:"none",padding:"9px 18px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>Paste URL →</button>
+            </div>)
+            :(<div>
+              <div style={{fontSize:12,color:"#9b9a97",marginBottom:12}}>Select the meeting for this consultation:</div>
+              <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16,maxHeight:280,overflowY:"auto"}}>
+                {meetings.map(m=>{
+                  const start=new Date(m.startTime);
+                  const isSel=selectedMeetingId===m.id;
+                  return(
+                    <div key={m.id} onClick={()=>setSelectedMeetingId(m.id)} style={{border:`2px solid ${isSel?"#1a56c4":"#f1f0ef"}`,borderRadius:8,padding:"12px 14px",cursor:"pointer",background:isSel?"#f5f8ff":"#fff",transition:"all .15s"}}>
+                      <div style={{fontWeight:600,fontSize:13,color:"#37352f",marginBottom:3}}>{m.title}</div>
+                      <div style={{fontSize:12,color:"#9b9a97"}}>{start.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})} · {start.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>)
+          )}
+          {(tab==="url"||!calendarConnected)&&(
+            <div>
+              <div style={{fontSize:12,color:"#9b9a97",marginBottom:10}}>Paste the Google Meet, Zoom, or Teams link:</div>
+              <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="https://meet.google.com/..." style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"11px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",marginBottom:6,boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+              <div style={{fontSize:11,color:"#c4c3bf",marginBottom:16}}>Frame Brief will join immediately and treat this as a revision session for this brief.</div>
+            </div>
+          )}
+          {error&&<div style={{fontSize:12,color:"#c0392b",marginBottom:12}}>⚠ {error}</div>}
+          <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+            <button onClick={onClose} style={{border:"1px solid #e8e4dc",background:"none",borderRadius:6,padding:"9px 16px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"'Lora',serif"}}>Cancel</button>
+            <button onClick={tab==="calendar"&&calendarConnected?handleScheduleCalendar:handleScheduleUrl} disabled={scheduling||!canSubmit} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:6,padding:"9px 18px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",opacity:scheduling||!canSubmit?0.5:1}}>
+              {scheduling?"Scheduling…":"Schedule Consultation"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients}){
+function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings}){
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
   const[sidebarOpen,setSidebarOpen]=useState(true);
@@ -2055,6 +2267,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
       <button onClick={onNew} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 10px",border:"none",background:"#37352f",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}>🎬 <span>New Brief</span></button>
       <button onClick={onIdeas} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💡</span><span>Idea Capture</span></button>
       <button onClick={onClients} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>👥</span><span>Clients</span></button>
+      <button onClick={onMeetings} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>📅</span><span>Meetings</span></button>
       <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Calendar</div>
       {calendarSettings?.calendar_connected
         ?(<div>
@@ -2092,48 +2305,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
 
         {/* Main content */}
         <div style={{flex:1,overflowY:"auto",padding:"32px 24px"}}>
-          {/* Upcoming Meetings */}
-          {calendarSettings?.calendar_connected&&(
-            <div style={{marginBottom:36}}>
-              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
-                <h2 style={{fontSize:18,fontWeight:700,color:"#37352f",margin:0,letterSpacing:"-0.02em"}}>📅 Upcoming Meetings</h2>
-                <button onClick={loadUpcomingMeetings} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,padding:"2px 6px",fontFamily:"'Lora',serif"}} title="Refresh">↺</button>
-              </div>
-              {calendarLoading?(<div style={{fontSize:13,color:"#9b9a97",fontStyle:"italic"}}>Loading meetings…</div>)
-              :upcomingMeetings.length===0?(<div style={{fontSize:13,color:"#9b9a97",fontStyle:"italic"}}>No upcoming meetings in the next 7 days.</div>)
-              :(<div style={{display:"flex",flexDirection:"column",gap:10}}>
-                {upcomingMeetings.map(m=>{
-                  const start=new Date(m.startTime);
-                  return(
-                    <div key={m.id} style={{border:"1px solid #e8f0fe",borderRadius:10,padding:"14px 16px",background:"#f5f8ff",display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
-                      <div style={{flex:1,minWidth:200}}>
-                        <div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4}}>{m.title}</div>
-                        <div style={{fontSize:12,color:"#9b9a97",marginBottom:4}}>
-                          {start.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})} · {start.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}
-                        </div>
-                        {m.attendees?.length>0&&<div style={{fontSize:11,color:"#c4c3bf"}}>{m.attendees.slice(0,3).join(", ")}{m.attendees.length>3?` +${m.attendees.length-3} more`:""}</div>}
-                      </div>
-                      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                        <span style={{fontSize:11,background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"3px 10px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>🤖 Auto-joining</span>
-                        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
-                          <select
-                            value={m.linkedProjectId||""}
-                            onChange={e=>handleLinkMeeting(m.id,e.target.value||null)}
-                            disabled={meetingLinking===m.id}
-                            style={{border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 10px",fontSize:12,fontFamily:"'Lora',serif",background:"#fff",outline:"none",color:m.linkedProjectId?"#37352f":"#9b9a97",cursor:"pointer",maxWidth:200}}
-                          >
-                            <option value="">Follow-up? Link to project…</option>
-                            {projects.map(p=><option key={p.id} value={p.id}>{p.brief?.coverEmoji||"🎬"} {p.title||"Untitled"}</option>)}
-                          </select>
-                          {m.linkedProjectId&&<span style={{fontSize:10,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>transcript → existing brief</span>}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>)}
-            </div>
-          )}
+          {calendarSettings?.calendar_connected&&<div style={{marginBottom:20,padding:"12px 16px",background:"#f5f8ff",borderRadius:10,border:"1px solid #e8f0fe",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={onMeetings}><span style={{fontSize:20}}>📅</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"#1a56c4"}}>View Upcoming Meetings</div><div style={{fontSize:11,color:"#9b9a97"}}>See your scheduled meetings, bot status, and link follow-ups</div></div><span style={{color:"#1a56c4",fontSize:16}}>→</span></div>}
           <h1 style={{fontSize:26,fontWeight:700,color:"#37352f",marginBottom:20,letterSpacing:"-0.02em"}}>Projects</h1>
           <div style={{display:"flex",gap:10,marginBottom:24,flexWrap:"wrap"}}>
             <div style={{flex:1,minWidth:180,position:"relative"}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#9b9a97"}}>🔍</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search projects…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px 10px 36px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",background:"#fafaf9",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/></div>
@@ -2333,6 +2505,7 @@ function FrameBriefApp(){
   const[joinCallUrl,setJoinCallUrl]=useState("");
   const[joinCallLoading,setJoinCallLoading]=useState(false);
   const[joinCallError,setJoinCallError]=useState("");
+  const[showConsultationModal,setShowConsultationModal]=useState(false);
   const brief=activeProject?.brief||null;
 
   useEffect(()=>{
@@ -2770,6 +2943,7 @@ ${JSON.stringify(brief)}`;
         })}
       </>)}
       {myRole!=="viewer"&&<button onClick={()=>{setShowJoinCall(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#1a56c4",fontFamily:"'Lora',serif",marginTop:6,borderRadius:6,fontWeight:600}} onMouseEnter={e=>e.currentTarget.style.background="#e8f0fe"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>📞 Join Call</button>}
+      {myRole!=="viewer"&&<button onClick={()=>{setShowConsultationModal(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#e97942",fontFamily:"'Lora',serif",marginTop:2,borderRadius:6,fontWeight:600}} onMouseEnter={e=>e.currentTarget.style.background="#fdeee4"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>📅 Schedule Consultation</button>}
       <button onClick={()=>{setShowAddMeeting(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#9b9a97",fontFamily:"'Lora',serif",marginTop:2,borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add Meeting Notes</button>
       {((brief?.clientActionItems?.length||0)+(brief?.internalTodos?.length||0))>0&&(<div style={{marginTop:16,padding:"12px 10px",borderTop:"1px solid #f1f0ef"}}><div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Progress</div>{brief.clientActionItems?.length>0&&(<div style={{marginBottom:6}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>✅ Client</span><span>{arr(brief.clientActionItems).filter(t=>t.done).length}/{arr(brief.clientActionItems).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#1e7e34",width:`${(arr(brief.clientActionItems).filter(t=>t.done).length/arr(brief.clientActionItems).length)*100}%`,transition:"width .3s"}}/></div></div>)}{brief.internalTodos?.length>0&&(<div><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>🔒 Team</span><span>{arr(brief.internalTodos).filter(t=>t.done).length}/{arr(brief.internalTodos).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#e97942",width:`${(arr(brief.internalTodos).filter(t=>t.done).length/arr(brief.internalTodos).length)*100}%`,transition:"width .3s"}}/></div></div>)}</div>)}
     </>);
@@ -2823,12 +2997,13 @@ ${JSON.stringify(brief)}`;
   );
 
   if(screen==="ideas")return(<div><style>{CSS}</style><IdeaCapture user={user} onBack={()=>setScreen("dashboard")} projects={projects} onOpenProject={p=>{setMyRole("owner");setActiveProject(p);setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}}/></div>);
+  if(screen==="meetings")return(<div><style>{CSS}</style><MeetingsScreen user={user} projects={projects} onBack={()=>setScreen("dashboard")}/></div>);
 
   if(screen==="clients")return(<div><style>{CSS}</style><ClientList clients={clients} projects={projects} user={user} onBack={()=>setScreen("dashboard")} onNew={c=>setClients(prev=>[...prev,c].sort((a,b)=>a.name.localeCompare(b.name)))} onOpen={c=>{setActiveClientId(c.id);setScreen("clientProfile");}}/></div>);
 
   if(screen==="clientProfile")return(<div><style>{CSS}</style><ClientProfile clientId={activeClientId} clients={clients} setClients={setClients} projects={projects} onBack={()=>setScreen("clients")} onOpenProject={p=>{setMyRole("owner");setActiveProject(p);setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNewProject={()=>{setInputClientId(activeClientId);setNewClientNameInput("");setTranscript("");setDocs([]);setErrMsg("");setScreen("input");}} onLinkProject={(projectId,clientId)=>setProjects(ps=>ps.map(p=>p.id===projectId?{...p,client_id:clientId}:p))}/></div>);
 
-  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")}/></div>);
+  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")}/></div>);
 
   if(screen==="input")return(
     <div style={{minHeight:"100vh",background:"#fff"}}><style>{CSS}</style>
@@ -2929,6 +3104,7 @@ ${JSON.stringify(brief)}`;
         </div>
       )}
       {showShareModal&&user&&<ShareModal project={activeProject} user={user} onClose={()=>setShowShareModal(false)} onProjectUpdate={p=>{setActiveProject(prev=>({...prev,...p}));setProjects(ps=>ps.map(pp=>pp.id===p.id?{...pp,...p}:pp));}}/>}
+      {showConsultationModal&&user&&activeProject&&<ConsultationModal user={user} project={activeProject} projects={projects} onClose={()=>setShowConsultationModal(false)} onScheduled={(stage)=>{const updated={...activeProject,meeting_stage:stage};setActiveProject(updated);setProjects(ps=>ps.map(p=>p.id===updated.id?updated:p));}}/>}
       {viewingMeeting&&<MeetingHistoryPanel meeting={viewingMeeting} onClose={()=>setViewingMeeting(null)}/>}
       {reviewingMeeting&&myRole!=="viewer"&&<SuggestedChangesModal meeting={reviewingMeeting} currentBrief={brief} onApply={(indices)=>{applyMeetingChanges(reviewingMeeting,indices);setReviewingMeeting(null);}} onDismiss={()=>{dismissMeeting(reviewingMeeting);setReviewingMeeting(null);}}/>}
       {showJoinCall&&(
