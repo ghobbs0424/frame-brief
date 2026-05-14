@@ -1131,11 +1131,25 @@ function MeetingBotPanel({ projectId, onBotStarted, recallStatus, recallBotId, o
 
   if (recallStatus === "transcript_ready") return (
     <div style={{background:"#e6f4ea",border:"1px solid #a8d5b5",borderRadius:10,padding:"14px 18px",marginBottom:20}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-        <span style={{fontSize:16}}>✅</span>
-        <span style={{fontWeight:700,fontSize:14,color:"#1e7e34"}}>Transcript received!</span>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+        <span style={{fontSize:16}}>📝</span>
+        <span style={{fontWeight:700,fontSize:14,color:"#1e7e34"}}>Transcript ready — brief not generated yet</span>
       </div>
-      <p style={{fontSize:13,color:"#1e7e34",margin:0}}>Your meeting transcript is ready. Generate a brief from it below.</p>
+      <p style={{fontSize:13,color:"#1e7e34",margin:"0 0 12px"}}>The transcript was saved but the brief wasn't generated. Click below to generate it now.</p>
+      <button onClick={async()=>{
+        setLoading(true);setError("");
+        try{
+          const res=await fetch(`/api/recall-webhook?action=fetch-transcript`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({botId:recallBotId,projectId})});
+          const data=await res.json();
+          if(data.ok){if(onTranscriptReady)onTranscriptReady();}
+          else setError(data.message||"Failed — try again");
+        }catch(err){setError(err.message);}
+        setLoading(false);
+      }} disabled={loading||!recallBotId||!projectId} style={{background:"#1e7e34",color:"#fff",border:"none",padding:"9px 20px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:8,opacity:loading?0.7:1}}>
+        {loading&&<div className="spin" style={{width:13,height:13,border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid #fff",borderRadius:"50%"}}/>}
+        {loading?"Generating…":"✦ Generate Brief Now"}
+      </button>
+      {error&&<p style={{fontSize:12,color:"#c0392b",marginTop:8}}>{error}</p>}
     </div>
   );
 
