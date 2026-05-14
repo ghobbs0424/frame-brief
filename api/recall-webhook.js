@@ -273,6 +273,82 @@ async function generateBrief(projectId, transcriptText) {
       await supabase.from("projects").update({ recall_status: "brief_error", updated_at: new Date().toISOString() }).eq("id", projectId);
       return;
     }
+
+    // Fetch full project to determine if it has an existing brief
+    const { data: project } = await supabase.from("projects").select("*").eq("id", projectId).single();
+    const hasExistingBrief = project && Array.isArray(project.brief?.concepts) && project.brief.concepts.length > 0;
+
+    console.log("generateBrief — hasExistingBrief:", hasExistingBrief, "conceptCount:", project?.brief?.concepts?.length);
+
+    if (hasExistingBrief) {
+      // ── Consultation flow: detect stage, summarize, suggest changes ──────────
+      const CONSULTATION_SYSTEM = `You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and return ONLY valid JSON, no markdown:
+{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value (quote from brief if possible)","after":"suggested new value"}]}
+stage: pick the best fit — discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).
+suggestedChanges: list specific, actionable changes to the existing brief fields. Reference actual field names from the brief. Limit to the most important 3-6 changes.`;
+
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 3000,
+          system: CONSULTATION_SYSTEM,
+          messages: [{ role: "user", content: `Existing brief:\n${JSON.stringify(project.brief)}\n\nMeeting transcript:\n${transcriptText}` }],
+        }),
+      });
+
+      const aiData = await aiRes.json();
+      console.log("Consultation AI status:", aiRes.status, "stop_reason:", aiData.stop_reason);
+
+      if (!aiRes.ok || aiData.error) {
+        console.error("Anthropic consultation error:", JSON.stringify(aiData));
+        await supabase.from("projects").update({ recall_status: "brief_error", updated_at: new Date().toISOString() }).eq("id", projectId);
+        return;
+      }
+
+      const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
+      console.log("Consultation raw length:", raw.length, "preview:", raw.slice(0, 200));
+
+      let parsed = null;
+      try {
+        const s = raw.indexOf("{"); const e = raw.lastIndexOf("}");
+        if (s !== -1 && e !== -1) parsed = JSON.parse(raw.slice(s, e + 1).replace(/,\s*}/g, "}").replace(/,\s*]/g, "]"));
+      } catch (pe) { console.error("Consultation parse error:", pe.message); }
+
+      if (!parsed) {
+        await supabase.from("projects").update({ recall_status: "brief_error", updated_at: new Date().toISOString() }).eq("id", projectId);
+        return;
+      }
+
+      const meeting = {
+        id: `m-${Date.now()}`,
+        date: new Date().toISOString(),
+        stage: parsed.stage || "consultation",
+        summary: parsed.summary || "",
+        keyPoints: parsed.keyPoints || [],
+        suggestedChanges: parsed.suggestedChanges || [],
+        transcriptExcerpt: transcriptText.slice(0, 500),
+        status: "pending_review",
+      };
+
+      const existingHistory = Array.isArray(project.meeting_history) ? project.meeting_history : [];
+      const newHistory = [...existingHistory, meeting];
+
+      const { error: dbErr } = await supabase.from("projects").update({
+        meeting_stage: parsed.stage || "consultation",
+        meeting_history: newHistory,
+        recall_status: "brief_pending_review",
+        recall_transcript: transcriptText,
+        updated_at: new Date().toISOString(),
+      }).eq("id", projectId);
+
+      if (dbErr) console.error("Supabase consultation update error:", dbErr.message);
+      else console.log("Consultation meeting stored for project:", projectId, "stage:", parsed.stage);
+      return;
+    }
+
+    // ── Discovery flow: generate full brief ───────────────────────────────────
     const SYSTEM = `You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object with no markdown or backticks. For each concept, generate 3-5 compelling opening hooks in the "hooks" array — each hook is a single punchy sentence that grabs attention in the first 3 seconds, varying styles: emotional, curiosity-driven, bold statement, question, cinematic. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}]}`;
 
     const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
@@ -319,10 +395,24 @@ async function generateBrief(projectId, transcriptText) {
     }
 
     if (brief) {
+      const meetingRecord = {
+        id: `m-${Date.now()}`,
+        date: new Date().toISOString(),
+        stage: "discovery",
+        summary: brief.logline || "Initial discovery meeting — brief generated.",
+        keyPoints: [],
+        suggestedChanges: [],
+        transcriptExcerpt: transcriptText.slice(0, 500),
+        status: "reviewed",
+      };
+      const existingHistory = Array.isArray(project?.meeting_history) ? project.meeting_history : [];
+
       const { error: dbErr } = await supabase.from("projects").update({
         title: brief.projectTitle || "Untitled",
         client_name: brief.clientName || "",
         brief: brief,
+        meeting_stage: "discovery",
+        meeting_history: [...existingHistory, meetingRecord],
         recall_status: "brief_ready",
         updated_at: new Date().toISOString(),
       }).eq("id", projectId);
