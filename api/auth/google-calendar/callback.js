@@ -74,6 +74,7 @@ export default async function handler(req, res) {
           oauth_client_secret: process.env.GOOGLE_CLIENT_SECRET,
           oauth_refresh_token: tokens.refresh_token,
           platform: "google_calendar",
+          webhook_url: "https://framebriefai.com/api/recall-webhook",
         }),
       });
 

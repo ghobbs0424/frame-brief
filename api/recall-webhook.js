@@ -108,6 +108,78 @@ export default async function handler(req, res) {
     // Log full payload every time so we can see exact structure from Recall
     console.log("Webhook event:", eventName, "full payload:", JSON.stringify(event));
 
+    // ── V2 calendar sync: auto-schedule bots for new/updated events ─────────
+    if (eventName === "calendar.sync_events" || eventName === "calendar.update") {
+      const calendarId = event.data?.calendar_id;
+      const lastUpdatedTs = event.data?.last_updated_ts;
+      console.log("Calendar sync event — calendarId:", calendarId, "lastUpdatedTs:", lastUpdatedTs);
+      if (!calendarId) return res.status(200).json({ ok: true });
+
+      // Find which user owns this calendar
+      const { data: settings } = await supabase
+        .from("user_settings")
+        .select("id, meeting_project_links")
+        .eq("recall_calendar_id", calendarId)
+        .single();
+
+      if (!settings) {
+        console.log("calendar sync: no user found for calendar:", calendarId);
+        return res.status(200).json({ ok: true });
+      }
+
+      // Fetch events updated since last sync (or next 7 days if no ts)
+      const queryParams = new URLSearchParams({ calendar_id: calendarId });
+      if (lastUpdatedTs) {
+        queryParams.set("updated_at__gte", lastUpdatedTs);
+      } else {
+        queryParams.set("start_time__gte", new Date().toISOString());
+        queryParams.set("start_time__lte", new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString());
+      }
+
+      const eventsRes = await fetch(
+        `https://${RECALL_REGION}.recall.ai/api/v2/calendar-events/?${queryParams}`,
+        { headers: { Authorization: `Token ${RECALL_KEY}` } }
+      );
+
+      if (!eventsRes.ok) {
+        console.error("calendar sync: events fetch failed:", eventsRes.status);
+        return res.status(200).json({ ok: true });
+      }
+
+      const eventsData = await eventsRes.json();
+      const events = eventsData.results || [];
+      console.log("calendar sync: fetched", events.length, "events for calendar:", calendarId);
+
+      const now = new Date();
+      for (const evt of events) {
+        if (evt.is_deleted || !evt.meeting_url) continue;
+        const startTime = new Date(evt.start_time);
+        if (startTime <= now) continue; // already started or past
+        const hasBot = !!(evt.bot || evt.bot_id || evt.scheduled_bot);
+        if (hasBot) continue;
+
+        const linkedProjectId = settings.meeting_project_links?.[evt.id] || null;
+        const botRes = await fetch(
+          `https://${RECALL_REGION}.recall.ai/api/v2/calendar-events/${evt.id}/bot/`,
+          {
+            method: "POST",
+            headers: { Authorization: `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              deduplication_key: `framebrief-${evt.id}`,
+              bot_config: {
+                bot_name: "Frame Brief",
+                webhook_url: "https://framebriefai.com/api/recall-webhook",
+              },
+            }),
+          }
+        );
+        const botRaw = await botRes.text();
+        console.log("calendar sync: scheduled bot for event:", evt.id, "status:", botRes.status, "linked_project:", linkedProjectId, "response:", botRaw.slice(0, 200));
+      }
+
+      return res.status(200).json({ ok: true, calendarSync: true });
+    }
+
     const transcriptionTriggerEvents = ["recording.done"];
     const handledEvents = [...transcriptionTriggerEvents, "transcript.done", "transcript.failed"];
     if (!event || !handledEvents.includes(eventName)) {
