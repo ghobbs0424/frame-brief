@@ -190,7 +190,7 @@ function SharedIdeaView({idea}){
 }
 
 // ─── IDEA PAGE (expanded view) ────────────────────────────────────────────────
-function IdeaPage({ idea, onBack, onUpdate, user }) {
+function IdeaPage({ idea, onBack, onUpdate, user, projects, onLinkProject, onUnlinkProject }) {
   const [localIdea, setLocalIdea] = useState(idea);
   const [shareState, setShareState] = useState("idle");
   const [chatLog, setChatLog] = useState([]);
@@ -198,6 +198,7 @@ function IdeaPage({ idea, onBack, onUpdate, user }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [hooksBusy, setHooksBusy] = useState(false);
   const [hooksErr, setHooksErr] = useState("");
+  const [showLinkPicker, setShowLinkPicker] = useState(false);
   const brief = localIdea.brief;
   const set = (k, v) => {
     const updated = { ...localIdea, brief: { ...brief, [k]: v } };
@@ -317,8 +318,18 @@ ${JSON.stringify(brief)}`;
         <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>← Ideas</button>
         <span style={{color:"#e8e4dc",flexShrink:0}}>·</span>
         <span style={{fontSize:13,fontWeight:700,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{brief?.title||localIdea.rawText?.slice(0,40)}</span>
+        {user&&brief&&(localIdea.linkedProjectId
+          ? <div style={{display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+              <span style={{fontSize:11,background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"3px 10px",fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>
+                📁 {(projects||[]).find(p=>p.id===localIdea.linkedProjectId)?.title||"Linked"}
+              </span>
+              <button onClick={()=>{if(window.confirm("Remove from project?"))onUnlinkProject&&(setLocalIdea(prev=>({...prev,linkedProjectId:null})),onUnlinkProject());}} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:12,padding:"2px 4px"}} title="Unlink">✕</button>
+            </div>
+          : <button onClick={()=>setShowLinkPicker(true)} className="tbtn" style={{flexShrink:0}}>📁 Link to Project</button>
+        )}
         {user&&brief&&<button className={`tbtn${chatOpen?" on":""}`} onClick={()=>setChatOpen(o=>!o)} style={{flexShrink:0}}>{chatOpen?"✕ AI":"✦ AI"}</button>}
         {user&&brief&&<button onClick={handleShare} disabled={shareState==="saving"} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 12px",fontSize:12,color:shareState==="copied"?"#1e7e34":"#55534e",cursor:"pointer",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap"}}>{shareState==="saving"?"Saving…":shareState==="copied"?"✓ Copied":"🔗 Share"}</button>}
+        {showLinkPicker&&<ProjectPickerModal projects={projects||[]} onSelect={proj=>{setLocalIdea(prev=>({...prev,linkedProjectId:proj.id}));onLinkProject&&onLinkProject(proj);setShowLinkPicker(false);}} onClose={()=>setShowLinkPicker(false)}/>}
       </div>
 
       {/* Body */}
@@ -535,8 +546,46 @@ ${JSON.stringify(brief)}`;
   );
 }
 
+// ─── PROJECT PICKER MODAL ────────────────────────────────────────────────────
+function ProjectPickerModal({ projects, onSelect, onClose }) {
+  const [search, setSearch] = useState("");
+  const filtered = (projects||[]).filter(p => {
+    const q = search.toLowerCase();
+    return !q || [p.title, p.client_name].some(s => s?.toLowerCase().includes(q));
+  }).sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at));
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:500,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:"24px",width:"min(480px,100%)",maxHeight:"70vh",display:"flex",flexDirection:"column",boxShadow:"0 8px 32px rgba(0,0,0,0.18)"}}>
+        <div style={{fontSize:16,fontWeight:700,color:"#37352f",marginBottom:14}}>📁 Link to Project</div>
+        <div style={{position:"relative",marginBottom:10,flexShrink:0}}>
+          <span style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:"#9b9a97",fontSize:13}}>🔍</span>
+          <input autoFocus value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search projects…"
+            style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"9px 12px 9px 32px",fontFamily:"'Lora',serif",fontSize:13,outline:"none",boxSizing:"border-box",color:"#37352f"}}
+            onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+        </div>
+        <div style={{overflowY:"auto",flex:1,margin:"0 -4px"}}>
+          {filtered.length === 0
+            ? <p style={{color:"#9b9a97",fontSize:13,textAlign:"center",padding:"24px 0",fontStyle:"italic"}}>No projects found</p>
+            : filtered.map(p => (
+              <button key={p.id} onClick={() => onSelect(p)}
+                style={{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"11px 12px",border:"none",background:"none",cursor:"pointer",borderRadius:8,textAlign:"left"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:22,flexShrink:0}}>{p.brief?.coverEmoji||"🎬"}</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontWeight:600,fontSize:14,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title||"Untitled"}</div>
+                  {p.client_name&&<div style={{fontSize:12,color:"#9b9a97"}}>{p.client_name}</div>}
+                </div>
+              </button>
+            ))}
+        </div>
+        <button onClick={onClose} style={{marginTop:12,background:"transparent",border:"1px solid #e8e4dc",borderRadius:6,padding:"9px",fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer",color:"#9b9a97",flexShrink:0}}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
 // ─── IDEA CAPTURE MAIN ────────────────────────────────────────────────────────
-function IdeaCapture({ user, onBack }) {
+function IdeaCapture({ user, onBack, projects, onOpenProject }) {
   const [workspaces, setWorkspaces] = useState(DEFAULT_WORKSPACES);
   const [activeWs, setActiveWs] = useState("personal");
   const [ideas, setIdeas] = useState({});
@@ -553,6 +602,8 @@ function IdeaCapture({ user, onBack }) {
   const [editingWsName, setEditingWsName] = useState("");
   const [wsMenuOpen, setWsMenuOpen] = useState(null);
   const [ideaSidebarOpen, setIdeaSidebarOpen] = useState(true);
+  const [showProjectPicker, setShowProjectPicker] = useState(false);
+  const [pickerTargetId, setPickerTargetId] = useState(null);
 
   useEffect(() => { loadData(); }, []);
 
@@ -589,7 +640,7 @@ function IdeaCapture({ user, onBack }) {
     const map = {};
     (ideasData || []).forEach(row => {
       if (!map[row.workspace_id]) map[row.workspace_id] = [];
-      map[row.workspace_id].push({ id: row.id, rawText: row.raw_text, brief: row.brief, createdAt: row.created_at });
+      map[row.workspace_id].push({ id: row.id, rawText: row.raw_text, brief: row.brief, createdAt: row.created_at, linkedProjectId: row.linked_project_id||null });
     });
     setIdeas(map);
     setLoadingData(false);
@@ -685,6 +736,55 @@ function IdeaCapture({ user, onBack }) {
     await supabase.from("ideas").delete().eq("id", id);
   }
 
+  async function linkIdeaToProject(ideaId, project) {
+    const wsId = Object.keys(ideas).find(k => (ideas[k]||[]).some(i => i.id === ideaId));
+    if (!wsId) return;
+    const idea = (ideas[wsId]||[]).find(i => i.id === ideaId);
+    if (!idea?.brief) return;
+    const b = idea.brief;
+    const concept = {
+      id: `idea-${ideaId}`,
+      emoji: "💡",
+      title: b.title || "Untitled Idea",
+      type: b.format || "",
+      logline: b.logline || "",
+      description: b.angle || "",
+      moodKeywords: arr(b.tags),
+      inspiration: [],
+      locations: arr(b.locations).map(l => ({ name: l.name||"", vibe:"", description: l.notes||"", shots:"" })),
+      lighting: { style:"", description:"", technical:"" },
+      colorHex: ["#c8a97e","#3d2b1f","#f5ede0"],
+      colorDescription: "",
+      wardrobe: [],
+      wardrobeNotes: "",
+      props: arr(b.props),
+      shotList: arr(b.shotList).map(s => ({ number: s.number||"", type: s.type||"", description: s.description||"", lens:"", notes:"" })),
+      script: { hook: b.hook||"", act1:"", act2:"", act3:"", cta:"" },
+      deliverableFormat: b.format||"",
+      directorNotes: b.scriptNotes||"",
+    };
+    const existing = arr(project.brief?.concepts).filter(c => c.id !== concept.id);
+    const updatedBrief = { ...(project.brief||{}), concepts: [...existing, concept] };
+    await supabase.from("projects").update({ brief: updatedBrief, updated_at: new Date().toISOString() }).eq("id", project.id);
+    await supabase.from("ideas").update({ linked_project_id: project.id, updated_at: new Date().toISOString() }).eq("id", ideaId);
+    setIdeas(prev => ({ ...prev, [wsId]: (prev[wsId]||[]).map(i => i.id === ideaId ? { ...i, linkedProjectId: project.id } : i) }));
+    setShowProjectPicker(false); setPickerTargetId(null);
+  }
+
+  async function unlinkIdeaFromProject(ideaId) {
+    const wsId = Object.keys(ideas).find(k => (ideas[k]||[]).some(i => i.id === ideaId));
+    if (!wsId) return;
+    const idea = (ideas[wsId]||[]).find(i => i.id === ideaId);
+    if (!idea?.linkedProjectId) return;
+    const project = (projects||[]).find(p => p.id === idea.linkedProjectId);
+    if (project) {
+      const updatedBrief = { ...(project.brief||{}), concepts: arr(project.brief?.concepts).filter(c => c.id !== `idea-${ideaId}`) };
+      await supabase.from("projects").update({ brief: updatedBrief, updated_at: new Date().toISOString() }).eq("id", project.id);
+    }
+    await supabase.from("ideas").update({ linked_project_id: null, updated_at: new Date().toISOString() }).eq("id", ideaId);
+    setIdeas(prev => ({ ...prev, [wsId]: (prev[wsId]||[]).map(i => i.id === ideaId ? { ...i, linkedProjectId: null } : i) }));
+  }
+
   const ws = workspaces.find(w => w.id === activeWs);
   const wsIdeas = ideas[activeWs] || [];
 
@@ -692,7 +792,8 @@ function IdeaCapture({ user, onBack }) {
   if (openIdea) {
     const ideaData = wsIdeas.find(i => i.id === openIdea);
     if (ideaData) return (
-      <IdeaPage idea={ideaData} onBack={() => setOpenIdea(null)} onUpdate={updateIdea} user={user} />
+      <IdeaPage idea={ideaData} onBack={() => setOpenIdea(null)} onUpdate={updateIdea} user={user}
+        projects={projects} onLinkProject={proj => linkIdeaToProject(ideaData.id, proj)} onUnlinkProject={() => unlinkIdeaFromProject(ideaData.id)} />
     );
   }
 
@@ -841,6 +942,13 @@ AI will generate a full creative brief with script, shot list, locations, and to
                         <span style={{ fontSize: 26 }}>{idea.brief ? "💡" : "✏️"}</span>
                         <div style={{ display: "flex", alignItems: "center", gap: 6 }} onClick={e => e.stopPropagation()}>
                           {idea.brief && <span style={{ fontSize: 11, background: "#eeece8", borderRadius: 20, padding: "3px 10px", color: "#9b9a97", whiteSpace: "nowrap" }}>Open →</span>}
+                          {idea.brief && (idea.linkedProjectId
+                            ? <span style={{ fontSize: 11, background: "#e6f4ea", color: "#1e7e34", borderRadius: 20, padding: "3px 10px", whiteSpace: "nowrap", fontFamily:"'IBM Plex Mono',monospace", cursor:"pointer" }}
+                                title="Click to unlink" onClick={e=>{e.stopPropagation();if(window.confirm("Remove this idea from the project?"))unlinkIdeaFromProject(idea.id);}}>
+                                📁 {(projects||[]).find(p=>p.id===idea.linkedProjectId)?.title||"Linked"}
+                              </span>
+                            : <button onClick={e=>{e.stopPropagation();setPickerTargetId(idea.id);setShowProjectPicker(true);}} style={{fontSize:11,background:"#e8f0fe",color:"#1a56c4",border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",fontFamily:"'Lora',serif",whiteSpace:"nowrap"}}>+ Link to Project</button>
+                          )}
                           <button onClick={e => { e.stopPropagation(); deleteIdea(idea.id); }} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
                             onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>🗑</button>
                         </div>
@@ -875,6 +983,13 @@ AI will generate a full creative brief with script, shot list, locations, and to
           )}
         </div>
       </div>
+      {showProjectPicker && (
+        <ProjectPickerModal
+          projects={projects||[]}
+          onSelect={proj => linkIdeaToProject(pickerTargetId, proj)}
+          onClose={() => { setShowProjectPicker(false); setPickerTargetId(null); }}
+        />
+      )}
     </div>
   );
 }
@@ -2610,7 +2725,7 @@ ${JSON.stringify(brief)}`;
     </div>
   );
 
-  if(screen==="ideas")return(<div><style>{CSS}</style><IdeaCapture user={user} onBack={()=>setScreen("dashboard")}/></div>);
+  if(screen==="ideas")return(<div><style>{CSS}</style><IdeaCapture user={user} onBack={()=>setScreen("dashboard")} projects={projects} onOpenProject={p=>{setMyRole("owner");setActiveProject(p);setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setSidebarOpen(false);setScreen("doc");}}/></div>);
 
   if(screen==="clients")return(<div><style>{CSS}</style><ClientList clients={clients} projects={projects} user={user} onBack={()=>setScreen("dashboard")} onNew={c=>setClients(prev=>[...prev,c].sort((a,b)=>a.name.localeCompare(b.name)))} onOpen={c=>{setActiveClientId(c.id);setScreen("clientProfile");}}/></div>);
 
