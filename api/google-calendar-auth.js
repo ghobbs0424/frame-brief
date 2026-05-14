@@ -1,6 +1,5 @@
 // api/google-calendar-auth.js
-// Handles Google Calendar OAuth URL generation, Recall.ai calendar actions,
-// and meeting-project link management.
+// Handles Google Calendar OAuth URL generation and Recall.ai V2 calendar actions.
 import { createClient } from "@supabase/supabase-js";
 
 const supabase = createClient(
@@ -15,7 +14,6 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-
   if (req.method === "OPTIONS") return res.status(200).end();
 
   const { action, userId } = req.query;
@@ -29,47 +27,12 @@ export default async function handler(req, res) {
       let origin = "https://framebriefai.com";
       try { if (referer) origin = new URL(referer).origin; } catch {}
 
-      // Step 1: Get a Recall.ai calendar auth token scoped to this user
-      const recallAuthRes = await fetch(
-        `https://${RECALL_REGION}.recall.ai/api/v1/calendar/authenticate/`,
-        {
-          method: "POST",
-          headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: userId }),
-        }
-      );
-      const recallAuthRaw = await recallAuthRes.text();
-      console.log("Recall authenticate status:", recallAuthRes.status, "response:", recallAuthRaw.slice(0, 300));
-      let recallCalendarAuthToken = null;
-      try {
-        const d = JSON.parse(recallAuthRaw);
-        recallCalendarAuthToken = d.token || d.recall_calendar_auth_token || d.access_token || null;
-      } catch {
-        console.error("Recall authenticate response not JSON:", recallAuthRaw.slice(0, 200));
-        return res.status(500).json({ error: "Failed to initialize calendar connection with Recall.ai" });
-      }
-      if (!recallCalendarAuthToken) {
-        return res.status(500).json({ error: "Recall.ai did not return auth token", raw: recallAuthRaw.slice(0, 200) });
-      }
-
-      // Step 2: Build Google OAuth URL.
-      // Recall.ai's callback is the redirect_uri — Recall.ai handles the token exchange
-      // using the Google OAuth credentials stored in your Recall.ai workspace dashboard.
-      const recallCallback = `https://${RECALL_REGION}.recall.ai/api/v1/calendar/google_oauth_callback/`;
-      const successUrl = `${origin}?calendar_connected=1&userId=${encodeURIComponent(userId)}`;
-      const errorUrl = `${origin}?calendar_error=oauth_failed`;
-
-      // State must be plain JSON.stringify (not base64) — Recall.ai parses it directly
-      const state = JSON.stringify({
-        recall_calendar_auth_token: recallCalendarAuthToken,
-        google_oauth_redirect_url: recallCallback,
-        success_url: successUrl,
-        error_url: errorUrl,
-      });
+      // State is base64 JSON — our callback decodes it to get userId + origin
+      const state = Buffer.from(JSON.stringify({ userId, origin })).toString("base64");
 
       const params = new URLSearchParams({
         client_id: process.env.GOOGLE_CLIENT_ID,
-        redirect_uri: recallCallback,
+        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
         response_type: "code",
         scope: [
           "https://www.googleapis.com/auth/calendar.events.readonly",
@@ -84,7 +47,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ url });
     }
 
-    // ── Fetch upcoming meetings from Recall.ai calendar ──────────────────────
+    // ── Fetch upcoming events from Recall.ai V2 ──────────────────────────────
     if (action === "upcoming-meetings") {
       if (!userId) return res.status(400).json({ error: "userId required" });
 
@@ -101,8 +64,8 @@ export default async function handler(req, res) {
       const now = new Date().toISOString();
       const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
 
-      const meetingsRes = await fetch(
-        `https://${RECALL_REGION}.recall.ai/api/v1/calendar/meeting/?` +
+      const eventsRes = await fetch(
+        `https://${RECALL_REGION}.recall.ai/api/v2/calendar-events/?` +
           new URLSearchParams({
             calendar_id: settings.recall_calendar_id,
             start_time__gte: now,
@@ -111,37 +74,41 @@ export default async function handler(req, res) {
         { headers: { Authorization: `Token ${RECALL_KEY}` } }
       );
 
-      if (!meetingsRes.ok) {
-        const errText = await meetingsRes.text();
-        console.error("Recall meetings fetch failed:", meetingsRes.status, errText.slice(0, 300));
+      if (!eventsRes.ok) {
+        const errText = await eventsRes.text();
+        console.error("Recall V2 calendar-events fetch failed:", eventsRes.status, errText.slice(0, 300));
         return res.status(200).json({ meetings: [], connected: true, error: "Failed to fetch meetings" });
       }
 
-      const meetingsData = await meetingsRes.json();
-      const rawMeetings = meetingsData.results || meetingsData || [];
+      const eventsData = await eventsRes.json();
+      const rawEvents = eventsData.results || eventsData || [];
 
-      // Auto-schedule bots for any meetings that don't have one yet
-      for (const m of rawMeetings) {
-        const hasBot = !!(m.bot_id || m.notetaker_id || m.bot);
+      // Auto-schedule bots for meetings that don't have one yet
+      for (const m of rawEvents) {
+        const hasBot = !!(m.bot || m.bot_id || m.scheduled_bot);
         const hasMeetingUrl = !!(m.meeting_url);
         if (!hasBot && hasMeetingUrl) {
           const botRes = await fetch(
-            `https://${RECALL_REGION}.recall.ai/api/v1/calendar/meeting/${m.id}/bot/`,
+            `https://${RECALL_REGION}.recall.ai/api/v2/calendar-events/${m.id}/bot/`,
             {
               method: "POST",
               headers: { Authorization: `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
               body: JSON.stringify({
-                bot_name: "Frame Brief",
-                webhook_url: "https://framebriefai.com/api/recall-webhook",
+                deduplication_key: `framebrief-${m.id}`,
+                bot_config: {
+                  bot_name: "Frame Brief",
+                  webhook_url: "https://framebriefai.com/api/recall-webhook",
+                },
               }),
             }
           );
-          console.log("Auto-scheduled bot for meeting:", m.id, "status:", botRes.status);
-          if (botRes.ok) m.bot_id = (await botRes.json()).id;
+          const botRaw = await botRes.text();
+          console.log("Auto-scheduled bot for event:", m.id, "status:", botRes.status, "response:", botRaw.slice(0, 200));
+          try { if (botRes.ok) m.bot = JSON.parse(botRaw); } catch {}
         }
       }
 
-      const meetings = rawMeetings.map((m) => ({
+      const meetings = rawEvents.map((m) => ({
         id: m.id,
         title: m.summary || m.title || "Untitled Meeting",
         startTime: m.start_time,
@@ -149,13 +116,13 @@ export default async function handler(req, res) {
         meetingUrl: m.meeting_url || null,
         attendees: (m.attendees || []).map((a) => a.email || a.name || a),
         linkedProjectId: settings.meeting_project_links?.[m.id] || null,
-        botScheduled: !!(m.bot_id || m.notetaker_id || m.bot),
+        botScheduled: !!(m.bot || m.bot_id || m.scheduled_bot),
       }));
 
       return res.status(200).json({ meetings, connected: true });
     }
 
-    // ── Link a meeting to an existing project (follow-up consultations only) ─
+    // ── Link a meeting to an existing project (follow-up consultations) ────────
     if (action === "link-meeting" && req.method === "POST") {
       const { userId: uid, meetingId, projectId } = req.body || {};
       if (!uid || !meetingId) return res.status(400).json({ error: "userId and meetingId required" });
@@ -181,47 +148,45 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // ── Fetch recall_calendar_id for a user after OAuth completes ────────────
+    // ── Re-create Recall.ai V2 calendar using stored refresh token ───────────
     if (action === "reconnect-recall" && req.method === "POST") {
       const { userId: uid } = req.body || {};
       if (!uid) return res.status(400).json({ error: "userId required" });
 
-      // Get a Recall.ai calendar auth token scoped to this user
-      const authRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/calendar/authenticate/`, {
-        method: "POST",
-        headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: uid }),
-      });
-      const authRaw = await authRes.text();
-      console.log("reconnect-recall authenticate status:", authRes.status, "response:", authRaw.slice(0, 300));
-      let calAuthToken = null;
-      try {
-        const d = JSON.parse(authRaw);
-        calAuthToken = d.token || d.recall_calendar_auth_token || d.access_token || null;
-      } catch {
-        return res.status(500).json({ error: "recall_auth_failed", raw: authRaw.slice(0, 200) });
-      }
-      if (!calAuthToken) {
-        return res.status(500).json({ error: "no_auth_token", raw: authRaw.slice(0, 200) });
+      const { data: settings } = await supabase
+        .from("user_settings")
+        .select("google_refresh_token")
+        .eq("id", uid)
+        .single();
+
+      if (!settings?.google_refresh_token) {
+        return res.status(400).json({ error: "no_tokens", message: "No stored Google tokens — please reconnect Google Calendar" });
       }
 
-      // List calendars for this user using the scoped token
-      const calRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/calendar/`, {
-        headers: { "Authorization": `Token ${calAuthToken}` },
+      const recallRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v2/calendars/`, {
+        method: "POST",
+        headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          oauth_client_id: process.env.GOOGLE_CLIENT_ID,
+          oauth_client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          oauth_refresh_token: settings.google_refresh_token,
+          platform: "google_calendar",
+        }),
       });
-      const calRaw = await calRes.text();
-      console.log("reconnect-recall calendar list status:", calRes.status, "response:", calRaw.slice(0, 300));
+
+      const recallRaw = await recallRes.text();
+      console.log("reconnect-recall V2 status:", recallRes.status, "response:", recallRaw.slice(0, 400));
+
       let recallCalendarId = null;
       try {
-        const calData = JSON.parse(calRaw);
-        const calendars = calData.results || (Array.isArray(calData) ? calData : []);
-        recallCalendarId = calendars[0]?.id || null;
+        const recallData = JSON.parse(recallRaw);
+        recallCalendarId = recallData.id || null;
       } catch {
-        return res.status(500).json({ error: "calendar_list_failed", status: calRes.status, raw: calRaw.slice(0, 200) });
+        return res.status(500).json({ error: "recall_error", status: recallRes.status, raw: recallRaw.slice(0, 200) });
       }
 
       if (!recallCalendarId) {
-        return res.status(200).json({ ok: false, message: "No calendar found on Recall.ai — please reconnect Google Calendar" });
+        return res.status(500).json({ error: "no_calendar_id", status: recallRes.status, raw: recallRaw.slice(0, 200) });
       }
 
       const { error: dbErr } = await supabase.from("user_settings").upsert({
@@ -229,8 +194,9 @@ export default async function handler(req, res) {
         recall_calendar_id: recallCalendarId,
         updated_at: new Date().toISOString(),
       });
+
       if (dbErr) return res.status(500).json({ error: dbErr.message });
-      console.log("reconnect-recall: saved calendar_id:", recallCalendarId, "for user:", uid);
+      console.log("reconnect-recall: saved V2 calendar_id:", recallCalendarId, "for user:", uid);
       return res.status(200).json({ ok: true, recall_calendar_id: recallCalendarId });
     }
 
@@ -247,19 +213,18 @@ export default async function handler(req, res) {
 
       if (settings?.recall_calendar_id) {
         const delRes = await fetch(
-          `https://${RECALL_REGION}.recall.ai/api/v1/calendar/${settings.recall_calendar_id}/`,
+          `https://${RECALL_REGION}.recall.ai/api/v2/calendars/${settings.recall_calendar_id}/`,
           {
             method: "DELETE",
             headers: { Authorization: `Token ${RECALL_KEY}` },
           }
         );
-        console.log("Recall calendar delete status:", delRes.status);
+        console.log("Recall V2 calendar delete status:", delRes.status);
       }
 
       const { error: dbErr } = await supabase.from("user_settings").upsert({
         id: uid,
         calendar_connected: false,
-        google_access_token: null,
         google_refresh_token: null,
         recall_calendar_id: null,
         meeting_project_links: {},
