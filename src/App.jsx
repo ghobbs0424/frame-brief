@@ -2835,30 +2835,25 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
 
   async function generateBriefFromTranscript(project){
     const proj=project||activeProject;
-    const transcriptText=proj?.recall_transcript;
-    if(!transcriptText||!proj)return;
+    if(!proj?.id)return;
     setBriefGenError(false);
     setLoadMsg("Generating brief from transcript…");
     setScreen("loading");
     try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:8000,system:SYSTEM_PROMPT,messages:[{role:"user",content:`Create a production brief from this meeting transcript:\n\n${transcriptText}`}]})});
-      const aiData=await res.json();
-      if(!res.ok||aiData.error)throw new Error(aiData?.error?.message||`API error ${res.status}`);
-      const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
-      let jsonStr=raw;
-      const fenced=raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if(fenced)jsonStr=fenced[1].trim();
-      else{const s=raw.indexOf("{"),e=raw.lastIndexOf("}");if(s!==-1&&e!==-1)jsonStr=raw.slice(s,e+1);}
-      jsonStr=jsonStr.replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
-      const parsed=JSON.parse(jsonStr);
-      if(!Array.isArray(parsed.concepts))parsed.concepts=[];
-      if(!parsed.clientActionItems)parsed.clientActionItems=[];
-      if(!parsed.internalTodos)parsed.internalTodos=[];
-      const updated={...proj,brief:parsed,recall_status:"brief_ready"};
-      setActiveProject(updated);
-      setProjects(ps=>ps.map(p=>p.id===proj.id?updated:p));
-      await saveProject(updated);
-      await supabase.from("projects").update({recall_status:"brief_ready",updated_at:new Date().toISOString()}).eq("id",proj.id);
+      // Route through serverless function — Anthropic blocks direct browser calls on production
+      const res=await fetch("/api/recall-webhook?action=fetch-transcript",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({projectId:proj.id,botId:proj.recall_bot_id||""}),
+      });
+      const d=await res.json();
+      if(!res.ok||!d.ok)throw new Error(d.message||"Brief generation failed");
+      // Reload project with the freshly generated brief
+      const{data:updated}=await supabase.from("projects").select("*").eq("id",proj.id).single();
+      if(updated){
+        setActiveProject(updated);
+        setProjects(ps=>ps.map(p=>p.id===proj.id?updated:p));
+      }
       setPage("overview");setScreen("doc");
     }catch(err){
       console.error("generateBriefFromTranscript error:",err);

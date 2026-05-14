@@ -65,7 +65,7 @@ export default async function handler(req, res) {
     if (req.query.action === "fetch-transcript") {
       const { botId, projectId } = req.body || {};
       console.log("fetch-transcript:", botId, projectId);
-      if (!botId || !projectId) return res.status(400).json({ error: "botId and projectId required" });
+      if (!projectId) return res.status(400).json({ error: "projectId required" });
 
       // First check if transcript is already saved in the project
       const { data: existingProject } = await supabase.from("projects").select("recall_transcript").eq("id", projectId).single();
@@ -74,6 +74,7 @@ export default async function handler(req, res) {
 
       // Only call Recall.ai if we don't already have the transcript
       if (!text.trim()) {
+        if (!botId) return res.status(200).json({ ok: false, message: "No transcript in DB and no botId to fetch from" });
         const botRes = await fetch(
           `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/`,
           { headers: { "Authorization": `Token ${RECALL_KEY}` } }
