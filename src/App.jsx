@@ -2143,6 +2143,11 @@ function FrameBriefApp(){
     let data,error;
     if(isOwner){
       ({data,error}=await supabase.from("projects").upsert({id:projectData.id,user_id:user.id,title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",status:projectData.status||"Draft",brief:projectData.brief||{},doc_count:projectData.doc_count||0,client_id:projectData.client_id||null,meeting_stage:projectData.meeting_stage||"discovery",meeting_history:projectData.meeting_history||[],call_sheet:projectData.call_sheet||{},post_production:projectData.post_production||{},updated_at:new Date().toISOString()}).select().single());
+      // If new lifecycle columns don't exist yet, fall back to saving without them
+      if(error){
+        console.warn("saveProject: full upsert failed, retrying without lifecycle columns:",error.message);
+        ({data,error}=await supabase.from("projects").upsert({id:projectData.id,user_id:user.id,title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",status:projectData.status||"Draft",brief:projectData.brief||{},doc_count:projectData.doc_count||0,client_id:projectData.client_id||null,updated_at:new Date().toISOString()}).select().single());
+      }
     }else{
       ({data,error}=await supabase.from("projects").update({title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",brief:projectData.brief||{},updated_at:new Date().toISOString()}).eq("id",projectData.id).select().single());
     }

@@ -343,8 +343,18 @@ suggestedChanges: list specific, actionable changes to the existing brief fields
         updated_at: new Date().toISOString(),
       }).eq("id", projectId);
 
-      if (dbErr) console.error("Supabase consultation update error:", dbErr.message);
-      else console.log("Consultation meeting stored for project:", projectId, "stage:", parsed.stage);
+      if (dbErr) {
+        console.error("Supabase consultation update error:", dbErr.message, "— retrying without lifecycle columns");
+        // Fall back: just mark as transcript_ready so user can review manually
+        const { error: fallbackErr } = await supabase.from("projects").update({
+          recall_status: "transcript_ready",
+          recall_transcript: transcriptText,
+          updated_at: new Date().toISOString(),
+        }).eq("id", projectId);
+        if (fallbackErr) console.error("Fallback consultation update failed:", fallbackErr.message);
+      } else {
+        console.log("Consultation meeting stored for project:", projectId, "stage:", parsed.stage);
+      }
       return;
     }
 
@@ -407,6 +417,7 @@ suggestedChanges: list specific, actionable changes to the existing brief fields
       };
       const existingHistory = Array.isArray(project?.meeting_history) ? project.meeting_history : [];
 
+      // Try with new lifecycle columns first; fall back to core-only if columns don't exist yet
       const { error: dbErr } = await supabase.from("projects").update({
         title: brief.projectTitle || "Untitled",
         client_name: brief.clientName || "",
@@ -416,8 +427,21 @@ suggestedChanges: list specific, actionable changes to the existing brief fields
         recall_status: "brief_ready",
         updated_at: new Date().toISOString(),
       }).eq("id", projectId);
-      if (dbErr) console.error("Supabase brief update error:", dbErr.message);
-      else console.log("Brief generated for project:", projectId);
+
+      if (dbErr) {
+        console.error("Supabase brief update error:", dbErr.message, "— retrying without lifecycle columns");
+        const { error: fallbackErr } = await supabase.from("projects").update({
+          title: brief.projectTitle || "Untitled",
+          client_name: brief.clientName || "",
+          brief: brief,
+          recall_status: "brief_ready",
+          updated_at: new Date().toISOString(),
+        }).eq("id", projectId);
+        if (fallbackErr) console.error("Fallback update also failed:", fallbackErr.message);
+        else console.log("Brief generated (without lifecycle columns) for project:", projectId);
+      } else {
+        console.log("Brief generated for project:", projectId);
+      }
     } else {
       console.error("Brief is null — not saving. Check Claude response above.");
     }
