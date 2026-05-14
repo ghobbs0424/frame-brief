@@ -53,23 +53,23 @@ export default async function handler(req, res) {
       }
 
       // Step 2: Build Google OAuth URL.
-      // Our callback acts as a proxy — it forwards the code to Recall.ai's callback.
-      // google_oauth_redirect_url = our registered callback URL (Recall.ai uses it in token exchange)
-      const ourCallback = process.env.GOOGLE_REDIRECT_URI;
+      // Recall.ai's callback is the redirect_uri — Recall.ai handles the token exchange
+      // using the Google OAuth credentials stored in your Recall.ai workspace dashboard.
+      const recallCallback = `https://${RECALL_REGION}.recall.ai/api/v1/calendar/google_oauth_callback/`;
       const successUrl = `${origin}?calendar_connected=1&userId=${encodeURIComponent(userId)}`;
       const errorUrl = `${origin}?calendar_error=oauth_failed`;
 
       // State must be plain JSON.stringify (not base64) — Recall.ai parses it directly
       const state = JSON.stringify({
         recall_calendar_auth_token: recallCalendarAuthToken,
-        google_oauth_redirect_url: ourCallback,
+        google_oauth_redirect_url: recallCallback,
         success_url: successUrl,
         error_url: errorUrl,
       });
 
       const params = new URLSearchParams({
         client_id: process.env.GOOGLE_CLIENT_ID,
-        redirect_uri: ourCallback,
+        redirect_uri: recallCallback,
         response_type: "code",
         scope: [
           "https://www.googleapis.com/auth/calendar.events.readonly",
