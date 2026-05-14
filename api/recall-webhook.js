@@ -67,29 +67,36 @@ export default async function handler(req, res) {
       console.log("fetch-transcript:", botId, projectId);
       if (!botId || !projectId) return res.status(400).json({ error: "botId and projectId required" });
 
-      // Get bot to find the transcript ID
-      const botRes = await fetch(
-        `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/`,
-        { headers: { "Authorization": `Token ${RECALL_KEY}` } }
-      );
-      const botData = await botRes.json();
-      const transcriptId = botData.recordings?.[0]?.media_shortcuts?.transcript?.id;
-      console.log("fetch-transcript: transcriptId:", transcriptId);
+      // First check if transcript is already saved in the project
+      const { data: existingProject } = await supabase.from("projects").select("recall_transcript").eq("id", projectId).single();
+      let text = existingProject?.recall_transcript || "";
+      console.log("fetch-transcript: existing transcript length:", text.length);
 
-      if (!transcriptId) {
-        return res.status(200).json({ ok: false, message: "No transcript found on bot", botStatus: JSON.stringify(botData.recordings?.[0]?.media_shortcuts?.transcript).slice(0, 200) });
-      }
-
-      const text = await downloadAndParseTranscript(transcriptId);
+      // Only call Recall.ai if we don't already have the transcript
       if (!text.trim()) {
-        return res.status(200).json({ ok: false, message: "Transcript empty or not ready" });
-      }
+        const botRes = await fetch(
+          `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/`,
+          { headers: { "Authorization": `Token ${RECALL_KEY}` } }
+        );
+        const botData = await botRes.json();
+        const transcriptId = botData.recordings?.[0]?.media_shortcuts?.transcript?.id;
+        console.log("fetch-transcript: transcriptId from Recall:", transcriptId);
 
-      await supabase.from("projects").update({
-        recall_status: "transcript_ready",
-        recall_transcript: text,
-        updated_at: new Date().toISOString(),
-      }).eq("id", projectId);
+        if (!transcriptId) {
+          return res.status(200).json({ ok: false, message: "No transcript found on bot" });
+        }
+
+        text = await downloadAndParseTranscript(transcriptId);
+        if (!text.trim()) {
+          return res.status(200).json({ ok: false, message: "Transcript empty or not ready" });
+        }
+
+        await supabase.from("projects").update({
+          recall_status: "transcript_ready",
+          recall_transcript: text,
+          updated_at: new Date().toISOString(),
+        }).eq("id", projectId);
+      }
 
       await generateBrief(projectId, text);
       return res.status(200).json({ ok: true, transcriptLength: text.length });
