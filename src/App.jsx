@@ -992,7 +992,7 @@ function ClientCombobox({value,clientId,clients,onChange,onLink,onUnlink,onGoToP
 }
 
 // ─── OVERVIEW PAGE ────────────────────────────────────────────────────────────
-function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,projectId,onTranscriptReady,clientId,onClientClick,clients,onClientLink,onClientUnlink,onClientCreateAndLink}){
+function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,projectId,onTranscriptReady,clientId,onClientClick,clients,onClientLink,onClientUnlink,onClientCreateAndLink,meetingStage,onStageChange}){
   const set=(k,v)=>setBrief(b=>({...b,[k]:v}));
   const upArr=(k,i,v)=>setBrief(b=>{const a=[...(b[k]||[])];a[i]=v;return{...b,[k]:a};});
   const delArr=(k,i)=>setBrief(b=>({...b,[k]:(b[k]||[]).filter((_,j)=>j!==i)}));
@@ -1008,6 +1008,14 @@ function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,pro
           {readonly
             ?(clientId&&onClientClick?<span style={{cursor:"pointer",color:"#1a56c4",display:"inline-flex",alignItems:"center",gap:4}} onClick={onClientClick}>{brief.clientName||"View Client"}<span style={{fontSize:11,color:"#9b9a97"}}>↗</span></span>:brief.clientName)
             :<ClientCombobox value={brief.clientName||""} clientId={clientId} clients={clients||[]} onChange={v=>set("clientName",v)} onLink={onClientLink} onUnlink={onClientUnlink} onGoToProfile={clientId&&onClientClick?onClientClick:null} onCreateAndLink={onClientCreateAndLink}/>
+          }
+        </PropRow>
+        <PropRow label="Stage">
+          {readonly
+            ?<span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:STAGE_COLORS[meetingStage||"discovery"]?.bg,color:STAGE_COLORS[meetingStage||"discovery"]?.c,borderRadius:20,padding:"2px 10px",fontWeight:600,textTransform:"capitalize"}}>{(meetingStage||"discovery").replace("_"," ")}</span>
+            :<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {STAGES.map(s=>{const active=(meetingStage||"discovery")===s.id;const sc=STAGE_COLORS[s.id];return(<span key={s.id} onClick={()=>onStageChange&&onStageChange(s.id)} style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:active?sc.bg:"#f7f6f3",color:active?sc.c:"#9b9a97",borderRadius:20,padding:"3px 10px",fontWeight:active?700:400,cursor:"pointer",border:`1px solid ${active?sc.c:"transparent"}`,transition:"all .15s",userSelect:"none"}}>{s.emoji} {s.label}</span>);})}
+            </div>
           }
         </PropRow>
         {[["Project Type","projectType"],["Date","date"],["Timeline","timeline"],["Budget","budget"]].map(([l,k])=>(<PropRow key={k} label={l}>{readonly?brief[k]:<Editable value={brief[k]} onChange={v=>set(k,v)}/>}</PropRow>))}
@@ -2450,13 +2458,10 @@ ${JSON.stringify(brief)}`;
           {arr(brief?.concepts).map((c,i)=><button key={i} className={`nb ${page===`concept-${i}`?"on":""}`} onClick={()=>setPage(`concept-${i}`)}><span style={{fontSize:15}}>{c.emoji}</span><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{c.title}</span></button>)}
           <button className={`nb ${page==="postprod"?"on":""}`} onClick={()=>setPage("postprod")} style={{marginTop:8}}><span style={{fontSize:15}}>✂️</span><span>Post Production</span></button>
         </div>
-        <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column"}}>
-          <StageProgressBar stage={activeProject?.meeting_stage||"discovery"} meetingHistory={arr(activeProject?.meeting_history)} onMeetingClick={()=>{}}/>
-          <div style={{flex:1}}>
-            {page==="overview"&&<OverviewPage brief={brief} setBrief={()=>{}} goTo={setPage} readonly/>}
-            {conceptIdx>=0&&brief?.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={()=>{}} readonly/>}
-            {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>({...prev,post_production:pp}));supabase.from("projects").update({post_production:pp,updated_at:new Date().toISOString()}).eq("id",activeProject.id);}} readonly/>}
-          </div>
+        <div style={{flex:1,overflowY:"auto"}}>
+          {page==="overview"&&<OverviewPage brief={brief} setBrief={()=>{}} goTo={setPage} readonly meetingStage={activeProject?.meeting_stage||"discovery"}/>}
+          {conceptIdx>=0&&brief?.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={()=>{}} readonly/>}
+          {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>({...prev,post_production:pp}));supabase.from("projects").update({post_production:pp,updated_at:new Date().toISOString()}).eq("id",activeProject.id);}} readonly/>}
         </div>
       </div>
     </div>
@@ -2589,14 +2594,11 @@ ${JSON.stringify(brief)}`;
       )}
       <div style={{display:"flex",flex:1,overflow:"hidden"}}>
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
-        <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column"}}>
-          <StageProgressBar stage={activeProject?.meeting_stage||"discovery"} meetingHistory={arr(activeProject?.meeting_history)} onMeetingClick={m=>setViewingMeeting(m)}/>
-          <div style={{flex:1}}>
-            {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}} clients={clients} onClientLink={linkClientToProject} onClientUnlink={unlinkClientFromProject} onClientCreateAndLink={createAndLinkClient}/>}
-            {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
-            {page==="shootday"&&<CallSheetPanel brief={brief} callSheet={activeProject?.call_sheet||{}} onUpdate={cs=>{setActiveProject(prev=>{const updated={...prev,call_sheet:cs};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
-            {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>{const updated={...prev,post_production:pp};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
-          </div>
+        <div style={{flex:1,overflowY:"auto"}}>
+          {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}} clients={clients} onClientLink={linkClientToProject} onClientUnlink={unlinkClientFromProject} onClientCreateAndLink={createAndLinkClient} meetingStage={activeProject?.meeting_stage||"discovery"} onStageChange={stage=>{setActiveProject(prev=>{const updated={...prev,meeting_stage:stage};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_stage:stage}:p));}}/>}
+          {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
+          {page==="shootday"&&<CallSheetPanel brief={brief} callSheet={activeProject?.call_sheet||{}} onUpdate={cs=>{setActiveProject(prev=>{const updated={...prev,call_sheet:cs};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
+          {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>{const updated={...prev,post_production:pp};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
         </div>
         {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}} className="hide-on-mobile"><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div>}
       </div>
