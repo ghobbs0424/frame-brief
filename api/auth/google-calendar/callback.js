@@ -12,11 +12,25 @@ const RECALL_KEY = process.env.RECALL_API_KEY;
 const RECALL_REGION = "us-west-2";
 
 export default async function handler(req, res) {
-  // Redirect back to whichever domain the user came from so their session stays intact
-  const host = req.headers.host || "framebriefai.com";
-  const APP_URL = `https://${host}`;
-
   const { code, state, error } = req.query;
+
+  // Decode state — may be JSON {userId, origin} or legacy plain userId
+  let userId, APP_URL;
+  try {
+    const decoded = Buffer.from(state || "", "base64").toString("utf-8");
+    try {
+      const parsed = JSON.parse(decoded);
+      userId = parsed.userId;
+      APP_URL = parsed.origin || "https://framebriefai.com";
+    } catch {
+      // Legacy format: plain userId string
+      userId = decoded;
+      APP_URL = "https://framebriefai.com";
+    }
+    if (!userId || userId.length < 10) throw new Error("invalid");
+  } catch {
+    return res.redirect(`https://framebriefai.com?calendar_error=invalid_state`);
+  }
 
   if (error) {
     return res.redirect(`${APP_URL}?calendar_error=${encodeURIComponent(error)}`);
@@ -24,15 +38,6 @@ export default async function handler(req, res) {
 
   if (!code || !state) {
     return res.redirect(`${APP_URL}?calendar_error=invalid_request`);
-  }
-
-  // Decode userId from base64 state param
-  let userId;
-  try {
-    userId = Buffer.from(state, "base64").toString("utf-8");
-    if (!userId || userId.length < 10) throw new Error("invalid");
-  } catch {
-    return res.redirect(`${APP_URL}?calendar_error=invalid_state`);
   }
 
   try {

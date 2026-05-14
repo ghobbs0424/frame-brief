@@ -25,7 +25,11 @@ export default async function handler(req, res) {
     if (action === "oauth-url") {
       if (!userId) return res.status(400).json({ error: "userId required" });
 
-      const state = Buffer.from(userId).toString("base64");
+      // Encode both userId and the originating domain so callback can redirect back correctly
+      const referer = req.headers.referer || req.headers.origin || "";
+      let origin = "https://framebriefai.com";
+      try { if (referer) origin = new URL(referer).origin; } catch {}
+      const state = Buffer.from(JSON.stringify({ userId, origin })).toString("base64");
       const params = new URLSearchParams({
         client_id: process.env.GOOGLE_CLIENT_ID,
         redirect_uri: process.env.GOOGLE_REDIRECT_URI,
