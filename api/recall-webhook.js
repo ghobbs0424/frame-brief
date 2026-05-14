@@ -482,19 +482,30 @@ async function generateBrief(projectId, transcriptText) {
 
     if (hasExistingBrief) {
       // ── Consultation flow: detect stage, summarize, suggest changes + actual updates ──
+      const CONCEPT_SCHEMA = `{"id":"concept-N","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"hooks":[],"selectedHook":"","deliverableFormat":"","directorNotes":""}`;
+
       const CONSULTATION_SYSTEM = `You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and the existing brief, then return ONLY valid JSON, no markdown:
 {"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value (quote from brief if possible)","after":"suggested new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}
+
 RULES:
-- stage: pick the best fit — discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).
-- suggestedChanges: list specific, actionable changes. Reference actual field names from the brief schema. Limit to the most important 3-6 changes. The "after" field is a plain text description for display.
-- briefUpdates: a partial JSON object with the ACTUAL new values to merge into the brief. Only include fields that genuinely changed. Use the same field names and data types as in the existing brief — strings for string fields (budget, timeline, generalNotes, projectType, logline, overview), arrays for array fields (clientActionItems as [{id,text,done}], internalTodos as [{id,text,done}], concepts as [{...}]). For concepts: include the full updated concept object for any concept being modified, keeping the same id. Do NOT include unchanged fields.`;
+- stage: discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).
+- suggestedChanges: 3-6 specific changes with plain-text "after" descriptions for display only.
+- briefUpdates: a partial JSON object with ACTUAL new values ready to merge into the brief. Only include changed fields. Use correct types:
+  * Scalar fields: budget, timeline, projectType, logline, overview, generalNotes, moodDescription, date, coverEmoji — set to new string value.
+  * clientActionItems: full array [{id:"ca-N",text:"",done:false}] — include ALL items (existing + new).
+  * internalTodos: full array [{id:"it-N",text:"",done:false}] — include ALL items (existing + new).
+  * concepts: CRITICAL — if the client requests adding new concepts or expanding the project scope, you MUST generate the full concept objects using this schema: ${CONCEPT_SCHEMA}
+    - For NEW concepts: assign id "concept-2", "concept-3", etc. (incrementing from highest existing). Generate rich, detailed content for ALL fields based on what was described in the meeting — title, logline, description, shot list (at least 3 shots), full script (hook/act1/act2/act3/cta), lighting, locations, wardrobe, props, mood keywords, color palette, 3 hooks, selectedHook.
+    - For MODIFIED existing concepts: include the full concept object with the same id, merging in changes.
+    - Include ALL concepts (existing unchanged ones do NOT need to be included — only new or modified ones).
+  * Do NOT include fields that didn't change.`;
 
       const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 3000,
+          max_tokens: 8000,
           system: CONSULTATION_SYSTEM,
           messages: [{ role: "user", content: `Existing brief:\n${JSON.stringify(project.brief)}\n\nMeeting transcript:\n${transcriptText}` }],
         }),
