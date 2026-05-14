@@ -998,8 +998,35 @@ function OverviewPage({brief,setBrief,goTo,readonly,recallStatus,recallBotId,pro
   const delArr=(k,i)=>setBrief(b=>({...b,[k]:(b[k]||[]).filter((_,j)=>j!==i)}));
   const addArr=(k,item)=>setBrief(b=>({...b,[k]:[...(b[k]||[]),item]}));
   const cT=brief.clientActionItems||[];const iT=brief.internalTodos||[];
+  const[retrying,setRetrying]=useState(false);
+  const[retryErr,setRetryErr]=useState("");
+  async function retryBriefGeneration(){
+    setRetrying(true);setRetryErr("");
+    try{
+      const res=await fetch(`/api/recall-webhook?action=fetch-transcript`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({botId:recallBotId,projectId})});
+      const data=await res.json();
+      if(data.ok){if(onTranscriptReady)onTranscriptReady();}
+      else setRetryErr(data.message||"Generation failed — try again");
+    }catch(err){setRetryErr(err.message);}
+    setRetrying(false);
+  }
   return(
     <div style={{maxWidth:760,padding:"40px 24px 120px",margin:"0 auto"}}>
+      {(recallStatus==="transcript_ready"||recallStatus==="transcribing")&&!readonly&&(
+        <div style={{background:recallStatus==="transcribing"?"#fef3e2":"#e8f0fe",border:`1px solid ${recallStatus==="transcribing"?"#fde8c8":"#d2e3fc"}`,borderRadius:10,padding:"14px 18px",marginBottom:24,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            {recallStatus==="transcribing"?<><div className="spin" style={{width:14,height:14,border:"2px solid #fde8c8",borderTop:"2px solid #b45309",borderRadius:"50%",flexShrink:0}}/><span style={{fontSize:13,color:"#92400e",fontWeight:600}}>Transcribing your meeting…</span></>
+            :<><span style={{fontSize:14}}>📝</span><div><span style={{fontSize:13,fontWeight:700,color:"#1a56c4"}}>Transcript ready</span><span style={{fontSize:12,color:"#9b9a97",marginLeft:8}}>Brief generation didn't complete — click to retry</span></div></>}
+          </div>
+          {recallStatus==="transcript_ready"&&(
+            <button onClick={retryBriefGeneration} disabled={retrying} style={{background:"#1a56c4",color:"#fff",border:"none",padding:"7px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:retrying?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6,flexShrink:0,opacity:retrying?0.7:1}}>
+              {retrying&&<div className="spin" style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid #fff",borderRadius:"50%"}}/>}
+              {retrying?"Generating…":"✦ Generate Brief Now"}
+            </button>
+          )}
+          {retryErr&&<span style={{fontSize:12,color:"#c0392b",width:"100%"}}>{retryErr}</span>}
+        </div>
+      )}
       <div style={{fontSize:48,marginBottom:10}}>{brief.coverEmoji||"🎬"}</div>
       {readonly?<h1 style={{fontSize:34,fontWeight:700,letterSpacing:"-0.025em",margin:"0 0 8px",color:"#37352f",lineHeight:1.2}}>{brief.projectTitle}</h1>:<h1 contentEditable suppressContentEditableWarning onBlur={e=>set("projectTitle",e.target.innerText)} style={{fontSize:34,fontWeight:700,letterSpacing:"-0.025em",margin:"0 0 8px",outline:"none",color:"#37352f",lineHeight:1.2}}>{brief.projectTitle}</h1>}
       <div style={{fontSize:15,color:"#9b9a97",fontStyle:"italic",marginBottom:20,lineHeight:1.6}}>{readonly?<p style={{margin:0}}>{brief.logline}</p>:<Editable value={brief.logline} onChange={v=>set("logline",v)} placeholder="Project logline…"/>}</div>
