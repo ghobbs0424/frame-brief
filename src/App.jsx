@@ -2003,8 +2003,50 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
   const[sidebarOpen,setSidebarOpen]=useState(true);
+  const[calendarSettings,setCalendarSettings]=useState(null);
+  const[upcomingMeetings,setUpcomingMeetings]=useState([]);
+  const[calendarLoading,setCalendarLoading]=useState(false);
+  const[calendarMsg,setCalendarMsg]=useState("");
+  const[meetingLinking,setMeetingLinking]=useState(null);
   const filtered=[...projects].filter(p=>{const q=search.toLowerCase();const ms=!q||[p.title,p.client_name,p.brief?.projectType].some(s=>s?.toLowerCase().includes(q));return ms&&(filter==="All"||p.status===filter);}).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
   const filteredShared=arr(sharedProjects).filter(p=>{const q=search.toLowerCase();return!q||[p.title,p.client_name,p.brief?.projectType].some(s=>s?.toLowerCase().includes(q));}).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at));
+
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    if(params.get("calendar_connected")==="1"){setCalendarMsg("✓ Google Calendar connected!");window.history.replaceState({},"",window.location.pathname);}
+    const calErr=params.get("calendar_error");
+    if(calErr){setCalendarMsg("⚠ "+decodeURIComponent(calErr));window.history.replaceState({},"",window.location.pathname);}
+    if(user?.id)loadCalendarSettings();
+  },[user?.id]);
+
+  async function loadCalendarSettings(){
+    const{data}=await supabase.from("user_settings").select("calendar_connected,recall_calendar_id").eq("id",user.id).single();
+    setCalendarSettings(data||{calendar_connected:false});
+    if(data?.calendar_connected)loadUpcomingMeetings();
+  }
+  async function loadUpcomingMeetings(){
+    setCalendarLoading(true);
+    try{const res=await fetch(`/api/google-calendar-auth?action=upcoming-meetings&userId=${user.id}`);const data=await res.json();setUpcomingMeetings(data.meetings||[]);}
+    catch(e){console.error("loadUpcomingMeetings:",e.message);}
+    setCalendarLoading(false);
+  }
+  async function handleConnectCalendar(){
+    try{const res=await fetch(`/api/google-calendar-auth?action=oauth-url&userId=${user.id}`);const data=await res.json();if(data.url)window.location.href=data.url;}
+    catch(e){setCalendarMsg("⚠ "+e.message);}
+  }
+  async function handleDisconnectCalendar(){
+    if(!window.confirm("Disconnect Google Calendar? The bot will stop auto-joining your meetings."))return;
+    try{await fetch("/api/google-calendar-auth?action=disconnect",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:user.id})});
+    setCalendarSettings({calendar_connected:false});setUpcomingMeetings([]);setCalendarMsg("Calendar disconnected.");}
+    catch(e){setCalendarMsg("⚠ "+e.message);}
+  }
+  async function handleLinkMeeting(meetingId,projectId){
+    setMeetingLinking(meetingId);
+    try{await fetch("/api/google-calendar-auth?action=link-meeting",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:user.id,meetingId,projectId:projectId||null})});
+    setUpcomingMeetings(prev=>prev.map(m=>m.id===meetingId?{...m,linkedProjectId:projectId||null}:m));}
+    catch(e){console.error("handleLinkMeeting:",e.message);}
+    setMeetingLinking(null);
+  }
 
   function DashSidebar(){return(<>
     <button onClick={()=>setSidebarOpen(false)} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"10px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,color:"#9b9a97",fontFamily:"'Lora',serif",borderBottom:"1px solid #f1f0ef",marginBottom:16}}>← Close Menu</button>
@@ -2013,6 +2055,19 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
       <button onClick={onNew} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 10px",border:"none",background:"#37352f",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}>🎬 <span>New Brief</span></button>
       <button onClick={onIdeas} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💡</span><span>Idea Capture</span></button>
       <button onClick={onClients} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>👥</span><span>Clients</span></button>
+      <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Calendar</div>
+      {calendarSettings?.calendar_connected
+        ?(<div>
+          <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 10px",background:"#e6f4ea",borderRadius:6,marginBottom:6}}>
+            <span style={{width:8,height:8,borderRadius:"50%",background:"#1e7e34",display:"inline-block",flexShrink:0}}/>
+            <span style={{fontSize:12,color:"#1e7e34",fontWeight:600,lineHeight:1.3}}>Calendar Connected</span>
+          </div>
+          <div style={{fontSize:11,color:"#9b9a97",padding:"2px 10px",marginBottom:6,lineHeight:1.5}}>🤖 Auto-joining your meetings</div>
+          <button onClick={handleDisconnectCalendar} className="nb" style={{color:"#9b9a97",fontSize:11}}><span>Disconnect</span></button>
+        </div>)
+        :(<button onClick={handleConnectCalendar} className="nb" style={{marginBottom:4,background:"#e8f0fe",color:"#1a56c4",border:"none",borderRadius:6,padding:"9px 10px",width:"100%",display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:"'Lora',serif",fontSize:13}}><span style={{fontSize:15}}>📅</span><span>Connect Google Calendar</span></button>)
+      }
+      {calendarMsg&&<div style={{fontSize:11,padding:"4px 10px",marginTop:4,color:calendarMsg.startsWith("✓")?"#1e7e34":"#c0392b",lineHeight:1.4}}>{calendarMsg}</div>}
       <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Account</div>
       <div style={{fontSize:12,color:"#9b9a97",padding:"4px 10px",marginBottom:8,lineHeight:1.5,wordBreak:"break-all"}}>{user?.email}</div>
       <button onClick={onSignOut} className="nb"><span style={{fontSize:15}}>🚪</span><span>Sign Out</span></button>
@@ -2037,6 +2092,45 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
 
         {/* Main content */}
         <div style={{flex:1,overflowY:"auto",padding:"32px 24px"}}>
+          {/* Upcoming Meetings */}
+          {calendarSettings?.calendar_connected&&(
+            <div style={{marginBottom:36}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                <h2 style={{fontSize:18,fontWeight:700,color:"#37352f",margin:0,letterSpacing:"-0.02em"}}>📅 Upcoming Meetings</h2>
+                <button onClick={loadUpcomingMeetings} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,padding:"2px 6px",fontFamily:"'Lora',serif"}} title="Refresh">↺</button>
+              </div>
+              {calendarLoading?(<div style={{fontSize:13,color:"#9b9a97",fontStyle:"italic"}}>Loading meetings…</div>)
+              :upcomingMeetings.length===0?(<div style={{fontSize:13,color:"#9b9a97",fontStyle:"italic"}}>No upcoming meetings in the next 7 days.</div>)
+              :(<div style={{display:"flex",flexDirection:"column",gap:10}}>
+                {upcomingMeetings.map(m=>{
+                  const start=new Date(m.startTime);
+                  return(
+                    <div key={m.id} style={{border:"1px solid #e8f0fe",borderRadius:10,padding:"14px 16px",background:"#f5f8ff",display:"flex",alignItems:"flex-start",gap:14,flexWrap:"wrap"}}>
+                      <div style={{flex:1,minWidth:200}}>
+                        <div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4}}>{m.title}</div>
+                        <div style={{fontSize:12,color:"#9b9a97",marginBottom:4}}>
+                          {start.toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric"})} · {start.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}
+                        </div>
+                        {m.attendees?.length>0&&<div style={{fontSize:11,color:"#c4c3bf"}}>{m.attendees.slice(0,3).join(", ")}{m.attendees.length>3?` +${m.attendees.length-3} more`:""}</div>}
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                        <span style={{fontSize:11,background:"#e8f0fe",color:"#1a56c4",borderRadius:20,padding:"3px 10px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>🤖 Auto-joining</span>
+                        <select
+                          value={m.linkedProjectId||""}
+                          onChange={e=>handleLinkMeeting(m.id,e.target.value||null)}
+                          disabled={meetingLinking===m.id}
+                          style={{border:"1px solid #c5d8fb",borderRadius:6,padding:"6px 10px",fontSize:12,fontFamily:"'Lora',serif",background:"#fff",outline:"none",color:"#37352f",cursor:"pointer",maxWidth:180}}
+                        >
+                          <option value="">Link to project…</option>
+                          {projects.map(p=><option key={p.id} value={p.id}>{p.brief?.coverEmoji||"🎬"} {p.title||"Untitled"}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>)}
+            </div>
+          )}
           <h1 style={{fontSize:26,fontWeight:700,color:"#37352f",marginBottom:20,letterSpacing:"-0.02em"}}>Projects</h1>
           <div style={{display:"flex",gap:10,marginBottom:24,flexWrap:"wrap"}}>
             <div style={{flex:1,minWidth:180,position:"relative"}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#9b9a97"}}>🔍</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search projects…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px 10px 36px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",background:"#fafaf9",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/></div>
@@ -2098,7 +2192,7 @@ function ShareModal({project,user,onClose,onProjectUpdate}){
   const[inviting,setInviting]=useState(false);
   const[inviteMsg,setInviteMsg]=useState("");
   const[removing,setRemoving]=useState(null);
-  const shareUrl=`https://frame-brief.vercel.app/share/${project?.id}`;
+  const shareUrl=`https://framebriefai.com/share/${project?.id}`;
   useEffect(()=>{if(project?.id)loadMembers();},[project?.id]);
   async function loadMembers(){
     setLoading(true);

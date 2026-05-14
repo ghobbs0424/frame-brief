@@ -56,7 +56,7 @@ export default async function handler(req, res) {
   if (insertErr) return res.status(500).json({ error: insertErr.message });
 
   // Send invite email via Supabase Auth (magic link / invite)
-  const projectUrl = `https://frame-brief.vercel.app/share/${projectId}`;
+  const projectUrl = `https://framebriefai.com/share/${projectId}`;
   try {
     if (existingUser) {
       // Existing user — send magic link to the project

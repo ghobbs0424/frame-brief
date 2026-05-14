@@ -36,7 +36,7 @@ export default async function handler(req, res) {
         body: JSON.stringify({
           meeting_url: meetingUrl,
           bot_name: "Frame Brief",
-          webhook_url: `https://frame-brief.vercel.app/api/recall-webhook`,
+          webhook_url: `https://framebriefai.com/api/recall-webhook`,
         }),
       });
 
@@ -133,7 +133,51 @@ export default async function handler(req, res) {
       .single();
 
     console.log("Project lookup:", project && project.id, "error:", lookupErr && lookupErr.message);
-    if (!project) return res.status(200).json({ ok: true, error: "project not found for bot " + botId });
+
+    // ── Calendar bot: no project found → try to auto-create from calendar event ─
+    if (!project) {
+      let resolvedProject = await resolveCalendarBotProject(botId);
+      if (!resolvedProject) {
+        return res.status(200).json({ ok: true, error: "project not found for bot " + botId });
+      }
+      // Continue processing with the resolved/created project
+      Object.assign(event, {}); // keep flow going
+      const botProject = resolvedProject;
+
+      if (transcriptionTriggerEvents.includes(eventName)) {
+        let recordingId = recordingIdFromEvent;
+        if (!recordingId) {
+          const botRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/`, { headers: { "Authorization": `Token ${RECALL_KEY}` } });
+          if (botRes.ok) {
+            const botData = await botRes.json();
+            recordingId = (botData.recordings && botData.recordings[0] && botData.recordings[0].id) || (botData.recording && botData.recording.id);
+          }
+        }
+        if (recordingId) {
+          const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/create_transcript/`;
+          const asyncRes = await fetch(asyncUrl, {
+            method: "POST",
+            headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ provider: { recallai_async: { language_code: "en" } } }),
+          });
+          console.log("Calendar bot async transcription trigger:", asyncRes.status);
+          await supabase.from("projects").update({ recall_status: "transcribing", updated_at: new Date().toISOString() }).eq("id", botProject.id);
+        }
+        return res.status(200).json({ ok: true, calendarBot: true });
+      }
+
+      if (eventName === "transcript.done" && transcriptId) {
+        const text = await downloadAndParseTranscript(transcriptId);
+        await supabase.from("projects").update({
+          recall_status: text.trim() ? "transcript_ready" : "empty_transcript",
+          recall_transcript: text || null,
+          updated_at: new Date().toISOString(),
+        }).eq("id", botProject.id);
+        if (text.trim()) await generateBrief(botProject.id, text);
+      }
+
+      return res.status(200).json({ ok: true, calendarBot: true });
+    }
 
     // ── recording.done → trigger async transcription ─────────────────────────
     if (transcriptionTriggerEvents.includes(eventName)) {
@@ -269,6 +313,65 @@ async function downloadAndParseTranscript(transcriptId) {
     return dlRaw;
   }
   return "";
+}
+
+async function resolveCalendarBotProject(botId) {
+  try {
+    // Fetch bot details from Recall.ai to get calendar metadata
+    const botRes = await fetch(
+      `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/`,
+      { headers: { "Authorization": `Token ${RECALL_KEY}` } }
+    );
+    if (!botRes.ok) { console.error("resolveCalendarBotProject: bot fetch failed:", botRes.status); return null; }
+
+    const botData = await botRes.json();
+    const calendarMeetingId = botData.calendar_meetings?.[0]?.id || botData.calendar_meeting?.id || null;
+    const meetingTitle = botData.calendar_meetings?.[0]?.raw?.summary || botData.meeting_metadata?.title || "Calendar Meeting";
+    console.log("resolveCalendarBotProject — calendarMeetingId:", calendarMeetingId, "title:", meetingTitle);
+
+    // Find the user who owns this calendar by checking recall_calendar_id in user_settings
+    const calendarId = botData.calendar_meetings?.[0]?.calendar_id || botData.calendar_id || null;
+    if (!calendarId) { console.error("resolveCalendarBotProject: no calendar_id on bot"); return null; }
+
+    const { data: settings } = await supabase
+      .from("user_settings")
+      .select("id, meeting_project_links")
+      .eq("recall_calendar_id", calendarId)
+      .single();
+
+    if (!settings) { console.error("resolveCalendarBotProject: no user found for calendar:", calendarId); return null; }
+
+    const userId = settings.id;
+
+    // Check if this meeting is already linked to a project
+    const linkedProjectId = calendarMeetingId ? settings.meeting_project_links?.[calendarMeetingId] : null;
+    if (linkedProjectId) {
+      const { data: linked } = await supabase.from("projects").select("*").eq("id", linkedProjectId).single();
+      if (linked) {
+        // Update bot id on the existing project
+        await supabase.from("projects").update({ recall_bot_id: botId, recall_status: "bot_joined", updated_at: new Date().toISOString() }).eq("id", linkedProjectId);
+        console.log("resolveCalendarBotProject: linked to existing project:", linkedProjectId);
+        return { ...linked, recall_bot_id: botId };
+      }
+    }
+
+    // No existing project — create one automatically
+    const { data: newProject, error: createErr } = await supabase.from("projects").insert({
+      user_id: userId,
+      title: meetingTitle,
+      status: "Draft",
+      brief: {},
+      recall_bot_id: botId,
+      recall_status: "bot_joined",
+    }).select().single();
+
+    if (createErr) { console.error("resolveCalendarBotProject: project create failed:", createErr.message); return null; }
+    console.log("resolveCalendarBotProject: auto-created project:", newProject.id, "for user:", userId);
+    return newProject;
+  } catch (err) {
+    console.error("resolveCalendarBotProject error:", err.message);
+    return null;
+  }
 }
 
 async function generateBrief(projectId, transcriptText) {

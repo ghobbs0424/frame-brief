@@ -4,6 +4,8 @@
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "functions": {
-    "api/recall-webhook.js": { "maxDuration": 60 }
+    "api/recall-webhook.js": { "maxDuration": 60 },
+    "api/google-calendar-auth.js": { "maxDuration": 30 },
+    "api/auth/google-calendar/callback.js": { "maxDuration": 30 }
   }
 }
