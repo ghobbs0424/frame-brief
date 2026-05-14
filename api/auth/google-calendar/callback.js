@@ -65,6 +65,10 @@ export default async function handler(req, res) {
         refresh_token: tokens.refresh_token,
         client_id: process.env.GOOGLE_CLIENT_ID,
         client_secret: process.env.GOOGLE_CLIENT_SECRET,
+        notetaker_preferences: {
+          bot_name: "Frame Brief",
+          webhook_url: "https://framebriefai.com/api/recall-webhook",
+        },
       }),
     });
 

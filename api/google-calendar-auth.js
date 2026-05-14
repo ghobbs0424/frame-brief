@@ -82,12 +82,13 @@ export default async function handler(req, res) {
         meetingUrl: m.meeting_url || null,
         attendees: (m.attendees || []).map((a) => a.email || a.name || a),
         linkedProjectId: settings.meeting_project_links?.[m.id] || null,
+        botScheduled: !!(m.bot_id || m.notetaker_id || m.bot),
       }));
 
       return res.status(200).json({ meetings, connected: true });
     }
 
-    // ── Link a meeting to a project ──────────────────────────────────────────
+    // ── Link a meeting to a project + schedule Recall bot ───────────────────
     if (action === "link-meeting" && req.method === "POST") {
       const { userId: uid, meetingId, projectId } = req.body || {};
       if (!uid || !meetingId) return res.status(400).json({ error: "userId and meetingId required" });
@@ -101,6 +102,30 @@ export default async function handler(req, res) {
       const links = { ...(settings?.meeting_project_links || {}) };
       if (projectId) {
         links[meetingId] = projectId;
+
+        // Schedule a Recall.ai bot for this calendar meeting
+        const botRes = await fetch(
+          `https://${RECALL_REGION}.recall.ai/api/v1/calendar/meeting/${meetingId}/bot/`,
+          {
+            method: "POST",
+            headers: { Authorization: `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              bot_name: "Frame Brief",
+              webhook_url: "https://framebriefai.com/api/recall-webhook",
+            }),
+          }
+        );
+        const botData = await botRes.json();
+        console.log("Recall calendar bot scheduled — status:", botRes.status, "response:", JSON.stringify(botData).slice(0, 200));
+
+        // Save bot id on the project for tracking
+        if (botRes.ok && botData.id && projectId) {
+          await supabase.from("projects").update({
+            recall_bot_id: botData.id,
+            recall_status: "bot_scheduled",
+            updated_at: new Date().toISOString(),
+          }).eq("id", projectId);
+        }
       } else {
         delete links[meetingId];
       }
