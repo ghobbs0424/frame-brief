@@ -10,9 +10,12 @@ const supabase = createClient(
 
 const RECALL_KEY = process.env.RECALL_API_KEY;
 const RECALL_REGION = "us-west-2";
-const APP_URL = "https://framebriefai.com";
 
 export default async function handler(req, res) {
+  // Redirect back to whichever domain the user came from so their session stays intact
+  const host = req.headers.host || "framebriefai.com";
+  const APP_URL = `https://${host}`;
+
   const { code, state, error } = req.query;
 
   if (error) {
