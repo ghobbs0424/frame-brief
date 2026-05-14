@@ -1533,11 +1533,11 @@ function ClientProfile({clientId,clients,setClients,projects,onBack,onOpenProjec
             {(client.company||client.industry)&&<div style={{fontSize:14,color:"#9b9a97"}}>{[client.company,client.industry].filter(Boolean).join(" · ")}</div>}
           </div>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12,marginBottom:28}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(3, 1fr)",gap:12,marginBottom:28,minWidth:0}}>
           {[["Total Projects",clientProjects.length],["Last Activity",lastProject?lastProject.toLocaleDateString("en-US",{month:"short",year:"numeric"}):"—"],["Active Project",activeClientProject?activeClientProject.title:"—"]].map(([label,val])=>(
-            <div key={label} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"16px",background:"#fafaf9",textAlign:"center"}}>
-              <div style={{fontSize:typeof val==="number"?22:13,fontWeight:700,color:"#37352f",marginBottom:4,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{val}</div>
-              <div style={{fontSize:10,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</div>
+            <div key={label} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"12px 8px",background:"#fafaf9",textAlign:"center",minWidth:0,overflow:"hidden"}}>
+              <div style={{fontSize:typeof val==="number"?22:12,fontWeight:700,color:"#37352f",marginBottom:4,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{val}</div>
+              <div style={{fontSize:10,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:"0.06em",whiteSpace:"nowrap"}}>{label}</div>
             </div>
           ))}
         </div>
@@ -2065,7 +2065,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
           <div style={{fontSize:11,color:"#9b9a97",padding:"2px 10px",marginBottom:6,lineHeight:1.5}}>🤖 Auto-joining your meetings</div>
           <button onClick={handleDisconnectCalendar} className="nb" style={{color:"#9b9a97",fontSize:11}}><span>Disconnect</span></button>
         </div>)
-        :(<button onClick={handleConnectCalendar} className="nb" style={{marginBottom:4,background:"#e8f0fe",color:"#1a56c4",border:"none",borderRadius:6,padding:"9px 10px",width:"100%",display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:"'Lora',serif",fontSize:13}}><span style={{fontSize:15}}>📅</span><span>Connect Google Calendar</span></button>)
+        :(<button onClick={handleConnectCalendar} className="nb" style={{marginBottom:4,background:"#e8f0fe",color:"#1a56c4",border:"none",borderRadius:6,padding:"9px 10px",width:"100%",display:"flex",alignItems:"center",gap:8,cursor:"pointer",fontFamily:"'Lora',serif",fontSize:13}}><span style={{fontSize:15}}>📅</span><span>Connect Calendar</span></button>)
       }
       {calendarMsg&&<div style={{fontSize:11,padding:"4px 10px",marginTop:4,color:calendarMsg.startsWith("✓")?"#1e7e34":"#c0392b",lineHeight:1.4}}>{calendarMsg}</div>}
       <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Account</div>
