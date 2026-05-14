@@ -51,9 +51,9 @@ class ErrorBoundary extends React.Component {
         <p style={{ fontSize:14, color:"#9b9a97", maxWidth:400, textAlign:"center", lineHeight:1.7 }}>
           {this.state.error?.message || "An unexpected error occurred."}
         </p>
-        <button onClick={() => { localStorage.clear(); this.setState({ error: null }); window.location.reload(); }}
+        <button onClick={() => { this.setState({ error: null }); window.location.reload(); }}
           style={{ background:"#37352f", color:"#fff", border:"none", padding:"10px 24px", borderRadius:6, fontSize:14, cursor:"pointer", fontFamily:"inherit" }}>
-          Clear data &amp; reload
+          Reload
         </button>
         <button onClick={() => this.setState({ error: null })}
           style={{ background:"transparent", color:"#9b9a97", border:"1px solid #e8e4dc", padding:"10px 24px", borderRadius:6, fontSize:14, cursor:"pointer", fontFamily:"inherit" }}>
@@ -537,26 +537,14 @@ ${JSON.stringify(brief)}`;
 
 // ─── IDEA CAPTURE MAIN ────────────────────────────────────────────────────────
 function IdeaCapture({ user, onBack }) {
-  const storageKey = `framebrief_ideas_${user?.id}`;
-  const wsKey = `framebrief_workspaces_${user?.id}`;
-
-  const [workspaces, setWorkspaces] = useState(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(wsKey));
-      return Array.isArray(parsed) ? parsed : DEFAULT_WORKSPACES;
-    } catch { return DEFAULT_WORKSPACES; }
-  });
-  const [activeWs, setActiveWs] = useState(() => workspaces[0]?.id || "personal");
-  const [ideas, setIdeas] = useState(() => {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(storageKey) || "{}");
-      return (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : {};
-    } catch { return {}; }
-  });
+  const [workspaces, setWorkspaces] = useState(DEFAULT_WORKSPACES);
+  const [activeWs, setActiveWs] = useState("personal");
+  const [ideas, setIdeas] = useState({});
+  const [loadingData, setLoadingData] = useState(true);
   const [openIdea, setOpenIdea] = useState(null);
   const [input, setInput] = useState("");
   const [interimText, setInterimText] = useState("");
-  const [generating, setGenerating] = useState(null); // id of idea being generated
+  const [generating, setGenerating] = useState(null);
   const [creatingWs, setCreatingWs] = useState(false);
   const [newWsName, setNewWsName] = useState("");
   const [newWsEmoji, setNewWsEmoji] = useState("💡");
@@ -564,15 +552,52 @@ function IdeaCapture({ user, onBack }) {
   const [editingWsId, setEditingWsId] = useState(null);
   const [editingWsName, setEditingWsName] = useState("");
   const [wsMenuOpen, setWsMenuOpen] = useState(null);
+  const [ideaSidebarOpen, setIdeaSidebarOpen] = useState(true);
 
-  function saveWorkspaces(updated) {
-    setWorkspaces(updated);
-    try { localStorage.setItem(wsKey, JSON.stringify(updated)); } catch {}
+  useEffect(() => { loadData(); }, []);
+
+  async function loadData() {
+    setLoadingData(true);
+    // Load workspaces from Supabase
+    const { data: wsData } = await supabase.from("idea_workspaces").select("*").eq("user_id", user.id).order("sort_order");
+    let loadedWs;
+    if (wsData && wsData.length > 0) {
+      loadedWs = wsData.map(w => ({ id: w.id, name: w.name, emoji: w.emoji }));
+    } else {
+      // First time: check localStorage for migration
+      const lsWsKey = `framebrief_workspaces_${user?.id}`;
+      const lsIdeasKey = `framebrief_ideas_${user?.id}`;
+      try { const p = JSON.parse(localStorage.getItem(lsWsKey)); loadedWs = Array.isArray(p) ? p : DEFAULT_WORKSPACES; } catch { loadedWs = DEFAULT_WORKSPACES; }
+      // Save workspaces to Supabase
+      await supabase.from("idea_workspaces").upsert(loadedWs.map((w, i) => ({ id: w.id, user_id: user.id, name: w.name, emoji: w.emoji, sort_order: i })));
+      // Migrate ideas from localStorage
+      try {
+        const lsIdeas = JSON.parse(localStorage.getItem(lsIdeasKey) || "{}");
+        if (lsIdeas && typeof lsIdeas === "object" && !Array.isArray(lsIdeas)) {
+          const rows = [];
+          Object.entries(lsIdeas).forEach(([wsId, list]) => {
+            (list || []).forEach(idea => rows.push({ id: idea.id, user_id: user.id, workspace_id: wsId, raw_text: idea.rawText || "", brief: idea.brief || null, created_at: idea.createdAt || new Date().toISOString(), updated_at: new Date().toISOString() }));
+          });
+          if (rows.length > 0) await supabase.from("ideas").upsert(rows);
+        }
+      } catch {}
+    }
+    setWorkspaces(loadedWs);
+    setActiveWs(loadedWs[0]?.id || "personal");
+    // Load all ideas
+    const { data: ideasData } = await supabase.from("ideas").select("*").eq("user_id", user.id).order("created_at", { ascending: false });
+    const map = {};
+    (ideasData || []).forEach(row => {
+      if (!map[row.workspace_id]) map[row.workspace_id] = [];
+      map[row.workspace_id].push({ id: row.id, rawText: row.raw_text, brief: row.brief, createdAt: row.created_at });
+    });
+    setIdeas(map);
+    setLoadingData(false);
   }
 
-  function saveIdeas(updated) {
-    setIdeas(updated);
-    try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch {}
+  async function saveWorkspaces(updated) {
+    setWorkspaces(updated);
+    await supabase.from("idea_workspaces").upsert(updated.map((w, i) => ({ id: w.id, user_id: user.id, name: w.name, emoji: w.emoji, sort_order: i })));
   }
 
   function createWorkspace() {
@@ -588,11 +613,13 @@ function IdeaCapture({ user, onBack }) {
     setEditingWsId(null);
   }
 
-  function deleteWorkspace(id) {
+  async function deleteWorkspace(id) {
     if (!window.confirm("Delete this workspace and all its ideas?")) return;
     const updated = (workspaces||[]).filter(w => w.id !== id);
     saveWorkspaces(updated);
-    const newIdeas = { ...ideas }; delete newIdeas[id]; saveIdeas(newIdeas);
+    await supabase.from("ideas").delete().eq("workspace_id", id).eq("user_id", user.id);
+    await supabase.from("idea_workspaces").delete().eq("id", id).eq("user_id", user.id);
+    const newIdeas = { ...ideas }; delete newIdeas[id]; setIdeas(newIdeas);
     if (activeWs === id) setActiveWs(updated[0]?.id || "");
     setWsMenuOpen(null);
   }
@@ -601,19 +628,20 @@ function IdeaCapture({ user, onBack }) {
     const text = (input + interimText).trim();
     if (!text) return;
     const id = `idea-${Date.now()}`;
-    const newIdea = { id, rawText: text, brief: null, createdAt: new Date().toISOString() };
+    const now = new Date().toISOString();
+    const newIdea = { id, rawText: text, brief: null, createdAt: now };
     const wsIdeas = [newIdea, ...(ideas[activeWs] || [])];
-    saveIdeas({ ...ideas, [activeWs]: wsIdeas });
+    setIdeas(prev => ({ ...prev, [activeWs]: wsIdeas }));
     setInput(""); setInterimText("");
-    // Generate brief for this idea
+    // Persist to Supabase immediately (briefless)
+    await supabase.from("ideas").insert({ id, user_id: user.id, workspace_id: activeWs, raw_text: text, brief: null, created_at: now, updated_at: now });
+    // Generate brief
     setGenerating(id);
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true", "x-api-key": API_KEY, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: MODEL, max_tokens: 3000, system: IDEA_SYSTEM, messages: [{ role: "user", content: `Generate a creative brief for this idea:
-
-${text}` }] })
+        body: JSON.stringify({ model: MODEL, max_tokens: 3000, system: IDEA_SYSTEM, messages: [{ role: "user", content: `Generate a creative brief for this idea:\n\n${text}` }] })
       });
       const data = await res.json();
       const raw = (data.content || []).map(b => b.text || "").join("").trim();
@@ -623,7 +651,6 @@ ${text}` }] })
       else { const s = raw.indexOf("{"), e = raw.lastIndexOf("}"); if (s !== -1 && e !== -1) jsonStr = raw.slice(s, e + 1); }
       jsonStr = jsonStr.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
       const rawBrief = JSON.parse(jsonStr);
-      // Ensure all array fields are actually arrays (AI sometimes returns null)
       const brief = {
         ...rawBrief,
         outline: Array.isArray(rawBrief.outline) ? rawBrief.outline : [],
@@ -634,8 +661,8 @@ ${text}` }] })
         toDoList: Array.isArray(rawBrief.toDoList) ? rawBrief.toDoList : [],
         tags: Array.isArray(rawBrief.tags) ? rawBrief.tags : [],
       };
-      const updated = { ...ideas, [activeWs]: wsIdeas.map(idea => idea.id === id ? { ...idea, brief } : idea) };
-      saveIdeas(updated);
+      setIdeas(prev => ({ ...prev, [activeWs]: (prev[activeWs] || []).map(i => i.id === id ? { ...i, brief } : i) }));
+      await supabase.from("ideas").update({ brief, updated_at: new Date().toISOString() }).eq("id", id);
     } catch (e) {
       console.error("Brief generation failed:", e);
     }
@@ -643,18 +670,23 @@ ${text}` }] })
   }
 
   function updateIdea(updated) {
-    const wsIdeas = (ideas[activeWs] || []).map(i => i.id === updated.id ? updated : i);
-    saveIdeas({ ...ideas, [activeWs]: wsIdeas });
+    setIdeas(prev => {
+      const wsId = Object.keys(prev).find(k => (prev[k] || []).some(i => i.id === updated.id)) || activeWs;
+      return { ...prev, [wsId]: (prev[wsId] || []).map(i => i.id === updated.id ? updated : i) };
+    });
+    clearTimeout(window._ideaSaveTimer);
+    window._ideaSaveTimer = setTimeout(() => {
+      supabase.from("ideas").update({ brief: updated.brief, updated_at: new Date().toISOString() }).eq("id", updated.id);
+    }, 1500);
   }
 
-  function deleteIdea(id) {
-    saveIdeas({ ...ideas, [activeWs]: (ideas[activeWs] || []).filter(i => i.id !== id) });
+  async function deleteIdea(id) {
+    setIdeas(prev => ({ ...prev, [activeWs]: (prev[activeWs] || []).filter(i => i.id !== id) }));
+    await supabase.from("ideas").delete().eq("id", id);
   }
 
   const ws = workspaces.find(w => w.id === activeWs);
   const wsIdeas = ideas[activeWs] || [];
-
-  const [ideaSidebarOpen, setIdeaSidebarOpen] = useState(true);
 
   // If viewing an idea, show full page
   if (openIdea) {
@@ -663,6 +695,13 @@ ${text}` }] })
       <IdeaPage idea={ideaData} onBack={() => setOpenIdea(null)} onUpdate={updateIdea} user={user} />
     );
   }
+
+  if (loadingData) return (
+    <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 14 }}>
+      <div className="spin" style={{ width: 28, height: 28, border: "3px solid #e8e4dc", borderTop: "3px solid #37352f", borderRadius: "50%" }} />
+      <span style={{ fontSize: 13, color: "#9b9a97", fontFamily: "'Lora',serif" }}>Loading your ideas…</span>
+    </div>
+  );
 
   // Sidebar content shared between desktop + mobile drawer
   function WorkspaceSidebarContent() {
