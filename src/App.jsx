@@ -2265,10 +2265,26 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
 
   useEffect(()=>{
     const params=new URLSearchParams(window.location.search);
-    if(params.get("calendar_connected")==="1"){setCalendarMsg("✓ Google Calendar connected!");window.history.replaceState({},"",window.location.pathname);}
+    const calConnected=params.get("calendar_connected")==="1";
     const calErr=params.get("calendar_error");
-    if(calErr){setCalendarMsg("⚠ "+decodeURIComponent(calErr));window.history.replaceState({},"",window.location.pathname);}
-    if(user?.id)loadCalendarSettings();
+    if(calConnected||calErr)window.history.replaceState({},"",window.location.pathname);
+    if(calErr){setCalendarMsg("⚠ "+decodeURIComponent(calErr));}
+    if(user?.id){
+      if(calConnected){
+        // OAuth just completed — fetch recall_calendar_id from Recall.ai and save it
+        setCalendarMsg("✓ Google Calendar connected! Setting up auto-join…");
+        fetch("/api/google-calendar-auth?action=reconnect-recall",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:user.id})})
+          .then(r=>r.json())
+          .then(d=>{
+            if(d.ok){setCalendarMsg("✓ Google Calendar connected — bot will auto-join your meetings!");}
+            else{setCalendarMsg("⚠ Calendar connected but setup incomplete. Try the Meetings tab to retry.");}
+          })
+          .catch(()=>setCalendarMsg("⚠ Calendar connected but setup incomplete."))
+          .finally(()=>loadCalendarSettings());
+      } else {
+        loadCalendarSettings();
+      }
+    }
   },[user?.id]);
 
   async function loadCalendarSettings(){

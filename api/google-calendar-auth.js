@@ -25,16 +25,56 @@ export default async function handler(req, res) {
     if (action === "oauth-url") {
       if (!userId) return res.status(400).json({ error: "userId required" });
 
-      // Encode both userId and the originating domain so callback can redirect back correctly
       const referer = req.headers.referer || req.headers.origin || "";
       let origin = "https://framebriefai.com";
       try { if (referer) origin = new URL(referer).origin; } catch {}
-      const state = Buffer.from(JSON.stringify({ userId, origin })).toString("base64");
+
+      // Step 1: Get a Recall.ai calendar auth token scoped to this user
+      const recallAuthRes = await fetch(
+        `https://${RECALL_REGION}.recall.ai/api/v1/calendar/authenticate/`,
+        {
+          method: "POST",
+          headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: userId }),
+        }
+      );
+      const recallAuthRaw = await recallAuthRes.text();
+      console.log("Recall authenticate status:", recallAuthRes.status, "response:", recallAuthRaw.slice(0, 300));
+      let recallCalendarAuthToken = null;
+      try {
+        const d = JSON.parse(recallAuthRaw);
+        recallCalendarAuthToken = d.token || d.recall_calendar_auth_token || d.access_token || null;
+      } catch {
+        console.error("Recall authenticate response not JSON:", recallAuthRaw.slice(0, 200));
+        return res.status(500).json({ error: "Failed to initialize calendar connection with Recall.ai" });
+      }
+      if (!recallCalendarAuthToken) {
+        return res.status(500).json({ error: "Recall.ai did not return auth token", raw: recallAuthRaw.slice(0, 200) });
+      }
+
+      // Step 2: Build Google OAuth URL.
+      // Our callback acts as a proxy — it forwards the code to Recall.ai's callback.
+      // google_oauth_redirect_url = our registered callback URL (Recall.ai uses it in token exchange)
+      const ourCallback = process.env.GOOGLE_REDIRECT_URI;
+      const successUrl = `${origin}?calendar_connected=1&userId=${encodeURIComponent(userId)}`;
+      const errorUrl = `${origin}?calendar_error=oauth_failed`;
+
+      // State must be plain JSON.stringify (not base64) — Recall.ai parses it directly
+      const state = JSON.stringify({
+        recall_calendar_auth_token: recallCalendarAuthToken,
+        google_oauth_redirect_url: ourCallback,
+        success_url: successUrl,
+        error_url: errorUrl,
+      });
+
       const params = new URLSearchParams({
         client_id: process.env.GOOGLE_CLIENT_ID,
-        redirect_uri: process.env.GOOGLE_REDIRECT_URI,
+        redirect_uri: ourCallback,
         response_type: "code",
-        scope: "https://www.googleapis.com/auth/calendar.readonly",
+        scope: [
+          "https://www.googleapis.com/auth/calendar.events.readonly",
+          "https://www.googleapis.com/auth/userinfo.email",
+        ].join(" "),
         access_type: "offline",
         prompt: "consent",
         state,
@@ -141,53 +181,47 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
-    // ── Reconnect Recall.ai using stored Google tokens (no re-auth needed) ────
+    // ── Fetch recall_calendar_id for a user after OAuth completes ────────────
     if (action === "reconnect-recall" && req.method === "POST") {
       const { userId: uid } = req.body || {};
       if (!uid) return res.status(400).json({ error: "userId required" });
 
-      const { data: settings } = await supabase
-        .from("user_settings")
-        .select("google_access_token, google_refresh_token")
-        .eq("id", uid)
-        .single();
-
-      if (!settings?.google_access_token) {
-        return res.status(400).json({ error: "no_tokens", message: "No stored Google tokens — please reconnect Google Calendar" });
+      // Get a Recall.ai calendar auth token scoped to this user
+      const authRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/calendar/authenticate/`, {
+        method: "POST",
+        headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: uid }),
+      });
+      const authRaw = await authRes.text();
+      console.log("reconnect-recall authenticate status:", authRes.status, "response:", authRaw.slice(0, 300));
+      let calAuthToken = null;
+      try {
+        const d = JSON.parse(authRaw);
+        calAuthToken = d.token || d.recall_calendar_auth_token || d.access_token || null;
+      } catch {
+        return res.status(500).json({ error: "recall_auth_failed", raw: authRaw.slice(0, 200) });
+      }
+      if (!calAuthToken) {
+        return res.status(500).json({ error: "no_auth_token", raw: authRaw.slice(0, 200) });
       }
 
-      const recallRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/calendar/google-oauth/`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Token ${RECALL_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          access_token: settings.google_access_token,
-          refresh_token: settings.google_refresh_token,
-          client_id: process.env.GOOGLE_CLIENT_ID,
-          client_secret: process.env.GOOGLE_CLIENT_SECRET,
-          notetaker_preferences: {
-            bot_name: "Frame Brief",
-            webhook_url: "https://framebriefai.com/api/recall-webhook",
-          },
-        }),
+      // List calendars for this user using the scoped token
+      const calRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/calendar/`, {
+        headers: { "Authorization": `Token ${calAuthToken}` },
       });
-
-      const recallRaw = await recallRes.text();
-      console.log("Recall reconnect status:", recallRes.status, "response:", recallRaw.slice(0, 500));
-
+      const calRaw = await calRes.text();
+      console.log("reconnect-recall calendar list status:", calRes.status, "response:", calRaw.slice(0, 300));
       let recallCalendarId = null;
       try {
-        const recallData = JSON.parse(recallRaw);
-        recallCalendarId = recallData.id || recallData.calendar_id || null;
+        const calData = JSON.parse(calRaw);
+        const calendars = calData.results || (Array.isArray(calData) ? calData : []);
+        recallCalendarId = calendars[0]?.id || null;
       } catch {
-        console.error("Recall reconnect response not JSON:", recallRaw.slice(0, 200));
-        return res.status(500).json({ error: "recall_error", status: recallRes.status, raw: recallRaw.slice(0, 200) });
+        return res.status(500).json({ error: "calendar_list_failed", status: calRes.status, raw: calRaw.slice(0, 200) });
       }
 
       if (!recallCalendarId) {
-        return res.status(500).json({ error: "no_calendar_id", status: recallRes.status, raw: recallRaw.slice(0, 200) });
+        return res.status(200).json({ ok: false, message: "No calendar found on Recall.ai — please reconnect Google Calendar" });
       }
 
       const { error: dbErr } = await supabase.from("user_settings").upsert({
@@ -195,9 +229,8 @@ export default async function handler(req, res) {
         recall_calendar_id: recallCalendarId,
         updated_at: new Date().toISOString(),
       });
-
       if (dbErr) return res.status(500).json({ error: dbErr.message });
-      console.log("Recall reconnected for user:", uid, "calendar_id:", recallCalendarId);
+      console.log("reconnect-recall: saved calendar_id:", recallCalendarId, "for user:", uid);
       return res.status(200).json({ ok: true, recall_calendar_id: recallCalendarId });
     }
 
