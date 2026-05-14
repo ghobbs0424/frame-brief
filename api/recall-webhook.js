@@ -169,6 +169,11 @@ export default async function handler(req, res) {
               bot_config: {
                 bot_name: "Frame Brief",
                 webhook_url: "https://framebriefai.com/api/recall-webhook",
+                metadata: {
+                  calendar_event_id: evt.id,
+                  user_id: settings.id,
+                  event_title: evt.raw?.summary || "Calendar Meeting",
+                },
               },
             }),
           }
@@ -389,7 +394,7 @@ async function downloadAndParseTranscript(transcriptId) {
 
 async function resolveCalendarBotProject(botId) {
   try {
-    // Fetch bot details from Recall.ai to get calendar metadata
+    // Fetch bot details from Recall.ai to get metadata
     const botRes = await fetch(
       `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/`,
       { headers: { "Authorization": `Token ${RECALL_KEY}` } }
@@ -397,23 +402,32 @@ async function resolveCalendarBotProject(botId) {
     if (!botRes.ok) { console.error("resolveCalendarBotProject: bot fetch failed:", botRes.status); return null; }
 
     const botData = await botRes.json();
-    const calendarMeetingId = botData.calendar_meetings?.[0]?.id || botData.calendar_meeting?.id || null;
-    const meetingTitle = botData.calendar_meetings?.[0]?.raw?.summary || botData.meeting_metadata?.title || "Calendar Meeting";
-    console.log("resolveCalendarBotProject — calendarMeetingId:", calendarMeetingId, "title:", meetingTitle);
+    console.log("resolveCalendarBotProject — metadata:", botData.metadata, "calendar_meetings:", botData.calendar_meetings?.length);
 
-    // Find the user who owns this calendar by checking recall_calendar_id in user_settings
-    const calendarId = botData.calendar_meetings?.[0]?.calendar_id || botData.calendar_id || null;
-    if (!calendarId) { console.error("resolveCalendarBotProject: no calendar_id on bot"); return null; }
+    // Primary: use metadata injected when bot was created
+    let userId = botData.metadata?.user_id || null;
+    let calendarMeetingId = botData.metadata?.calendar_event_id || null;
+    let meetingTitle = botData.metadata?.event_title || null;
 
+    // Fallback: use calendar_meetings array (older bots without metadata)
+    if (!userId) {
+      const calendarId = botData.calendar_meetings?.[0]?.calendar_id || null;
+      if (!calendarId) { console.error("resolveCalendarBotProject: no user_id in metadata and no calendar_id on bot"); return null; }
+      const { data: settings } = await supabase
+        .from("user_settings").select("id, meeting_project_links").eq("recall_calendar_id", calendarId).single();
+      if (!settings) { console.error("resolveCalendarBotProject: no user found for calendar:", calendarId); return null; }
+      userId = settings.id;
+      calendarMeetingId = botData.calendar_meetings?.[0]?.id || null;
+      meetingTitle = botData.calendar_meetings?.[0]?.raw?.summary || null;
+    }
+
+    meetingTitle = meetingTitle || "Calendar Meeting";
+    console.log("resolveCalendarBotProject — userId:", userId, "calendarMeetingId:", calendarMeetingId, "title:", meetingTitle);
+
+    // Reload settings to get meeting_project_links
     const { data: settings } = await supabase
-      .from("user_settings")
-      .select("id, meeting_project_links")
-      .eq("recall_calendar_id", calendarId)
-      .single();
-
-    if (!settings) { console.error("resolveCalendarBotProject: no user found for calendar:", calendarId); return null; }
-
-    const userId = settings.id;
+      .from("user_settings").select("id, meeting_project_links").eq("id", userId).single();
+    if (!settings) { console.error("resolveCalendarBotProject: settings not found for user:", userId); return null; }
 
     // Check if this meeting is already linked to a project
     const linkedProjectId = calendarMeetingId ? settings.meeting_project_links?.[calendarMeetingId] : null;

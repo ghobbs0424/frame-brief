@@ -101,7 +101,7 @@ export default async function handler(req, res) {
 
       // Auto-schedule bots for meetings that don't have one yet
       for (const m of rawEvents) {
-        const hasBot = !!(m.bot || m.bot_id || m.scheduled_bot);
+        const hasBot = (m.bots?.length > 0) || !!(m.bot || m.bot_id || m.scheduled_bot);
         const hasMeetingUrl = !!(m.meeting_url);
         if (!hasBot && hasMeetingUrl) {
           const botRes = await fetch(
@@ -114,13 +114,18 @@ export default async function handler(req, res) {
                 bot_config: {
                   bot_name: "Frame Brief",
                   webhook_url: "https://framebriefai.com/api/recall-webhook",
+                  metadata: {
+                    calendar_event_id: m.id,
+                    user_id: userId,
+                    event_title: m.raw?.summary || "Calendar Meeting",
+                  },
                 },
               }),
             }
           );
           const botRaw = await botRes.text();
           console.log("Auto-scheduled bot for event:", m.id, "status:", botRes.status, "response:", botRaw.slice(0, 200));
-          try { if (botRes.ok) m.bot = JSON.parse(botRaw); } catch {}
+          try { if (botRes.ok) m._scheduledBot = JSON.parse(botRaw); } catch {}
         }
       }
 
@@ -128,13 +133,13 @@ export default async function handler(req, res) {
         .filter((m) => !!m.meeting_url)
         .map((m) => ({
           id: m.id,
-          title: m.summary || m.title || "Untitled Meeting",
+          title: m.raw?.summary || m.summary || m.title || "Untitled Meeting",
           startTime: m.start_time,
           endTime: m.end_time,
           meetingUrl: m.meeting_url,
-          attendees: (m.attendees || []).map((a) => a.email || a.name || a),
+          attendees: (m.raw?.attendees || m.attendees || []).map((a) => a.email || a.name || a),
           linkedProjectId: settings.meeting_project_links?.[m.id] || null,
-          botScheduled: !!(m.bot || m.bot_id || m.scheduled_bot),
+          botScheduled: (m.bots?.length > 0) || !!(m._scheduledBot || m.bot || m.bot_id || m.scheduled_bot),
         }));
 
       return res.status(200).json({ meetings, connected: true });
