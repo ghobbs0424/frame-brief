@@ -2005,14 +2005,31 @@ function MeetingsScreen({user,projects,onBack}){
   const[calendarConnected,setCalendarConnected]=useState(false);
   const[linking,setLinking]=useState(null);
   const[connecting,setConnecting]=useState(false);
+  const[reconnecting,setReconnecting]=useState(false);
+  const[reconnectError,setReconnectError]=useState("");
 
   useEffect(()=>{loadData();},[]);
 
   async function loadData(){
     setLoading(true);
-    const{data}=await supabase.from("user_settings").select("calendar_connected").eq("id",user.id).single();
-    setCalendarConnected(!!data?.calendar_connected);
-    if(data?.calendar_connected){
+    setReconnectError("");
+    const{data}=await supabase.from("user_settings").select("calendar_connected,recall_calendar_id").eq("id",user.id).single();
+    const connected=!!data?.calendar_connected;
+    setCalendarConnected(connected);
+    if(connected){
+      // recall_calendar_id missing means Recall.ai connection failed during OAuth — auto-fix silently
+      if(!data?.recall_calendar_id){
+        setReconnecting(true);
+        try{
+          const rr=await fetch("/api/google-calendar-auth?action=reconnect-recall",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:user.id})});
+          const rd=await rr.json();
+          if(!rr.ok||rd.error){
+            setReconnectError(rd.message||rd.raw||"Could not connect to Recall.ai — try disconnecting and reconnecting your calendar.");
+            setLoading(false);setReconnecting(false);return;
+          }
+        }catch(e){setReconnectError("Network error reconnecting to Recall.ai.");setLoading(false);setReconnecting(false);return;}
+        setReconnecting(false);
+      }
       try{const res=await fetch(`/api/google-calendar-auth?action=upcoming-meetings&userId=${user.id}`);const d=await res.json();setMeetings(d.meetings||[]);}
       catch(e){console.error(e);}
     }
@@ -2052,6 +2069,18 @@ function MeetingsScreen({user,projects,onBack}){
               {connecting?"Connecting…":"Connect Google Calendar"}
             </button>
             <div style={{fontSize:12,color:"#c4c3bf",lineHeight:1.7}}>Read-only access · No emails sent · Disconnect anytime</div>
+          </div>
+        ):reconnecting?(
+          <div style={{textAlign:"center",padding:"60px 20px",color:"#9b9a97",fontSize:14,fontStyle:"italic"}}>
+            <div style={{fontSize:32,marginBottom:12}}>🔄</div>
+            Finishing calendar setup…
+          </div>
+        ):reconnectError?(
+          <div style={{textAlign:"center",padding:"60px 20px",maxWidth:480,margin:"0 auto"}}>
+            <div style={{fontSize:40,marginBottom:12}}>⚠️</div>
+            <p style={{fontSize:15,fontWeight:700,color:"#37352f",marginBottom:8}}>Calendar sync issue</p>
+            <p style={{fontSize:13,color:"#9b9a97",marginBottom:20,lineHeight:1.7}}>{reconnectError}</p>
+            <button onClick={handleConnect} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 24px",borderRadius:8,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>Reconnect Google Calendar</button>
           </div>
         ):loading?(
           <div style={{textAlign:"center",padding:"60px 20px",color:"#9b9a97",fontSize:14,fontStyle:"italic"}}>Loading meetings…</div>

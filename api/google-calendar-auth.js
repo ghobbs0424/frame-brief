@@ -141,6 +141,66 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true });
     }
 
+    // ── Reconnect Recall.ai using stored Google tokens (no re-auth needed) ────
+    if (action === "reconnect-recall" && req.method === "POST") {
+      const { userId: uid } = req.body || {};
+      if (!uid) return res.status(400).json({ error: "userId required" });
+
+      const { data: settings } = await supabase
+        .from("user_settings")
+        .select("google_access_token, google_refresh_token")
+        .eq("id", uid)
+        .single();
+
+      if (!settings?.google_access_token) {
+        return res.status(400).json({ error: "no_tokens", message: "No stored Google tokens — please reconnect Google Calendar" });
+      }
+
+      const recallRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/calendar/google-oauth/`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Token ${RECALL_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          access_token: settings.google_access_token,
+          refresh_token: settings.google_refresh_token,
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          notetaker_preferences: {
+            bot_name: "Frame Brief",
+            webhook_url: "https://framebriefai.com/api/recall-webhook",
+          },
+        }),
+      });
+
+      const recallRaw = await recallRes.text();
+      console.log("Recall reconnect status:", recallRes.status, "response:", recallRaw.slice(0, 500));
+
+      let recallCalendarId = null;
+      try {
+        const recallData = JSON.parse(recallRaw);
+        recallCalendarId = recallData.id || recallData.calendar_id || null;
+      } catch {
+        console.error("Recall reconnect response not JSON:", recallRaw.slice(0, 200));
+        return res.status(500).json({ error: "recall_error", status: recallRes.status, raw: recallRaw.slice(0, 200) });
+      }
+
+      if (!recallCalendarId) {
+        return res.status(500).json({ error: "no_calendar_id", status: recallRes.status, raw: recallRaw.slice(0, 200) });
+      }
+
+      const { error: dbErr } = await supabase.from("user_settings").upsert({
+        id: uid,
+        recall_calendar_id: recallCalendarId,
+        updated_at: new Date().toISOString(),
+      });
+
+      if (dbErr) return res.status(500).json({ error: dbErr.message });
+      console.log("Recall reconnected for user:", uid, "calendar_id:", recallCalendarId);
+      return res.status(200).json({ ok: true, recall_calendar_id: recallCalendarId });
+    }
+
     // ── Disconnect Google Calendar ───────────────────────────────────────────
     if (action === "disconnect" && req.method === "POST") {
       const { userId: uid } = req.body || {};
