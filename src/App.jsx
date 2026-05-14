@@ -1706,39 +1706,39 @@ function SuggestedChangesModal({meeting,currentBrief,onApply,onDismiss}){
   function toggle(i){setSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i]);}
   return(
     <div style={{position:"fixed",inset:0,zIndex:400,display:"flex",justifyContent:"flex-end"}} onClick={onDismiss}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"min(520px,100vw)",background:"#fff",boxShadow:"-4px 0 24px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",overflowY:"hidden"}}>
+      <div onClick={e=>e.stopPropagation()} style={{width:"min(520px,100vw)",background:"#fff",boxShadow:"-4px 0 24px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #f1f0ef",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
             <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:sc.bg,color:sc.c,borderRadius:20,padding:"2px 10px",fontWeight:600,textTransform:"uppercase"}}>{meeting.stage?.replace("_"," ")} · {new Date(meeting.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
-            <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97",padding:4}}>✕</button>
+            <button onClick={onDismiss} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97",padding:4,flexShrink:0}}>✕</button>
           </div>
           <div style={{fontSize:18,fontWeight:700,color:"#37352f",marginBottom:4}}>Review Meeting Changes</div>
-          <div style={{fontSize:13,color:"#9b9a97",lineHeight:1.6}}>{meeting.summary}</div>
+          <div style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,overflowWrap:"break-word"}}>{meeting.summary}</div>
         </div>
         {arr(meeting.keyPoints).length>0&&(
           <div style={{padding:"12px 24px",borderBottom:"1px solid #f1f0ef",background:"#fafaf9",flexShrink:0}}>
             <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Key Points</div>
-            {arr(meeting.keyPoints).map((p,i)=><div key={i} style={{fontSize:12,color:"#37352f",lineHeight:1.7,display:"flex",gap:6}}><span style={{color:"#e97942",flexShrink:0}}>•</span><span>{p}</span></div>)}
+            {arr(meeting.keyPoints).map((p,i)=><div key={i} style={{fontSize:12,color:"#37352f",lineHeight:1.7,display:"flex",gap:6,overflowWrap:"break-word"}}><span style={{color:"#e97942",flexShrink:0}}>•</span><span>{p}</span></div>)}
           </div>
         )}
-        <div style={{flex:1,overflowY:"auto",padding:"16px 24px"}}>
+        <div style={{flex:1,overflowY:"auto",overflowX:"hidden",padding:"16px 24px"}}>
           <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:12}}>Suggested Changes ({changes.length})</div>
           {changes.length===0&&<div style={{fontSize:13,color:"#9b9a97",fontStyle:"italic"}}>No specific field changes suggested.</div>}
           {changes.map((c,i)=>{
             const checked=selected.includes(i);
             return(
-              <div key={i} onClick={()=>toggle(i)} style={{padding:"12px 14px",border:`1px solid ${checked?"#1a56c4":"#f1f0ef"}`,borderRadius:8,marginBottom:8,cursor:"pointer",background:checked?"#f0f5ff":"#fff",transition:"all .15s"}}>
-                <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+              <div key={i} onClick={()=>toggle(i)} style={{padding:"12px 14px",border:`1px solid ${checked?"#1a56c4":"#f1f0ef"}`,borderRadius:8,marginBottom:8,cursor:"pointer",background:checked?"#f0f5ff":"#fff",transition:"all .15s",minWidth:0}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:10,minWidth:0}}>
                   <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${checked?"#1a56c4":"#d4d2ce"}`,background:checked?"#1a56c4":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
                     {checked&&<span style={{color:"#fff",fontSize:11,lineHeight:1}}>✓</span>}
                   </div>
-                  <div style={{flex:1}}>
+                  <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:3}}>{c.field||"Update"}</div>
-                    <div style={{fontSize:13,color:"#37352f",lineHeight:1.6}}>{c.description}</div>
+                    <div style={{fontSize:13,color:"#37352f",lineHeight:1.6,overflowWrap:"break-word"}}>{c.description}</div>
                     {c.before&&c.after&&(
-                      <div style={{marginTop:8,display:"flex",gap:8}}>
-                        <div style={{flex:1,padding:"6px 10px",background:"#fff2f2",borderRadius:4,fontSize:11,color:"#c0392b",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={c.before}>– {c.before}</div>
-                        <div style={{flex:1,padding:"6px 10px",background:"#e6f4ea",borderRadius:4,fontSize:11,color:"#1e7e34",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={c.after}>+ {c.after}</div>
+                      <div style={{marginTop:8,display:"flex",gap:8,minWidth:0}}>
+                        <div style={{flex:1,minWidth:0,padding:"6px 10px",background:"#fff2f2",borderRadius:4,fontSize:11,color:"#c0392b",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={c.before}>– {c.before}</div>
+                        <div style={{flex:1,minWidth:0,padding:"6px 10px",background:"#e6f4ea",borderRadius:4,fontSize:11,color:"#1e7e34",lineHeight:1.5,fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={c.after}>+ {c.after}</div>
                       </div>
                     )}
                   </div>
