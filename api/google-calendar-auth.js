@@ -111,6 +111,8 @@ export default async function handler(req, res) {
               headers: { Authorization: `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
               body: JSON.stringify({
                 deduplication_key: `framebrief-${m.id}`,
+                // Join 2 minutes before start so bot is ready when participants arrive early
+                join_at: new Date(new Date(m.start_time).getTime() - 2 * 60 * 1000).toISOString(),
                 bot_config: {
                   bot_name: "Frame Brief",
                   webhook_url: "https://framebriefai.com/api/recall-webhook",
@@ -118,6 +120,9 @@ export default async function handler(req, res) {
                     calendar_event_id: m.id,
                     user_id: userId,
                     event_title: m.raw?.summary || "Calendar Meeting",
+                  },
+                  automatic_leave: {
+                    waiting_room_timeout: 3600, // wait up to 1 hour if host hasn't arrived yet
                   },
                 },
               }),
