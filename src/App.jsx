@@ -2114,19 +2114,19 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
                         {m.attendees?.length>0&&<div style={{fontSize:11,color:"#c4c3bf"}}>{m.attendees.slice(0,3).join(", ")}{m.attendees.length>3?` +${m.attendees.length-3} more`:""}</div>}
                       </div>
                       <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,flexWrap:"wrap",justifyContent:"flex-end"}}>
-                        {m.botScheduled
-                          ?<span style={{fontSize:11,background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"3px 10px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>🤖 Bot Scheduled</span>
-                          :<span style={{fontSize:11,background:"#fff8e1",color:"#b45309",borderRadius:20,padding:"3px 10px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>📋 Link to schedule bot</span>
-                        }
-                        <select
-                          value={m.linkedProjectId||""}
-                          onChange={e=>handleLinkMeeting(m.id,e.target.value||null)}
-                          disabled={meetingLinking===m.id}
-                          style={{border:"1px solid #c5d8fb",borderRadius:6,padding:"6px 10px",fontSize:12,fontFamily:"'Lora',serif",background:"#fff",outline:"none",color:"#37352f",cursor:"pointer",maxWidth:180}}
-                        >
-                          <option value="">{meetingLinking===m.id?"Scheduling…":"Link to project…"}</option>
-                          {projects.map(p=><option key={p.id} value={p.id}>{p.brief?.coverEmoji||"🎬"} {p.title||"Untitled"}</option>)}
-                        </select>
+                        <span style={{fontSize:11,background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"3px 10px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}>🤖 Auto-joining</span>
+                        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:2}}>
+                          <select
+                            value={m.linkedProjectId||""}
+                            onChange={e=>handleLinkMeeting(m.id,e.target.value||null)}
+                            disabled={meetingLinking===m.id}
+                            style={{border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 10px",fontSize:12,fontFamily:"'Lora',serif",background:"#fff",outline:"none",color:m.linkedProjectId?"#37352f":"#9b9a97",cursor:"pointer",maxWidth:200}}
+                          >
+                            <option value="">Follow-up? Link to project…</option>
+                            {projects.map(p=><option key={p.id} value={p.id}>{p.brief?.coverEmoji||"🎬"} {p.title||"Untitled"}</option>)}
+                          </select>
+                          {m.linkedProjectId&&<span style={{fontSize:10,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>transcript → existing brief</span>}
+                        </div>
                       </div>
                     </div>
                   );

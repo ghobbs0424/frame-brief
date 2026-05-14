@@ -74,7 +74,30 @@ export default async function handler(req, res) {
       }
 
       const meetingsData = await meetingsRes.json();
-      const meetings = (meetingsData.results || meetingsData || []).map((m) => ({
+      const rawMeetings = meetingsData.results || meetingsData || [];
+
+      // Auto-schedule bots for any meetings that don't have one yet
+      for (const m of rawMeetings) {
+        const hasBot = !!(m.bot_id || m.notetaker_id || m.bot);
+        const hasMeetingUrl = !!(m.meeting_url);
+        if (!hasBot && hasMeetingUrl) {
+          const botRes = await fetch(
+            `https://${RECALL_REGION}.recall.ai/api/v1/calendar/meeting/${m.id}/bot/`,
+            {
+              method: "POST",
+              headers: { Authorization: `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                bot_name: "Frame Brief",
+                webhook_url: "https://framebriefai.com/api/recall-webhook",
+              }),
+            }
+          );
+          console.log("Auto-scheduled bot for meeting:", m.id, "status:", botRes.status);
+          if (botRes.ok) m.bot_id = (await botRes.json()).id;
+        }
+      }
+
+      const meetings = rawMeetings.map((m) => ({
         id: m.id,
         title: m.summary || m.title || "Untitled Meeting",
         startTime: m.start_time,
@@ -88,7 +111,7 @@ export default async function handler(req, res) {
       return res.status(200).json({ meetings, connected: true });
     }
 
-    // ── Link a meeting to a project + schedule Recall bot ───────────────────
+    // ── Link a meeting to an existing project (follow-up consultations only) ─
     if (action === "link-meeting" && req.method === "POST") {
       const { userId: uid, meetingId, projectId } = req.body || {};
       if (!uid || !meetingId) return res.status(400).json({ error: "userId and meetingId required" });
@@ -102,30 +125,6 @@ export default async function handler(req, res) {
       const links = { ...(settings?.meeting_project_links || {}) };
       if (projectId) {
         links[meetingId] = projectId;
-
-        // Schedule a Recall.ai bot for this calendar meeting
-        const botRes = await fetch(
-          `https://${RECALL_REGION}.recall.ai/api/v1/calendar/meeting/${meetingId}/bot/`,
-          {
-            method: "POST",
-            headers: { Authorization: `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              bot_name: "Frame Brief",
-              webhook_url: "https://framebriefai.com/api/recall-webhook",
-            }),
-          }
-        );
-        const botData = await botRes.json();
-        console.log("Recall calendar bot scheduled — status:", botRes.status, "response:", JSON.stringify(botData).slice(0, 200));
-
-        // Save bot id on the project for tracking
-        if (botRes.ok && botData.id && projectId) {
-          await supabase.from("projects").update({
-            recall_bot_id: botData.id,
-            recall_status: "bot_scheduled",
-            updated_at: new Date().toISOString(),
-          }).eq("id", projectId);
-        }
       } else {
         delete links[meetingId];
       }
