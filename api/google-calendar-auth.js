@@ -47,9 +47,25 @@ export default async function handler(req, res) {
       return res.status(200).json({ url });
     }
 
+    // ── Debug: dump raw Recall.ai calendar events ────────────────────────────
+    if (action === "debug-events") {
+      if (!userId) return res.status(400).json({ error: "userId required" });
+      const { data: settings } = await supabase.from("user_settings").select("recall_calendar_id,calendar_connected").eq("id", userId).single();
+      if (!settings?.recall_calendar_id) return res.status(200).json({ error: "no calendar", settings });
+      const eventsRes = await fetch(
+        `https://${RECALL_REGION}.recall.ai/api/v2/calendar-events/?calendar_id=${settings.recall_calendar_id}`,
+        { headers: { Authorization: `Token ${RECALL_KEY}` } }
+      );
+      const raw = await eventsRes.text();
+      console.log("debug-events status:", eventsRes.status, "raw:", raw.slice(0, 1000));
+      return res.status(200).json({ status: eventsRes.status, recall_calendar_id: settings.recall_calendar_id, raw: JSON.parse(raw) });
+    }
+
     // ── Fetch upcoming events from Recall.ai V2 ──────────────────────────────
     if (action === "upcoming-meetings") {
       if (!userId) return res.status(400).json({ error: "userId required" });
+      // Prevent caching — meetings change frequently
+      res.setHeader("Cache-Control", "no-store");
 
       const { data: settings } = await supabase
         .from("user_settings")
