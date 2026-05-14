@@ -2603,6 +2603,15 @@ function FrameBriefApp(){
     loadShareRoute(shareProjectId);
   },[shareProjectId,authLoading]); // eslint-disable-line
 
+  // Initialize pendingMeeting when opening a project that already has brief_pending_review status
+  useEffect(()=>{
+    if(activeProject?.recall_status==="brief_pending_review"){
+      const history=arr(activeProject.meeting_history);
+      const pending=history.find(m=>m.status==="pending_review");
+      if(pending)setPendingMeeting(pending);
+    }
+  },[activeProject?.id, activeProject?.recall_status]); // eslint-disable-line
+
   // Poll for transcript/brief when bot is in a meeting
   useEffect(()=>{
     const pollStatuses = ["bot_joined", "transcribing", "transcript_ready"];
@@ -2769,18 +2778,32 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
     setAddMeetingLoading(false);
   }
 
+  // Simple scalar brief fields that can be patched directly from suggestedChanges.after
+  const SIMPLE_BRIEF_FIELDS=new Set(["budget","timeline","projectType","logline","overview","generalNotes","moodDescription","deliverableFormat","date","clientName","projectTitle"]);
+
   async function applyMeetingChanges(meeting,selectedIndices){
     if(!activeProject)return;
     const changes=arr(meeting.suggestedChanges);
     const appliedChanges=changes.map((c,i)=>({...c,applied:selectedIndices.includes(i)}));
     let updatedBrief={...activeProject.brief};
-    if(meeting.briefUpdates&&typeof meeting.briefUpdates==="object"){
-      // Apply top-level briefUpdates if this is a discovery-style meeting
+    if(meeting.briefUpdates&&typeof meeting.briefUpdates==="object"&&Object.keys(meeting.briefUpdates).length>0){
+      // Apply structured brief updates (concepts merge by id, everything else spread)
       updatedBrief={...updatedBrief,...meeting.briefUpdates};
       if(meeting.briefUpdates.concepts&&Array.isArray(meeting.briefUpdates.concepts)&&arr(updatedBrief.concepts).length>0){
         const byId={};meeting.briefUpdates.concepts.forEach(c=>{if(c.id)byId[c.id]=c;});
         updatedBrief.concepts=arr(activeProject.brief.concepts).map(c=>byId[c.id]?{...c,...byId[c.id]}:c);
+        // Append any brand-new concepts (ids not in existing brief)
+        const existingIds=new Set(arr(activeProject.brief.concepts).map(c=>c.id));
+        meeting.briefUpdates.concepts.filter(c=>c.id&&!existingIds.has(c.id)).forEach(c=>updatedBrief.concepts.push(c));
       }
+    } else {
+      // Fallback: apply selected suggestedChanges for simple scalar fields
+      selectedIndices.forEach(i=>{
+        const c=changes[i];
+        if(c&&c.field&&c.after&&SIMPLE_BRIEF_FIELDS.has(c.field)){
+          updatedBrief[c.field]=c.after;
+        }
+      });
     }
     const updatedMeeting={...meeting,suggestedChanges:appliedChanges,status:"reviewed"};
     const newHistory=arr(activeProject.meeting_history).map(m=>m.id===meeting.id?updatedMeeting:m);

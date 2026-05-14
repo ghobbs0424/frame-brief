@@ -481,11 +481,13 @@ async function generateBrief(projectId, transcriptText) {
     console.log("generateBrief — hasExistingBrief:", hasExistingBrief, "conceptCount:", project?.brief?.concepts?.length);
 
     if (hasExistingBrief) {
-      // ── Consultation flow: detect stage, summarize, suggest changes ──────────
-      const CONSULTATION_SYSTEM = `You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and return ONLY valid JSON, no markdown:
-{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value (quote from brief if possible)","after":"suggested new value"}]}
-stage: pick the best fit — discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).
-suggestedChanges: list specific, actionable changes to the existing brief fields. Reference actual field names from the brief. Limit to the most important 3-6 changes.`;
+      // ── Consultation flow: detect stage, summarize, suggest changes + actual updates ──
+      const CONSULTATION_SYSTEM = `You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and the existing brief, then return ONLY valid JSON, no markdown:
+{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value (quote from brief if possible)","after":"suggested new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}
+RULES:
+- stage: pick the best fit — discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).
+- suggestedChanges: list specific, actionable changes. Reference actual field names from the brief schema. Limit to the most important 3-6 changes. The "after" field is a plain text description for display.
+- briefUpdates: a partial JSON object with the ACTUAL new values to merge into the brief. Only include fields that genuinely changed. Use the same field names and data types as in the existing brief — strings for string fields (budget, timeline, generalNotes, projectType, logline, overview), arrays for array fields (clientActionItems as [{id,text,done}], internalTodos as [{id,text,done}], concepts as [{...}]). For concepts: include the full updated concept object for any concept being modified, keeping the same id. Do NOT include unchanged fields.`;
 
       const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -528,6 +530,7 @@ suggestedChanges: list specific, actionable changes to the existing brief fields
         summary: parsed.summary || "",
         keyPoints: parsed.keyPoints || [],
         suggestedChanges: parsed.suggestedChanges || [],
+        briefUpdates: parsed.briefUpdates && typeof parsed.briefUpdates === "object" && Object.keys(parsed.briefUpdates).length > 0 ? parsed.briefUpdates : null,
         transcriptExcerpt: transcriptText.slice(0, 500),
         status: "pending_review",
       };
