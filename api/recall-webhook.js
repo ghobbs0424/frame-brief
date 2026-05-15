@@ -159,7 +159,7 @@ RULES:
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
-          max_tokens: 2000,
+          max_tokens: 3000,
           system: REANALYZE_SYSTEM,
           messages: [{ role: "user", content: `Existing brief (summary):\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcript.slice(0, 5000)}` }],
         }),
@@ -173,21 +173,20 @@ RULES:
 
       const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
       console.log("reanalyze-meeting raw response length:", raw.length, "preview:", raw.slice(0, 200));
+      // Helper: strip invalid JSON control chars (keep \n \r \t which are valid JSON whitespace)
+      const cleanJson = (str) => str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
       let parsed = null;
       try {
-        // Try direct parse first
-        parsed = JSON.parse(raw);
+        parsed = JSON.parse(cleanJson(raw));
       } catch {
         try {
-          // Strip markdown code fences and retry
-          const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
-          parsed = JSON.parse(cleaned);
+          const fenced = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+          parsed = JSON.parse(cleanJson(fenced));
         } catch {
           try {
-            // Extract outermost JSON object
             const s = raw.indexOf("{"); const e = raw.lastIndexOf("}");
             if (s !== -1 && e !== -1) {
-              const slice = raw.slice(s, e + 1).replace(/,(\s*[}\]])/g, "$1");
+              const slice = cleanJson(raw.slice(s, e + 1)).replace(/,(\s*[}\]])/g, "$1");
               parsed = JSON.parse(slice);
             }
           } catch (pe) { console.error("reanalyze-meeting parse error:", pe.message, "raw:", raw.slice(0, 500)); }
