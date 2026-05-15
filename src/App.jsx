@@ -1680,17 +1680,29 @@ function formatFieldName(field){
     .trim();
 }
 
-function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand,onClose,onApply,onDismiss}){
+function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand,onClose,onApply,onDismiss,onRegenerate,projectId}){
   const[tab,setTab]=useState("notes");
+  const[regenerating,setRegenerating]=useState(false);
+  const[regenError,setRegenError]=useState(null);
   const isPending=meeting?.status==="pending_review";
   const changes=arr(meeting?.suggestedChanges);
   const[selected,setSelected]=useState(()=>changes.map((_,i)=>i));
-  // Reset selection when meeting changes
-  React.useEffect(()=>{setSelected(arr(meeting?.suggestedChanges).map((_,i)=>i));},[meeting?.id]);
+  // Reset selection and regen state when meeting changes
+  React.useEffect(()=>{setSelected(arr(meeting?.suggestedChanges).map((_,i)=>i));setRegenError(null);},[meeting?.id]);
   if(!meeting)return null;
   const sc=STAGE_COLORS[meeting.stage]||STAGE_COLORS.discovery;
   const segments=parseTranscript(fullTranscript||meeting.transcriptExcerpt||"");
   function toggleChange(i){setSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i]);}
+  async function handleRegenerate(){
+    if(!projectId||regenerating)return;
+    setRegenerating(true);setRegenError(null);
+    try{
+      const res=await fetch(`/api/recall-webhook?action=reanalyze-meeting`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({projectId,meetingId:meeting.id})});
+      const data=await res.json();
+      if(!res.ok||!data.ok)throw new Error(data.error||"Reanalysis failed");
+      if(onRegenerate)onRegenerate(data.meeting);
+    }catch(e){setRegenError(e.message);}finally{setRegenerating(false);}
+  }
 
   const panelStyle=expanded
     ?{position:"fixed",inset:0,zIndex:300,background:"#fff",display:"flex",flexDirection:"column",overflow:"hidden"}
@@ -1803,17 +1815,20 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
             <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:sc.bg,color:sc.c,borderRadius:20,padding:"2px 8px",fontWeight:600,textTransform:"uppercase",flexShrink:0}}>{label||(meeting.stage||"").replace("_"," ")}</span>
             <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{new Date(meeting.date).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>
           </div>
-          <div style={{display:"flex",gap:4,flexShrink:0}}>
+          <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+            {onRegenerate&&<button onClick={handleRegenerate} disabled={regenerating} title="Re-analyze transcript with AI" style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 8px",cursor:regenerating?"default":"pointer",fontSize:11,color:regenerating?"#c4c3bf":"#9b9a97",lineHeight:1,fontFamily:"'IBM Plex Mono',monospace"}} onMouseEnter={e=>{if(!regenerating)e.currentTarget.style.borderColor="#37352f";}} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{regenerating?"...":" ↻ Regenerate"}</button>}
             <button onClick={onToggleExpand} title={expanded?"Collapse":"Expand"} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:12,color:"#9b9a97",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.borderColor="#37352f"} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{expanded?"⊡":"⊞"}</button>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#9b9a97",padding:"2px 4px",lineHeight:1}}>✕</button>
           </div>
         </div>
+        {regenError&&<div style={{padding:"6px 14px",fontSize:11,color:"#c0392b",background:"#fff2f2",borderBottom:"1px solid #fcc"}}>{regenError}</div>}
         <div style={{display:"flex"}}>
           {[["notes","Notes"],["transcript","Transcript"]].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontSize:12,fontFamily:"'Lora',serif",color:tab===t?"#37352f":"#9b9a97",fontWeight:tab===t?700:400,borderBottom:tab===t?"2px solid #37352f":"2px solid transparent",marginBottom:-1,transition:"all .15s"}}>{l}</button>
           ))}
         </div>
       </div>
+      {regenerating&&<div style={{padding:"10px 16px",fontSize:12,color:"#9b9a97",background:"#fafaf9",borderBottom:"1px solid #f1f0ef",display:"flex",alignItems:"center",gap:8}}><span className="spin" style={{display:"inline-block",fontSize:14}}>⟳</span> Re-analyzing transcript…</div>}
       {tab==="notes"?<NotesContent/>:<TranscriptContent/>}
       {/* Apply/Dismiss footer — only shown when pending and on notes tab */}
       {isPending&&tab==="notes"&&onApply&&(
@@ -3492,7 +3507,7 @@ ${JSON.stringify(brief)}`;
           const stageLabel=(viewingMeeting.stage||"discovery").replace("_"," ");
           const sameStageIdx=history.slice(0,idx).filter(x=>x.stage===viewingMeeting.stage).length;
           const label=sameStageIdx===0?stageLabel.replace(/^\w/,c=>c.toUpperCase()):stageLabel.replace(/^\w/,c=>c.toUpperCase())+` #${sameStageIdx+1}`;
-          return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={false} onToggleExpand={()=>setMeetingNotesExpanded(true)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);}}/>;
+          return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={false} onToggleExpand={()=>setMeetingNotesExpanded(true)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);}} onRegenerate={updated=>{setViewingMeeting(updated);const newHist=arr(activeProject?.meeting_history).map(m=>m.id===updated.id?updated:m);setActiveProject(p=>({...p,meeting_history:newHist,recall_status:"brief_pending_review"}));setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_history:newHist}:p));}} projectId={activeProject?.id}/>;
         })()}
         {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}} className="hide-on-mobile"><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div>}
       </div>
@@ -3503,7 +3518,7 @@ ${JSON.stringify(brief)}`;
         const stageLabel=(viewingMeeting.stage||"discovery").replace("_"," ");
         const sameStageIdx=history.slice(0,idx).filter(x=>x.stage===viewingMeeting.stage).length;
         const label=sameStageIdx===0?stageLabel.replace(/^\w/,c=>c.toUpperCase()):stageLabel.replace(/^\w/,c=>c.toUpperCase())+` #${sameStageIdx+1}`;
-        return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={true} onToggleExpand={()=>setMeetingNotesExpanded(false)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}}/>;
+        return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={true} onToggleExpand={()=>setMeetingNotesExpanded(false)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}} onRegenerate={updated=>{setViewingMeeting(updated);const newHist=arr(activeProject?.meeting_history).map(m=>m.id===updated.id?updated:m);setActiveProject(p=>({...p,meeting_history:newHist,recall_status:"brief_pending_review"}));setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_history:newHist}:p));}} projectId={activeProject?.id}/>;
       })()}
       {chatOpen&&<div className="mobile-only" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:250,flexDirection:"column",justifyContent:"flex-end"}}><div style={{background:"#fff",borderRadius:"16px 16px 0 0",height:"80vh",display:"flex",flexDirection:"column",overflow:"hidden"}}><div style={{padding:"12px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}><span style={{fontWeight:700,fontSize:14}}>✦ AI Creative Director</span><button onClick={()=>setChatOpen(false)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97"}}>✕</button></div><div style={{flex:1,overflow:"hidden"}}><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div></div></div>}
     </div>

@@ -62,6 +62,92 @@ export default async function handler(req, res) {
       return res.status(200).json({ botId: botData.id, status: botData.status });
     }
 
+    // ── Re-analyze a specific meeting entry with AI (regenerate notes + briefUpdates) ──
+    if (req.query.action === "reanalyze-meeting") {
+      const { projectId, meetingId } = req.body || {};
+      if (!projectId) return res.status(400).json({ error: "projectId required" });
+
+      const { data: project } = await supabase.from("projects").select("*").eq("id", projectId).single();
+      if (!project) return res.status(404).json({ error: "project not found" });
+
+      const transcript = project.recall_transcript;
+      if (!transcript?.trim()) return res.status(400).json({ error: "no transcript stored for this project" });
+
+      const existingHistory = Array.isArray(project.meeting_history) ? project.meeting_history : [];
+      const meetingIdx = meetingId ? existingHistory.findIndex(m => m.id === meetingId) : existingHistory.length - 1;
+      if (meetingIdx === -1) return res.status(404).json({ error: "meeting not found in history" });
+
+      const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY || process.env.VITE_ANTHROPIC_KEY;
+      if (!ANTHROPIC_KEY) return res.status(500).json({ error: "no Anthropic key" });
+
+      const CONCEPT_SCHEMA = `{"id":"concept-N","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"hooks":[],"selectedHook":"","deliverableFormat":"","directorNotes":""}`;
+
+      const CONSULTATION_SYSTEM = `You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and the existing brief, then return ONLY valid JSON, no markdown:
+{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value","after":"suggested new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}
+
+RULES:
+- suggestedChanges: 3-8 specific changes. Use human-readable field names in "field" (e.g. "budget", "overview", "concepts[0].logline").
+- briefUpdates: REQUIRED — a partial JSON object with ACTUAL new values ready to merge. Only include changed fields:
+  * Scalar fields: budget, timeline, projectType, logline, overview, generalNotes, moodDescription, date, coverEmoji — set to exact new string.
+  * clientActionItems: full array [{id:"ca-N",text:"",done:false}] — include ALL items.
+  * internalTodos: full array [{id:"it-N",text:"",done:false}] — include ALL items.
+  * concepts: CRITICAL — if new concepts mentioned, generate full objects using schema: ${CONCEPT_SCHEMA}
+    - NEW concepts: assign id "concept-2", "concept-3" etc. Generate rich content for ALL fields.
+    - MODIFIED concepts: full object with same id, merging changes.
+    - Only include new or modified concepts (not unchanged ones).
+  * Extract EVERY specific value mentioned: dollar amounts → budget, dates → date/timeline, scope changes → concepts.`;
+
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 8000,
+          system: CONSULTATION_SYSTEM,
+          messages: [{ role: "user", content: `Existing brief:\n${JSON.stringify(project.brief)}\n\nMeeting transcript:\n${transcript}` }],
+        }),
+      });
+
+      const aiData = await aiRes.json();
+      if (!aiRes.ok || aiData.error) {
+        console.error("reanalyze-meeting AI error:", JSON.stringify(aiData));
+        return res.status(500).json({ error: "AI analysis failed" });
+      }
+
+      const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
+      let parsed = null;
+      try {
+        const s = raw.indexOf("{"); const e = raw.lastIndexOf("}");
+        if (s !== -1 && e !== -1) parsed = JSON.parse(raw.slice(s, e + 1).replace(/,\s*}/g, "}").replace(/,\s*]/g, "]"));
+      } catch (pe) { console.error("reanalyze-meeting parse error:", pe.message, "raw:", raw.slice(0, 300)); }
+
+      if (!parsed) return res.status(500).json({ error: "AI returned invalid JSON" });
+
+      const oldMeeting = existingHistory[meetingIdx];
+      const updatedMeeting = {
+        ...oldMeeting,
+        summary: parsed.summary || oldMeeting.summary,
+        keyPoints: parsed.keyPoints || oldMeeting.keyPoints,
+        suggestedChanges: parsed.suggestedChanges || [],
+        briefUpdates: (parsed.briefUpdates && Object.keys(parsed.briefUpdates).length > 0) ? parsed.briefUpdates : null,
+        stage: parsed.stage || oldMeeting.stage,
+        status: "pending_review",
+        reanalyzedAt: new Date().toISOString(),
+      };
+
+      const newHistory = [...existingHistory];
+      newHistory[meetingIdx] = updatedMeeting;
+
+      await supabase.from("projects").update({
+        meeting_history: newHistory,
+        recall_status: "brief_pending_review",
+        updated_at: new Date().toISOString(),
+      }).eq("id", projectId);
+
+      console.log("reanalyze-meeting: updated meeting", meetingId, "for project", projectId, "briefUpdates keys:", Object.keys(parsed.briefUpdates || {}));
+      return res.status(200).json({ ok: true, meeting: updatedMeeting });
+    }
+
     // ── Fetch transcript manually (recovery action) ──────────────────────────
     if (req.query.action === "fetch-transcript") {
       const { botId, projectId } = req.body || {};
