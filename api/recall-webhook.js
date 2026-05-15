@@ -132,9 +132,12 @@ Rules:
       // Use Haiku for speed (must complete within Vercel function timeout)
       // Keep prompt compact — no full concept schema for reanalysis
       const REANALYZE_SYSTEM = `You are a creative director AI. Analyze this meeting transcript against the existing brief. Return ONLY valid JSON (no markdown):
-{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary","keyPoints":["point 1","point 2","point 3"],"suggestedChanges":[{"field":"fieldName","description":"what changes","before":"old value","after":"new value as plain text"}],"briefUpdates":{"fieldName":"new exact value"}}
+{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary","keyPoints":["point 1","point 2","point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}],"actionItems":[{"owner":"Person Name","task":"specific task to complete","deadline":""}],"suggestedChanges":[{"field":"fieldName","description":"what changes","before":"old value","after":"new value as plain text"}],"briefUpdates":{"fieldName":"new exact value"}}
 
-RULES — briefUpdates must have ACTUAL values to merge into the brief:
+RULES:
+- topics: 2-5 main subjects discussed, each with 2-4 bullet points. Group related points together.
+- actionItems: concrete next steps with a clear owner (person's name or "Client"/"Team"), specific task, and deadline if mentioned.
+- briefUpdates must have ACTUAL values to merge into the brief:
 - Dollar amounts → briefUpdates.budget = "$X,XXX"
 - Dates/timelines → briefUpdates.date or briefUpdates.timeline
 - Scope changes → briefUpdates.overview (updated text)
@@ -197,7 +200,9 @@ RULES — briefUpdates must have ACTUAL values to merge into the brief:
       const updatedMeeting = {
         ...oldMeeting,
         summary: parsed.summary || oldMeeting.summary,
-        keyPoints: parsed.keyPoints || oldMeeting.keyPoints,
+        keyPoints: parsed.keyPoints || oldMeeting.keyPoints || [],
+        topics: parsed.topics || oldMeeting.topics || [],
+        actionItems: parsed.actionItems || oldMeeting.actionItems || [],
         suggestedChanges: parsed.suggestedChanges || [],
         briefUpdates: (parsed.briefUpdates && Object.keys(parsed.briefUpdates).length > 0) ? parsed.briefUpdates : null,
         stage: parsed.stage || oldMeeting.stage,
