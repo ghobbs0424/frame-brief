@@ -1645,23 +1645,55 @@ function StageProgressBar({stage,meetingHistory,onMeetingClick}){
 }
 
 // ─── MEETING NOTES PAGE ───────────────────────────────────────────────────────
-// Parse transcript text into speaker segments with optional timestamps
+// Parse transcript text into speaker segments with optional timestamps.
+// Handles multiple formats:
+//   "Speaker: text"
+//   "[0:37] Speaker: text"
+//   "Speaker\n0:37\ntext" (Recall.ai diarization)
+//   "0:37 text" (timestamp-only prefix, inherits last speaker)
 function parseTranscript(text){
   if(!text)return[];
-  const lines=text.split("\n").filter(l=>l.trim());
+  const lines=text.split("\n").map(l=>l.trim()).filter(Boolean);
   const segments=[];
-  for(const line of lines){
-    // Match: optional [mm:ss] or (mm:ss) prefix, then "Speaker Name: text"
-    const m=line.match(/^(?:\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s+)?([^:]{2,40}):\s*(.+)$/);
-    if(m){
-      segments.push({timestamp:m[1]||null,speaker:m[2].trim(),text:m[3].trim()});
-    } else {
-      // Continuation or plain line — append to last segment or add as plain
-      if(segments.length>0&&!line.match(/^\[?\d{1,2}:\d{2}/)){
-        segments[segments.length-1].text+=" "+line.trim();
-      } else {
-        segments.push({timestamp:null,speaker:null,text:line.trim()});
+  let lastSpeaker=null;
+  for(let i=0;i<lines.length;i++){
+    const line=lines[i];
+    // Format 1: [ts] Speaker: text  OR  Speaker: text
+    const m1=line.match(/^(?:\[?(\d{1,2}:\d{2}(?::\d{2})?)\]?\s+)?([^:\d][^:]{1,38}):\s*(.+)$/);
+    if(m1){
+      lastSpeaker=m1[2].trim();
+      segments.push({timestamp:m1[1]||null,speaker:lastSpeaker,text:m1[3].trim()});
+      continue;
+    }
+    // Format 2: standalone timestamp line "0:37" — peek ahead for text
+    const m2=line.match(/^(\d{1,2}:\d{2}(?::\d{2})?)$/);
+    if(m2){
+      const ts=m2[1];
+      const textLines=[];
+      while(i+1<lines.length&&!lines[i+1].match(/^\d{1,2}:\d{2}/)&&!lines[i+1].match(/^(?:\[?\d{1,2}:\d{2}\]?\s+)?[^:\d][^:]{1,38}:/)){
+        i++;textLines.push(lines[i]);
       }
+      const bodyText=textLines.join(" ").trim();
+      if(bodyText){segments.push({timestamp:ts,speaker:lastSpeaker,text:bodyText});}
+      continue;
+    }
+    // Format 3: "0:37 text text" — timestamp + inline text, inherit last speaker
+    const m3=line.match(/^(\d{1,2}:\d{2}(?::\d{2})?)\s+(.+)$/);
+    if(m3){
+      segments.push({timestamp:m3[1],speaker:lastSpeaker,text:m3[2].trim()});
+      continue;
+    }
+    // Standalone speaker name line (proper noun, no colon) — set as current speaker, consume
+    const m4=line.match(/^([A-Z][A-Za-z]*(?:\s+[A-Z][A-Za-z]*){0,4})$/);
+    if(m4&&line.length<50){
+      lastSpeaker=line;
+      continue;
+    }
+    // Continuation or plain text
+    if(segments.length>0){
+      segments[segments.length-1].text+=" "+line;
+    }else{
+      segments.push({timestamp:null,speaker:null,text:line});
     }
   }
   return segments;
@@ -1798,16 +1830,17 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
       ):(
         <div>
           {segments.map((seg,i)=>{
-            if(!seg.speaker){
+            if(!seg.speaker&&!seg.timestamp){
               return <div key={i} style={{fontSize:13,color:"#9b9a97",lineHeight:1.7,marginBottom:8,fontStyle:"italic"}}>{seg.text}</div>;
             }
-            const showHeader=i===0||segments[i-1].speaker!==seg.speaker;
+            // Show speaker header when speaker changes, or when this segment has its own timestamp
+            const showHeader=i===0||segments[i-1].speaker!==seg.speaker||!!seg.timestamp;
             return(
-              <div key={i} style={{marginBottom:showHeader?16:5}}>
+              <div key={i} style={{marginBottom:showHeader?14:4}}>
                 {showHeader&&(
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
-                    <span style={{fontSize:11,fontWeight:700,color:"#37352f",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:"0.06em"}}>{seg.speaker}</span>
-                    {seg.timestamp&&<span style={{fontSize:10,background:"#f1f0ef",color:"#9b9a97",borderRadius:4,padding:"2px 7px",fontFamily:"'IBM Plex Mono',monospace"}}>{seg.timestamp}</span>}
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                    {seg.speaker&&<span style={{fontSize:11,fontWeight:700,color:"#37352f",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:"0.06em"}}>{seg.speaker}</span>}
+                    {seg.timestamp&&<span style={{fontSize:11,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>· {seg.timestamp}</span>}
                   </div>
                 )}
                 <div style={{fontSize:13,color:"#37352f",lineHeight:1.8}}>{seg.text}</div>
