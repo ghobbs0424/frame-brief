@@ -2675,67 +2675,9 @@ function ScheduleConsultationModal({user,project,onClose,onScheduled}){
   if(calendarConnected===null)return null;
 
   const isMobile=window.innerWidth<=768;
-  const formContent=(
-    <>
-      {!calendarConnected?(
-        <div style={{padding:"24px",textAlign:"center"}}>
-          <div style={{fontSize:32,marginBottom:10}}>🔗</div>
-          <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6}}>Connect Google Calendar first to schedule consultation meetings with auto-join.</p>
-        </div>
-      ):(
-        <div style={{padding:isMobile?"20px 16px":"20px 24px"}}>
-          {/* Date + Time stacked on mobile, side-by-side on desktop */}
-          <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:14}}>
-            <div>
-              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Date</div>
-              <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"12px 12px",fontFamily:"'Lora',serif",fontSize:15,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-            </div>
-            <div>
-              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Time</div>
-              <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"12px 12px",fontFamily:"'Lora',serif",fontSize:15,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-            </div>
-          </div>
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Duration</div>
-            <select value={duration} onChange={e=>setDuration(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"12px 12px",fontFamily:"'Lora',serif",fontSize:15,color:"#37352f",outline:"none",background:"#fff",boxSizing:"border-box"}}>
-              <option value="30">30 minutes</option>
-              <option value="45">45 minutes</option>
-              <option value="60">1 hour</option>
-              <option value="90">1.5 hours</option>
-              <option value="120">2 hours</option>
-            </select>
-          </div>
-          <div style={{marginBottom:24}}>
-            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Client Email (optional — sends invite)</div>
-            <input type="email" value={attendeeEmail} onChange={e=>setAttendeeEmail(e.target.value)} placeholder="client@email.com" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"12px 12px",fontFamily:"'Lora',serif",fontSize:15,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-          </div>
-          {error&&<div style={{fontSize:13,color:"#c0392b",marginBottom:14,background:"#fdf2f2",border:"1px solid #f5c6cb",borderRadius:6,padding:"10px 12px"}}>⚠ {error}</div>}
-          <button onClick={handleSchedule} disabled={scheduling||!date||!time} style={{width:"100%",background:scheduling||!date||!time?"#c4c3bf":"#e97942",color:"#fff",border:"none",borderRadius:8,padding:"14px",fontSize:15,cursor:scheduling||!date||!time?"not-allowed":"pointer",fontFamily:"'Lora',serif",fontWeight:700}}>
-            {scheduling?"Scheduling…":"Create Meeting →"}
-          </button>
-        </div>
-      )}
-    </>
-  );
-
-  if(isMobile){
-    return(
-      <div style={{position:"fixed",inset:0,background:"#fff",zIndex:400,overflowY:"auto",display:"flex",flexDirection:"column"}}>
-        {/* Mobile header */}
-        <div style={{display:"flex",alignItems:"center",gap:12,padding:"16px 16px 12px",borderBottom:"1px solid #f1f0ef",background:"#fff",position:"sticky",top:0,zIndex:1}}>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:"#37352f",padding:"2px 6px",lineHeight:1}}>←</button>
-          <div style={{flex:1}}>
-            <div style={{fontWeight:700,fontSize:17,color:"#37352f"}}>📅 Schedule Consultation</div>
-            <div style={{fontSize:12,color:"#9b9a97",marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{project?.title}</div>
-          </div>
-        </div>
-        {formContent}
-      </div>
-    );
-  }
 
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:24}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
       <div style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:460,boxShadow:"0 20px 60px rgba(0,0,0,0.22)"}}>
         <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div style={{flex:1,minWidth:0,paddingRight:12}}>
@@ -2744,7 +2686,47 @@ function ScheduleConsultationModal({user,project,onClose,onScheduled}){
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97",flexShrink:0,lineHeight:1,padding:"2px 4px"}}>✕</button>
         </div>
-        {formContent}
+        {!calendarConnected?(
+          <div style={{padding:"24px",textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:10}}>🔗</div>
+            <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6}}>Connect Google Calendar first to schedule consultation meetings with auto-join.</p>
+          </div>
+        ):(
+          <div style={{padding:"20px 24px"}}>
+            {/* On mobile stack date+time; side-by-side on desktop */}
+            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:14}}>
+              <div>
+                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Date</div>
+                <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Time</div>
+                <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+              </div>
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Duration</div>
+              <select value={duration} onChange={e=>setDuration(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",background:"#fff",boxSizing:"border-box"}}>
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="60">1 hour</option>
+                <option value="90">1.5 hours</option>
+                <option value="120">2 hours</option>
+              </select>
+            </div>
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Client Email (optional — sends invite)</div>
+              <input type="email" value={attendeeEmail} onChange={e=>setAttendeeEmail(e.target.value)} placeholder="client@email.com" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            </div>
+            {error&&<div style={{fontSize:12,color:"#c0392b",marginBottom:12}}>⚠ {error}</div>}
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+              <button onClick={onClose} style={{border:"1px solid #e8e4dc",background:"none",borderRadius:6,padding:"9px 16px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"'Lora',serif"}}>Cancel</button>
+              <button onClick={handleSchedule} disabled={scheduling||!date||!time} style={{background:"#e97942",color:"#fff",border:"none",borderRadius:6,padding:"9px 18px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600,opacity:scheduling||!date||!time?0.5:1}}>
+                {scheduling?"Scheduling…":"Create Meeting →"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
