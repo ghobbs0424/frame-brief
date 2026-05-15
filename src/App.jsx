@@ -2898,9 +2898,9 @@ function AIChatPanel({chatLog,onSend,busy,onClose,hideHeader}){
         <div style={{border:"1px solid #e8e4dc",borderRadius:10,overflow:"hidden"}} onFocusCapture={e=>e.currentTarget.style.borderColor="#37352f"} onBlurCapture={e=>e.currentTarget.style.borderColor="#e8e4dc"}>
           <textarea ref={taRef} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&(e.preventDefault(),send())} placeholder="Ask or say anything… (Enter to send)" style={{width:"100%",border:"none",outline:"none",padding:"12px 14px",fontSize:13,color:"#37352f",fontFamily:"'Lora',serif",lineHeight:1.6,resize:"none",background:"transparent",minHeight:44,maxHeight:160,overflowY:"auto",display:"block"}}/>
           {interimText&&<div style={{padding:"0 14px 8px",fontSize:12,color:"#9b9a97",fontStyle:"italic",lineHeight:1.5}}>{interimText}…</div>}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderTop:"1px solid #f1f0ef"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"stretch",padding:"8px 12px",borderTop:"1px solid #f1f0ef"}}>
             <VoiceMicBtn onTranscript={(final,interim)=>{setInput(final);setInterimText(interim);}}/>
-            <button onClick={send} disabled={!(input+interimText).trim()||busy} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",opacity:!(input+interimText).trim()||busy?0.4:1,flexShrink:0,display:"flex",alignItems:"center",lineHeight:1}}>Send ↑</button>
+            <button onClick={send} disabled={!(input+interimText).trim()||busy} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:8,padding:"0 16px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",opacity:!(input+interimText).trim()||busy?0.4:1,flexShrink:0,display:"flex",alignItems:"center",lineHeight:1}}>Send ↑</button>
           </div>
         </div>
       </div>
