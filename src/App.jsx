@@ -1826,7 +1826,6 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
             <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{new Date(meeting.date).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>
           </div>
           <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center",position:"relative"}}>
-            {onRegenerate&&<button onClick={handleRegenerate} disabled={regenerating} title="Re-analyze transcript with AI" style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 8px",cursor:regenerating?"default":"pointer",fontSize:11,color:regenerating?"#c4c3bf":"#9b9a97",lineHeight:1,fontFamily:"'IBM Plex Mono',monospace"}} onMouseEnter={e=>{if(!regenerating)e.currentTarget.style.borderColor="#37352f";}} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{regenerating?"...":" ↻ Regenerate"}</button>}
             {onMove&&arr(projects).filter(p=>p.id!==projectId).length>0&&(
               <div style={{position:"relative"}}>
                 <button onClick={()=>setMoveOpen(o=>!o)} title="Move to another project" style={{background:moveOpen?"#37352f":"none",color:moveOpen?"#fff":"#9b9a97",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:11,lineHeight:1,fontFamily:"'IBM Plex Mono',monospace"}} onMouseEnter={e=>{if(!moveOpen){e.currentTarget.style.borderColor="#37352f";e.currentTarget.style.color="#37352f";}}} onMouseLeave={e=>{if(!moveOpen){e.currentTarget.style.borderColor="#e8e4dc";e.currentTarget.style.color="#9b9a97";}}}>{moving?"…":"↗ Move"}</button>
@@ -1846,6 +1845,7 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
                 )}
               </div>
             )}
+            {onRegenerate&&<button onClick={handleRegenerate} disabled={regenerating} title="Re-analyze transcript with AI" style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 8px",cursor:regenerating?"default":"pointer",fontSize:11,color:regenerating?"#c4c3bf":"#9b9a97",lineHeight:1,fontFamily:"'IBM Plex Mono',monospace"}} onMouseEnter={e=>{if(!regenerating)e.currentTarget.style.borderColor="#37352f";}} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{regenerating?"...":" ↻ Regenerate"}</button>}
             <button onClick={onToggleExpand} title={expanded?"Collapse":"Expand"} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:12,color:"#9b9a97",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.borderColor="#37352f"} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{expanded?"⊡":"⊞"}</button>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#9b9a97",padding:"2px 4px",lineHeight:1}}>✕</button>
           </div>
