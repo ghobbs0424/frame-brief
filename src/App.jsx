@@ -2900,7 +2900,7 @@ function AIChatPanel({chatLog,onSend,busy,onClose,hideHeader}){
           {interimText&&<div style={{padding:"0 14px 8px",fontSize:12,color:"#9b9a97",fontStyle:"italic",lineHeight:1.5}}>{interimText}…</div>}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderTop:"1px solid #f1f0ef"}}>
             <VoiceMicBtn onTranscript={(final,interim)=>{setInput(final);setInterimText(interim);}}/>
-            <button onClick={send} disabled={!(input+interimText).trim()||busy} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",opacity:!(input+interimText).trim()||busy?0.4:1}}>Send ↑</button>
+            <button onClick={send} disabled={!(input+interimText).trim()||busy} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",opacity:!(input+interimText).trim()||busy?0.4:1,flexShrink:0}}>Send ↑</button>
           </div>
         </div>
       </div>
