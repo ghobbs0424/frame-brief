@@ -256,17 +256,8 @@ RULES — briefUpdates must have ACTUAL values to merge into the brief:
         }).eq("id", projectId);
       }
 
-      // Send response immediately so the browser stops waiting, then run generateBrief
-      // while the Vercel function is still alive (handler stays alive until it resolves).
-      await supabase.from("projects").update({
-        recall_status: "brief_generating",
-        updated_at: new Date().toISOString(),
-      }).eq("id", projectId);
-      res.status(200).json({ ok: true, transcriptLength: text.length, status: "generating" });
-
-      // Await so the function stays alive (60s maxDuration in vercel.json) until brief is saved.
-      await generateBrief(projectId, text);
-      return;
+      // Return transcript to browser — Claude call happens client-side (no server timeout)
+      return res.status(200).json({ ok: true, transcript: text });
     }
 
     // ── Receive Recall webhook ───────────────────────────────────────────────

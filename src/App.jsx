@@ -1283,7 +1283,7 @@ async function startRecallBot(meetingUrl, projectId) {
   return data; // returns { botId, status }
 }
 
-function MeetingBotPanel({ projectId, onBotStarted, recallStatus, recallBotId, onTranscriptReady }) {
+function MeetingBotPanel({ projectId, onBotStarted, recallStatus, recallBotId, onTranscriptReady, onGenerateBrief }) {
   const [meetingUrl, setMeetingUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -1309,16 +1309,7 @@ function MeetingBotPanel({ projectId, onBotStarted, recallStatus, recallBotId, o
         <span style={{fontWeight:700,fontSize:14,color:"#1e7e34"}}>Transcript ready — brief not generated yet</span>
       </div>
       <p style={{fontSize:13,color:"#1e7e34",margin:"0 0 12px"}}>The transcript was saved but the brief wasn't generated. Click below to generate it now.</p>
-      <button onClick={async()=>{
-        setLoading(true);setError("");
-        try{
-          const res=await fetch(`/api/recall-webhook?action=fetch-transcript`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({botId:recallBotId,projectId})});
-          const data=await res.json();
-          if(data.ok){if(onTranscriptReady)onTranscriptReady();}
-          else setError(data.message||"Failed — try again");
-        }catch(err){setError(err.message);}
-        setLoading(false);
-      }} disabled={loading||!recallBotId||!projectId} style={{background:"#1e7e34",color:"#fff",border:"none",padding:"9px 20px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:8,opacity:loading?0.7:1}}>
+      <button onClick={()=>{if(onGenerateBrief)onGenerateBrief();}} disabled={loading||!projectId} style={{background:"#1e7e34",color:"#fff",border:"none",padding:"9px 20px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:loading?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:8,opacity:loading?0.7:1}}>
         {loading&&<div className="spin" style={{width:13,height:13,border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid #fff",borderRadius:"50%"}}/>}
         {loading?"Generating…":"✦ Generate Brief Now"}
       </button>
@@ -1333,21 +1324,8 @@ function MeetingBotPanel({ projectId, onBotStarted, recallStatus, recallBotId, o
         <span style={{fontWeight:700,fontSize:14,color:"#1a56c4"}}>Bot is recording</span>
       </div>
       <p style={{fontSize:13,color:"#1a56c4",marginBottom:10}}>When the meeting ends, click below to fetch the transcript and generate your brief.</p>
-      <button onClick={async()=>{
-        if(!recallBotId||!projectId){alert("No bot ID found.");return;}
-        setLoading(true);
-        try{
-          const res=await fetch("/api/recall-webhook?action=fetch-transcript",{
-            method:"POST",headers:{"Content-Type":"application/json"},
-            body:JSON.stringify({botId:recallBotId,projectId})
-          });
-          const data=await res.json();
-          if(data.transcriptLength>0){onTranscriptReady();}
-          else{alert("Transcript not ready yet. Try again in a minute. Debug: "+data.message);}
-        }catch(e){alert("Error: "+e.message);}
-        setLoading(false);
-      }} style={{background:"#1a56c4",color:"#fff",border:"none",borderRadius:6,padding:"8px 16px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif"}}>
-        {loading?"Fetching…":"📄 Fetch Transcript & Generate Brief"}
+      <button onClick={()=>{if(onGenerateBrief)onGenerateBrief();}} style={{background:"#1a56c4",color:"#fff",border:"none",borderRadius:6,padding:"8px 16px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif"}}>
+        {loading?"Generating…":"📄 Fetch Transcript & Generate Brief"}
       </button>
     </div>
   );
@@ -3452,10 +3430,10 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
     const proj=project||activeProject;
     if(!proj?.id)return;
     setBriefGenError(false);
-    setLoadMsg("Generating brief from transcript…");
+    setLoadMsg("Fetching transcript…");
     setScreen("loading");
     try{
-      // Route through serverless function — triggers brief generation and returns immediately
+      // 1. Server fetches/saves transcript and returns it — no Claude call server-side
       const res=await fetch("/api/recall-webhook?action=fetch-transcript",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
@@ -3464,27 +3442,93 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       let d={};
       try{d=await res.json();}catch{}
       if(!res.ok)throw new Error(d.message||"Server error — please try again");
-      // Server returns immediately with status "generating" — poll Supabase until brief is ready
+      const transcriptText=d.transcript||"";
+      if(!transcriptText.trim())throw new Error(d.message||"No transcript available yet — try again in a moment");
+
+      // 2. Call Claude directly from browser (no Vercel timeout limit)
       setLoadMsg("AI is writing your brief…");
-      let attempts=0;
-      while(attempts<40){
-        await new Promise(r=>setTimeout(r,3000));
-        attempts++;
+      const hasExistingBrief=Array.isArray(proj.brief?.concepts)&&proj.brief.concepts.length>0;
+
+      if(hasExistingBrief){
+        // ── Consultation flow ──
+        const CONCEPT_SCHEMA=`{"id":"concept-N","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"hooks":[],"selectedHook":"","deliverableFormat":"","directorNotes":""}`;
+        const CONSULT_SYS=`You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and the existing brief, then return ONLY valid JSON, no markdown:\n{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value (quote from brief if possible)","after":"suggested new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}\n\nRULES:\n- stage: discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).\n- suggestedChanges: 3-6 specific changes with plain-text "after" descriptions for display only.\n- briefUpdates: partial JSON with ACTUAL new values to merge. Only include changed fields. Scalar fields (budget, timeline, projectType, logline, overview, generalNotes, moodDescription, date, coverEmoji) = new string. clientActionItems/internalTodos = full arrays including existing. concepts: if client requests new concepts, generate full objects using schema: ${CONCEPT_SCHEMA} — assign incremented IDs, rich content for all fields. Include only new/modified concepts. Do NOT include unchanged fields.`;
+        const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
+          body:JSON.stringify({model:MODEL,max_tokens:8000,system:CONSULT_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(proj.brief)}\n\nMeeting transcript:\n${transcriptText}`}]}),
+        });
+        const aiData=await aiRes.json();
+        if(!aiRes.ok||aiData.error)throw new Error(aiData?.error?.message||`AI error ${aiRes.status}`);
+        const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
+        let parsed=null;
+        try{parsed=JSON.parse(raw);}catch{}
+        if(!parsed){try{parsed=JSON.parse(raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,""));}catch{}}
+        if(!parsed){
+          try{
+            const s=raw.indexOf("{");const e=raw.lastIndexOf("}");
+            if(s!==-1&&e!==-1){let js=raw.slice(s,e+1).replace(/[\x00-\x1F\x7F]/g,ch=>ch==="\n"?"\\n":ch==="\r"?"\\r":ch==="\t"?"\\t":"");parsed=JSON.parse(js);}
+          }catch{}
+        }
+        if(!parsed)throw new Error("Failed to parse AI response — please try again");
+        const meeting={
+          id:`m-${Date.now()}`,date:new Date().toISOString(),
+          stage:parsed.stage||"consultation",summary:parsed.summary||"",
+          keyPoints:arr(parsed.keyPoints),suggestedChanges:arr(parsed.suggestedChanges),
+          briefUpdates:(parsed.briefUpdates&&typeof parsed.briefUpdates==="object"&&Object.keys(parsed.briefUpdates).length>0)?parsed.briefUpdates:null,
+          transcriptExcerpt:transcriptText.slice(0,500),transcriptText,status:"pending_review",
+        };
+        const newHistory=[...arr(proj.meeting_history),meeting];
+        await supabase.from("projects").update({
+          meeting_stage:parsed.stage||"consultation",meeting_history:newHistory,
+          recall_status:"brief_pending_review",recall_transcript:transcriptText,
+          updated_at:new Date().toISOString(),
+        }).eq("id",proj.id);
         const{data:updated}=await supabase.from("projects").select("*").eq("id",proj.id).single();
-        if(!updated)continue;
-        if(updated.recall_status==="brief_ready"||updated.recall_status==="brief_pending_review"||(Array.isArray(updated.brief?.concepts)&&updated.brief.concepts.length>0)){
-          setActiveProject(updated);
-          setProjects(ps=>ps.map(p=>p.id===proj.id?updated:p));
-          setPage("overview");setScreen("doc");
-          return;
-        }
-        if(updated.recall_status==="brief_error"||updated.recall_status==="transcription_failed"||updated.recall_status==="transcription_error"){
-          throw new Error("Brief generation failed — please try again");
-        }
-        // brief_generating means the server function is still running — keep waiting
-        if(attempts%5===0)setLoadMsg(`Still generating… (${attempts*3}s)`);
+        const final=updated||{...proj,meeting_history:newHistory,recall_status:"brief_pending_review"};
+        setActiveProject(final);setProjects(ps=>ps.map(p=>p.id===proj.id?final:p));
+        setPage("overview");setScreen("doc");
+      } else {
+        // ── Discovery flow: generate full brief ──
+        const DISC_SYS=`You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object with no markdown or backticks. For each concept, generate 3-5 compelling opening hooks in the "hooks" array — each hook is a single punchy sentence that grabs attention in the first 3 seconds, varying styles: emotional, curiosity-driven, bold statement, question, cinematic. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}]}`;
+        const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
+          body:JSON.stringify({model:MODEL,max_tokens:8000,system:DISC_SYS,messages:[{role:"user",content:`Create a production brief from this meeting transcript:\n\n${transcriptText}`}]}),
+        });
+        const aiData=await aiRes.json();
+        if(!aiRes.ok||aiData.error)throw new Error(aiData?.error?.message||`AI error ${aiRes.status}`);
+        const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
+        let brief=null;
+        try{
+          const s=raw.indexOf("{");const e=raw.lastIndexOf("}");
+          if(s!==-1&&e!==-1){
+            let js=raw.slice(s,e+1).replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
+            js=js.replace(/[\x00-\x1F\x7F]/g,ch=>ch==="\n"?"\\n":ch==="\r"?"\\r":ch==="\t"?"\\t":"");
+            brief=JSON.parse(js);
+          }
+        }catch(pe){console.error("Discovery parse error:",pe.message);}
+        if(!brief)throw new Error("Failed to parse AI response — please try again");
+        if(!Array.isArray(brief.concepts))brief.concepts=[];
+        if(!brief.clientActionItems)brief.clientActionItems=[];
+        if(!brief.internalTodos)brief.internalTodos=[];
+        const meetingRecord={
+          id:`m-${Date.now()}`,date:new Date().toISOString(),stage:"discovery",
+          summary:brief.logline||"Initial discovery meeting — brief generated.",
+          keyPoints:[],suggestedChanges:[],
+          transcriptExcerpt:transcriptText.slice(0,500),transcriptText,status:"reviewed",
+        };
+        await supabase.from("projects").update({
+          title:brief.projectTitle||"Untitled",client_name:brief.clientName||"",brief,
+          meeting_stage:"discovery",meeting_history:[...arr(proj.meeting_history),meetingRecord],
+          recall_status:"brief_ready",recall_transcript:transcriptText,
+          updated_at:new Date().toISOString(),
+        }).eq("id",proj.id);
+        const{data:updated}=await supabase.from("projects").select("*").eq("id",proj.id).single();
+        const final=updated||{...proj,brief,title:brief.projectTitle||"Untitled",recall_status:"brief_ready"};
+        setActiveProject(final);setProjects(ps=>ps.map(p=>p.id===proj.id?final:p));
+        setPage("overview");setScreen("doc");
       }
-      throw new Error("Brief generation timed out — please try again");
     }catch(err){
       console.error("generateBriefFromTranscript error:",err);
       setBriefGenError(true);
