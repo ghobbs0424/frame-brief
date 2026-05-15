@@ -1699,12 +1699,10 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
   const isPending=meeting?.status==="pending_review";
   const changes=arr(meeting?.suggestedChanges);
   const[selected,setSelected]=useState(()=>changes.map((_,i)=>i));
-  // Reset selection and regen state when meeting changes; auto-open Brief Changes tab for pending consultations
+  // Reset selection and regen state when meeting changes
   React.useEffect(()=>{
     setSelected(arr(meeting?.suggestedChanges).map((_,i)=>i));
-    setRegenError(null);setMoveOpen(false);
-    if(meeting?.status==="pending_review"&&arr(meeting?.suggestedChanges).length>0){setTab("changes");}
-    else{setTab("notes");}
+    setRegenError(null);setMoveOpen(false);setTab("notes");
   },[meeting?.id]);
 
   async function handleMove(targetProjectId){
@@ -1718,15 +1716,78 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
   const sc=STAGE_COLORS[meeting.stage]||STAGE_COLORS.discovery;
   const segments=parseTranscript(meeting.transcriptText||meeting.transcriptExcerpt||fullTranscript||"");
   function toggleChange(i){setSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i]);}
+
   async function handleRegenerate(){
     if(!projectId||regenerating)return;
     setRegenerating(true);setRegenError(null);
     try{
-      const res=await fetch(`/api/recall-webhook?action=reanalyze-meeting`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({projectId,meetingId:meeting.id})});
-      const data=await res.json();
-      if(!res.ok||!data.ok)throw new Error(data.error||"Reanalysis failed");
-      if(onRegenerate)onRegenerate(data.meeting);
-    }catch(e){setRegenError(e.message);}finally{setRegenerating(false);}
+      // Use the meeting's own transcript first; fall back to project-level transcript
+      const transcriptText=meeting.transcriptText||meeting.transcriptExcerpt||fullTranscript||"";
+      if(!transcriptText.trim())throw new Error("No transcript available for this meeting");
+
+      // Fetch brief summary from Supabase (needed for consultation context)
+      const{data:proj}=await supabase.from("projects").select("brief,meeting_history").eq("id",projectId).single();
+      const briefSummary=proj?.brief?{
+        projectTitle:proj.brief.projectTitle,budget:proj.brief.budget,timeline:proj.brief.timeline,
+        overview:proj.brief.overview,
+        concepts:arr(proj.brief.concepts).map(c=>({id:c.id,title:c.title,logline:c.logline})),
+        clientActionItems:proj.brief.clientActionItems,internalTodos:proj.brief.internalTodos,
+      }:{};
+
+      const REGEN_SYS=`You are a creative director AI. Analyze this meeting transcript against the existing brief. Return ONLY valid JSON (no markdown):
+{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary","keyPoints":["point 1","point 2","point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}],"actionItems":[{"owner":"Person Name","task":"specific task to complete","deadline":""}],"suggestedChanges":[{"field":"fieldName","description":"what changes","before":"old value","after":"new value as plain text"}],"briefUpdates":{"fieldName":"new exact value"}}
+
+RULES:
+- topics: 2-5 main subjects discussed, each with 2-4 bullet points.
+- actionItems: concrete next steps with owner (person name or "Client"/"Team"), specific task, and optional deadline.
+- briefUpdates: ACTUAL values to merge — dollar amounts, dates, updated text, full clientActionItems/internalTodos arrays.
+- suggestedChanges: 3-6 specific items with readable field names.`;
+
+      const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
+        body:JSON.stringify({model:MODEL,max_tokens:3000,system:REGEN_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcriptText.slice(0,8000)}`}]}),
+      });
+      const aiData=await aiRes.json();
+      if(!aiRes.ok||aiData.error)throw new Error(aiData?.error?.message||`AI error ${aiRes.status}`);
+      const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
+      const clean=(s)=>s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
+      let parsed=null;
+      try{parsed=JSON.parse(clean(raw));}catch{}
+      if(!parsed){try{parsed=JSON.parse(clean(raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"").trim()));}catch{}}
+      if(!parsed){
+        try{
+          const s=raw.indexOf("{");const e=raw.lastIndexOf("}");
+          if(s!==-1&&e!==-1)parsed=JSON.parse(clean(raw.slice(s,e+1)).replace(/,(\s*[}\]])/g,"$1"));
+        }catch(pe){console.error("Regenparse error:",pe.message);}
+      }
+      if(!parsed)throw new Error("AI returned an unexpected response — please try again");
+
+      const updatedMeeting={
+        ...meeting,
+        summary:parsed.summary||meeting.summary,
+        keyPoints:arr(parsed.keyPoints).length>0?parsed.keyPoints:arr(meeting.keyPoints),
+        topics:arr(parsed.topics).length>0?parsed.topics:arr(meeting.topics),
+        actionItems:arr(parsed.actionItems).length>0?parsed.actionItems:arr(meeting.actionItems),
+        suggestedChanges:arr(parsed.suggestedChanges),
+        briefUpdates:(parsed.briefUpdates&&Object.keys(parsed.briefUpdates).length>0)?parsed.briefUpdates:meeting.briefUpdates||null,
+        stage:parsed.stage||meeting.stage,
+        status:"pending_review",
+        reanalyzedAt:new Date().toISOString(),
+      };
+
+      // Save to Supabase
+      const existingHistory=arr(proj?.meeting_history);
+      const newHistory=existingHistory.map(m=>m.id===meeting.id?updatedMeeting:m);
+      // If meeting not found in history (edge case), append it
+      if(!existingHistory.some(m=>m.id===meeting.id))newHistory.push(updatedMeeting);
+      await supabase.from("projects").update({
+        meeting_history:newHistory,recall_status:"brief_pending_review",updated_at:new Date().toISOString(),
+      }).eq("id",projectId);
+
+      if(onRegenerate)onRegenerate(updatedMeeting);
+    }catch(e){console.error("handleRegenerate error:",e);setRegenError(e.message);}
+    finally{setRegenerating(false);}
   }
 
   const panelStyle=expanded
@@ -1735,7 +1796,6 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
 
   const topics=arr(meeting?.topics);
   const actionItems=arr(meeting?.actionItems);
-  const hasChangesTab=changes.length>0;
 
   const NotesContent=()=>(
     <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
@@ -1812,43 +1872,46 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
           ))}
         </div>
       )}
-    </div>
-  );
-
-  const BriefChangesContent=()=>(
-    <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
-      {isPending&&<div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,padding:"10px 14px",background:"#fdeee4",borderRadius:8,border:"1px solid #f5d0b5"}}>
-        <span style={{fontSize:12,fontFamily:"'IBM Plex Mono',monospace",background:"#b94a1a",color:"#fff",borderRadius:20,padding:"2px 8px",fontWeight:600,flexShrink:0}}>PENDING REVIEW</span>
-        <span style={{fontSize:12,color:"#7a3210",lineHeight:1.5}}>Select changes to apply, then click Apply below.</span>
-      </div>}
-      {changes.map((c,i)=>{
-        const reviewed=meeting.status==="reviewed";
-        const applied=reviewed&&c.applied!==false;
-        const skipped=reviewed&&c.applied===false;
-        const sel=isPending&&selected.includes(i);
-        return(
-          <div key={i}
-            onClick={isPending?()=>toggleChange(i):undefined}
-            style={{padding:"14px 16px",borderRadius:10,marginBottom:12,border:`1.5px solid ${isPending?(sel?"#1a56c4":"#e8e4dc"):skipped?"#f1f0ef":applied?"#b7e4c7":"#f1f0ef"}`,background:isPending?(sel?"#f5f8ff":"#fff"):skipped?"#f7f6f3":applied?"#f0faf4":"#fff",cursor:isPending?"pointer":"default",transition:"all .15s"}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-              {isPending&&(
-                <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${sel?"#1a56c4":"#d4d2ce"}`,background:sel?"#1a56c4":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  {sel&&<span style={{color:"#fff",fontSize:10,lineHeight:1}}>✓</span>}
-                </div>
-              )}
-              <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:skipped?"#f1f0ef":applied?"#d1f0dc":isPending?"#e8f0fe":"#e8f0fe",color:skipped?"#9b9a97":applied?"#1e7e34":"#1a56c4",borderRadius:6,padding:"3px 8px",fontWeight:600,letterSpacing:"0.04em",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatFieldName(c.field)}</span>
-              {reviewed&&<span style={{fontSize:10,color:skipped?"#c4c3bf":"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",flexShrink:0}}>{skipped?"skipped":"✓ applied"}</span>}
+      {/* Brief Changes — inline in Notes */}
+      {changes.length>0&&(
+        <div style={{marginTop:8,marginBottom:8}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:13}}>✎</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#37352f"}}>Brief Changes</span>
             </div>
-            <div style={{fontSize:13,color:"#37352f",lineHeight:1.65,overflowWrap:"break-word",marginBottom:c.before&&c.after?10:0}}>{c.description}</div>
-            {c.before&&c.after&&(
-              <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                <div style={{fontSize:11,color:"#c0392b",fontFamily:"'IBM Plex Mono',monospace",background:"#fff2f2",borderRadius:6,padding:"6px 10px",overflowWrap:"break-word",whiteSpace:"pre-wrap",lineHeight:1.6}}>– {c.before}</div>
-                <div style={{fontSize:11,color:"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",background:"#e6f4ea",borderRadius:6,padding:"6px 10px",overflowWrap:"break-word",whiteSpace:"pre-wrap",lineHeight:1.6}}>+ {c.after}</div>
-              </div>
-            )}
+            {isPending&&<span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:"#fdeee4",color:"#b94a1a",borderRadius:20,padding:"2px 8px",fontWeight:600}}>PENDING REVIEW</span>}
           </div>
-        );
-      })}
+          {changes.map((c,i)=>{
+            const reviewed=meeting.status==="reviewed";
+            const applied=reviewed&&c.applied!==false;
+            const skipped=reviewed&&c.applied===false;
+            const sel=isPending&&selected.includes(i);
+            return(
+              <div key={i}
+                onClick={isPending?()=>toggleChange(i):undefined}
+                style={{padding:"14px 16px",borderRadius:10,marginBottom:12,border:`1.5px solid ${isPending?(sel?"#1a56c4":"#e8e4dc"):skipped?"#f1f0ef":applied?"#b7e4c7":"#f1f0ef"}`,background:isPending?(sel?"#f5f8ff":"#fff"):skipped?"#f7f6f3":applied?"#f0faf4":"#fff",cursor:isPending?"pointer":"default",transition:"all .15s"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                  {isPending&&(
+                    <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${sel?"#1a56c4":"#d4d2ce"}`,background:sel?"#1a56c4":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {sel&&<span style={{color:"#fff",fontSize:10,lineHeight:1}}>✓</span>}
+                    </div>
+                  )}
+                  <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:skipped?"#f1f0ef":applied?"#d1f0dc":isPending?"#e8f0fe":"#e8f0fe",color:skipped?"#9b9a97":applied?"#1e7e34":"#1a56c4",borderRadius:6,padding:"3px 8px",fontWeight:600,letterSpacing:"0.04em",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatFieldName(c.field)}</span>
+                  {reviewed&&<span style={{fontSize:10,color:skipped?"#c4c3bf":"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",flexShrink:0}}>{skipped?"skipped":"✓ applied"}</span>}
+                </div>
+                <div style={{fontSize:13,color:"#37352f",lineHeight:1.65,overflowWrap:"break-word",marginBottom:c.before&&c.after?10:0}}>{c.description}</div>
+                {c.before&&c.after&&(
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{fontSize:11,color:"#c0392b",fontFamily:"'IBM Plex Mono',monospace",background:"#fff2f2",borderRadius:6,padding:"6px 10px",overflowWrap:"break-word",whiteSpace:"pre-wrap",lineHeight:1.6}}>– {c.before}</div>
+                    <div style={{fontSize:11,color:"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",background:"#e6f4ea",borderRadius:6,padding:"6px 10px",overflowWrap:"break-word",whiteSpace:"pre-wrap",lineHeight:1.6}}>+ {c.after}</div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 
@@ -1920,14 +1983,14 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
           </div>
         </div>
           <div style={{display:"flex"}}>
-          {[["notes","Notes"],["transcript","Transcript"],...(hasChangesTab?[["changes","Brief Changes"]]:[])].map(([t,l])=>(
-            <button key={t} onClick={()=>setTab(t)} style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontSize:12,fontFamily:"'Lora',serif",color:tab===t?"#37352f":"#9b9a97",fontWeight:tab===t?700:400,borderBottom:tab===t?"2px solid #37352f":"2px solid transparent",marginBottom:-1,transition:"all .15s",position:"relative"}}>{l}{t==="changes"&&isPending&&<span style={{position:"absolute",top:4,right:4,width:6,height:6,borderRadius:3,background:"#e97942"}}/>}</button>
+          {[["notes","Notes"],["transcript","Transcript"]].map(([t,l])=>(
+            <button key={t} onClick={()=>setTab(t)} style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontSize:12,fontFamily:"'Lora',serif",color:tab===t?"#37352f":"#9b9a97",fontWeight:tab===t?700:400,borderBottom:tab===t?"2px solid #37352f":"2px solid transparent",marginBottom:-1,transition:"all .15s"}}>{l}</button>
           ))}
         </div>
       </div>
-      {tab==="notes"?<NotesContent/>:tab==="transcript"?<TranscriptContent/>:<BriefChangesContent/>}
-      {/* Apply/Dismiss footer — only shown when pending and on changes tab */}
-      {isPending&&tab==="changes"&&onApply&&(
+      {tab==="notes"?<NotesContent/>:<TranscriptContent/>}
+      {/* Apply/Dismiss footer — shown when pending and on Notes tab */}
+      {isPending&&tab==="notes"&&onApply&&(
         <div style={{padding:"12px 16px",borderTop:"1px solid #f1f0ef",display:"flex",gap:8,flexShrink:0,background:"#fafaf9"}}>
           <button onClick={()=>onApply(changes.map((_,i)=>i))} style={{flex:1,background:"#37352f",color:"#fff",border:"none",padding:"9px 14px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",fontWeight:600}}>Apply All</button>
           {selected.length>0&&selected.length<changes.length&&(
