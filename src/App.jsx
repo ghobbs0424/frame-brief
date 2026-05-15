@@ -1835,7 +1835,7 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
                 {moveOpen&&(
                   <>
                     <div style={{position:"fixed",inset:0,zIndex:299}} onClick={()=>setMoveOpen(false)}/>
-                    <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:"#fff",border:"1px solid #e8e4dc",borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",zIndex:300,minWidth:220,maxHeight:260,overflowY:"auto"}}>
+                    <div style={{position:"fixed",top:48,right:8,left:8,background:"#fff",border:"1px solid #e8e4dc",borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.15)",zIndex:310,maxHeight:"60vh",overflowY:"auto"}}>
                       <div style={{padding:"10px 14px 6px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",borderBottom:"1px solid #f1f0ef"}}>Move to project</div>
                       {arr(projects).filter(p=>p.id!==projectId).map(p=>(
                         <button key={p.id} onClick={()=>handleMove(p.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"11px 14px",border:"none",borderBottom:"1px solid #f7f6f3",background:"none",cursor:"pointer",fontSize:13,color:"#37352f",fontFamily:"'Lora',serif"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
