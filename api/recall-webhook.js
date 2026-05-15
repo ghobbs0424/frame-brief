@@ -37,7 +37,7 @@ export default async function handler(req, res) {
           meeting_url: meetingUrl,
           bot_name: "Frame Brief",
           webhook_url: `https://framebriefai.com/api/recall-webhook`,
-          automatic_leave: { waiting_room_timeout: 3600, everyone_left_timeout: 300 },
+          automatic_leave: { waiting_room_timeout: 3600, everyone_left_timeout: 60 },
         }),
       });
 
@@ -178,7 +178,7 @@ export default async function handler(req, res) {
                 },
                 automatic_leave: {
                   waiting_room_timeout: 3600,
-                  everyone_left_timeout: 300,
+                  everyone_left_timeout: 60,
                 },
               },
             }),

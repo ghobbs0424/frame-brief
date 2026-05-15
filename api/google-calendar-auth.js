@@ -116,7 +116,7 @@ export default async function handler(req, res) {
               },
               automatic_leave: {
                 waiting_room_timeout: 3600,
-                everyone_left_timeout: 300,
+                everyone_left_timeout: 60,
               },
             },
           };
