@@ -2035,12 +2035,21 @@ function CallSheetPanel({brief,callSheet,onUpdate,readonly}){
 }
 
 // ─── POST PRODUCTION PANEL ────────────────────────────────────────────────────
-function PostProductionPanel({postProduction,onUpdate,readonly,concepts}){
+function PostProductionPanel({postProduction,onUpdate,readonly,concepts,projectId,meetingHistory,fullTranscript}){
   const pp=obj(postProduction);
   const items=arr(pp.items);
   const[addingRound,setAddingRound]=useState(null);
   const[editingId,setEditingId]=useState(null);
   const[draft,setDraft]=useState({});
+  // Import panel state
+  const[importMode,setImportMode]=useState(null); // null | "meeting" | "dictate"
+  const[importText,setImportText]=useState("");
+  const[selectedMeetingIdx,setSelectedMeetingIdx]=useState(null);
+  const[extracting,setExtracting]=useState(false);
+  const[extracted,setExtracted]=useState(null);
+  const[extractError,setExtractError]=useState(null);
+  const[dictating,setDictating]=useState(false);
+  const[targetRound,setTargetRound]=useState(null);
 
   const STATUS_STYLES={
     pending:{bg:"#fdeee4",c:"#b94a1a",label:"Pending"},
@@ -2051,6 +2060,8 @@ function PostProductionPanel({postProduction,onUpdate,readonly,concepts}){
 
   const rounds=[...new Set(items.map(r=>r.round||1))].sort((a,b)=>a-b);
   const maxRound=rounds.length?Math.max(...rounds):0;
+  // Keep targetRound in sync with maxRound when first opened
+  React.useEffect(()=>{if(targetRound===null)setTargetRound(maxRound+1);},[maxRound]);
 
   function save(id,patch){
     onUpdate({...pp,items:items.map(r=>r.id===id?{...r,...patch}:r)});
@@ -2069,6 +2080,53 @@ function PostProductionPanel({postProduction,onUpdate,readonly,concepts}){
 
   const statusCycle={pending:"in_progress",in_progress:"done",done:"wont_fix",wont_fix:"pending"};
 
+  // ── Import helpers ────────────────────────────────────────────────────────
+  function openImport(mode){
+    setImportMode(mode);setImportText("");setExtracted(null);setExtractError(null);setSelectedMeetingIdx(null);
+    if(mode==="meeting"){setTargetRound(maxRound+1);}
+  }
+  function closeImport(){setImportMode(null);setImportText("");setExtracted(null);setExtractError(null);setDictating(false);if(window._ppRec){window._ppRec.stop();window._ppRec=null;}}
+
+  function loadMeetingTranscript(idx){
+    const history=arr(meetingHistory);
+    const m=history[idx];
+    if(!m)return;
+    setSelectedMeetingIdx(idx);
+    // Use full transcript if this meeting's transcriptExcerpt matches what we stored, else excerpt
+    const isLatest=idx===history.length-1;
+    setImportText(isLatest&&fullTranscript?fullTranscript:m.transcriptExcerpt||"(No transcript available for this meeting)");
+  }
+
+  function startDictation(){
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if(!SR){setExtractError("Speech recognition not supported in this browser — try Chrome");return;}
+    const rec=new SR();rec.continuous=true;rec.interimResults=true;rec.lang="en-US";
+    let final="";
+    rec.onresult=e=>{let interim="";for(let i=e.resultIndex;i<e.results.length;i++){if(e.results[i].isFinal)final+=e.results[i][0].transcript+" ";else interim+=e.results[i][0].transcript;}setImportText(final+interim);};
+    rec.onend=()=>setDictating(false);
+    rec.start();setDictating(true);window._ppRec=rec;
+  }
+  function stopDictation(){if(window._ppRec){window._ppRec.stop();window._ppRec=null;}setDictating(false);}
+
+  async function extractRevisions(){
+    if(!importText.trim())return;
+    setExtracting(true);setExtractError(null);setExtracted(null);
+    try{
+      const res=await fetch("/api/recall-webhook?action=extract-revisions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text:importText,conceptTitles:arr(concepts).map(c=>c.title)})});
+      const data=await res.json();
+      if(!res.ok||!data.ok)throw new Error(data.error||"Extraction failed");
+      if(!data.items?.length)throw new Error("No revision requests found in the text");
+      setExtracted(data.items.map((item,i)=>({...item,_selected:true,_id:`ext-${Date.now()}-${i}`})));
+    }catch(e){setExtractError(e.message);}finally{setExtracting(false);}
+  }
+
+  function applyExtracted(){
+    const round=targetRound??maxRound+1;
+    const newItems=extracted.filter(x=>x._selected).map(x=>({id:`ri-${Date.now()}-${Math.random().toString(36).slice(2)}`,round,timecode:x.timecode||"",description:x.description||"",status:"pending",requestedBy:importMode==="dictate"?"team":"client",concept:x.concept||"",notes:x.notes||"",createdAt:new Date().toISOString()}));
+    onUpdate({...pp,items:[...items,...newItems]});
+    closeImport();
+  }
+
   return(
     <div style={{maxWidth:760,margin:"0 auto",padding:"32px 24px"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
@@ -2076,9 +2134,135 @@ function PostProductionPanel({postProduction,onUpdate,readonly,concepts}){
           <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:4}}>Post Production</div>
           <h2 style={{fontSize:22,fontWeight:700,color:"#37352f",margin:0}}>Client Revisions</h2>
         </div>
-        {!readonly&&<button onClick={()=>{const r=maxRound+1;onUpdate({...pp,items:[...items,{id:`ri-${Date.now()}`,round:r,timecode:"",description:"",status:"pending",requestedBy:"team",concept:"",notes:"",createdAt:new Date().toISOString()}]});setAddingRound(r);}} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",fontWeight:600}}>+ New Round</button>}
+        {!readonly&&<div style={{display:"flex",gap:8}}>
+          <button onClick={()=>openImport("meeting")} style={{background:"none",color:"#1a56c4",border:"1px solid #d2e3fc",padding:"7px 13px",borderRadius:6,fontFamily:"'IBM Plex Mono',monospace",fontSize:11,cursor:"pointer",fontWeight:600}}>📎 From Meeting</button>
+          <button onClick={()=>openImport("dictate")} style={{background:"none",color:"#37352f",border:"1px solid #e8e4dc",padding:"7px 13px",borderRadius:6,fontFamily:"'IBM Plex Mono',monospace",fontSize:11,cursor:"pointer",fontWeight:600}}>🎙 Dictate</button>
+          <button onClick={()=>{const r=maxRound+1;onUpdate({...pp,items:[...items,{id:`ri-${Date.now()}`,round:r,timecode:"",description:"",status:"pending",requestedBy:"team",concept:"",notes:"",createdAt:new Date().toISOString()}]});setAddingRound(r);}} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",fontWeight:600}}>+ New Round</button>
+        </div>}
       </div>
       <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,marginBottom:28}}>Time-coded revision requests from client review. Both you and your client can add items — use the shared link to give your client access.</p>
+
+      {/* ── Import Panel ──────────────────────────────────────────────────── */}
+      {importMode&&(
+        <div style={{border:"1px solid #d2e3fc",borderRadius:10,background:"#f5f8ff",padding:"20px 20px 16px",marginBottom:28}}>
+          {/* Header row */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+            <div style={{fontSize:13,fontWeight:700,color:"#1a56c4"}}>
+              {importMode==="meeting"?"📎 Import from Meeting Transcript":"🎙 Dictate Revision Requests"}
+            </div>
+            <button onClick={closeImport} style={{background:"none",border:"none",color:"#9b9a97",fontSize:16,cursor:"pointer",padding:"0 2px",lineHeight:1}}>✕</button>
+          </div>
+
+          {/* Meeting selector (meeting mode) */}
+          {importMode==="meeting"&&(
+            <div style={{marginBottom:12}}>
+              {arr(meetingHistory).length===0?(
+                <div style={{fontSize:13,color:"#9b9a97",fontStyle:"italic"}}>No meeting history for this project yet.</div>
+              ):(
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {arr(meetingHistory).map((m,i)=>{
+                    const label=m.title||m.eventTitle||`Meeting ${i+1}`;
+                    const date=m.date||m.createdAt?new Date(m.date||m.createdAt).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):"";
+                    const sel=selectedMeetingIdx===i;
+                    return(
+                      <button key={m.id||i} onClick={()=>loadMeetingTranscript(i)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",textAlign:"left",background:sel?"#e8f0fe":"#fff",border:`1px solid ${sel?"#1a56c4":"#e8e4dc"}`,borderRadius:7,padding:"10px 14px",cursor:"pointer",transition:"all .1s"}}>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:sel?700:400,color:sel?"#1a56c4":"#37352f"}}>{label}</div>
+                          {date&&<div style={{fontSize:11,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>{date}</div>}
+                        </div>
+                        {sel&&<span style={{fontSize:11,color:"#1a56c4",fontFamily:"'IBM Plex Mono',monospace"}}>✓ loaded</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Dictation controls (dictate mode) */}
+          {importMode==="dictate"&&(
+            <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+              {!dictating?(
+                <button onClick={startDictation} style={{display:"flex",alignItems:"center",gap:6,background:"#e97942",color:"#fff",border:"none",borderRadius:7,padding:"10px 18px",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'Lora',serif"}}>
+                  <span style={{fontSize:18}}>🎙</span> Start Dictating
+                </button>
+              ):(
+                <button onClick={stopDictation} style={{display:"flex",alignItems:"center",gap:6,background:"#c0392b",color:"#fff",border:"none",borderRadius:7,padding:"10px 18px",cursor:"pointer",fontSize:13,fontWeight:600,fontFamily:"'Lora',serif",animation:"pulse 1.2s ease-in-out infinite"}}>
+                  <span style={{fontSize:18}}>⏹</span> Stop Recording
+                </button>
+              )}
+              <div style={{fontSize:12,color:"#9b9a97"}}>Speak your revision notes — AI will extract each request with timecodes.</div>
+            </div>
+          )}
+
+          {/* Shared: transcript/dictation text area */}
+          {(importMode==="dictate"||(importMode==="meeting"&&selectedMeetingIdx!==null))&&(
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>
+                {importMode==="dictate"?"Your Spoken Notes":"Transcript Preview"}
+                {dictating&&<span style={{marginLeft:8,color:"#c0392b",fontWeight:700}}>● RECORDING</span>}
+              </div>
+              <textarea
+                value={importText}
+                onChange={e=>setImportText(e.target.value)}
+                rows={6}
+                placeholder={importMode==="dictate"?"Start speaking — text will appear here…":"Transcript will load here. You can edit it before extracting."}
+                style={{width:"100%",border:"1px solid #d2e3fc",borderRadius:6,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:12,color:"#37352f",background:"#fff",resize:"vertical",outline:"none",boxSizing:"border-box",lineHeight:1.6}}
+              />
+            </div>
+          )}
+
+          {/* Extract button */}
+          {(importMode==="dictate"||(importMode==="meeting"&&selectedMeetingIdx!==null))&&!extracted&&(
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+              <button onClick={extractRevisions} disabled={extracting||!importText.trim()} style={{background:extracting||!importText.trim()?"#c4c3bf":"#1a56c4",color:"#fff",border:"none",borderRadius:6,padding:"9px 20px",fontFamily:"'Lora',serif",fontSize:13,cursor:extracting||!importText.trim()?"not-allowed":"pointer",fontWeight:600}}>
+                {extracting?"Extracting…":"✦ Extract Revisions"}
+              </button>
+              {extracting&&<div style={{fontSize:12,color:"#9b9a97"}}>AI is reading the transcript…</div>}
+            </div>
+          )}
+
+          {extractError&&<div style={{fontSize:12,color:"#c0392b",marginTop:6,background:"#fdf2f2",border:"1px solid #f5c6cb",borderRadius:5,padding:"8px 12px"}}>{extractError}</div>}
+
+          {/* Extracted items preview */}
+          {extracted&&extracted.length>0&&(
+            <div>
+              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#1a56c4",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10,fontWeight:600}}>
+                {extracted.length} revision{extracted.length!==1?"s":""} found — select which to add:
+              </div>
+              <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:14}}>
+                {extracted.map((x,i)=>(
+                  <label key={x._id} style={{display:"flex",alignItems:"flex-start",gap:10,background:x._selected?"#fff":"#f7f6f3",border:`1px solid ${x._selected?"#1a56c4":"#e8e4dc"}`,borderRadius:7,padding:"10px 12px",cursor:"pointer",transition:"all .1s"}}>
+                    <input type="checkbox" checked={!!x._selected} onChange={()=>setExtracted(ex=>ex.map((e,j)=>j===i?{...e,_selected:!e._selected}:e))} style={{marginTop:2,flexShrink:0,accentColor:"#1a56c4"}}/>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:x.concept||x.notes?3:0}}>
+                        {x.timecode&&<span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:"#f1f0ef",color:"#55534e",borderRadius:4,padding:"1px 6px",fontWeight:600,flexShrink:0}}>{x.timecode}</span>}
+                        <span style={{fontSize:13,color:"#37352f",lineHeight:1.5}}>{x.description}</span>
+                      </div>
+                      {(x.concept||x.notes)&&<div style={{fontSize:11,color:"#9b9a97"}}>{x.concept&&<span style={{marginRight:8}}>📹 {x.concept}</span>}{x.notes&&<span>{x.notes}</span>}</div>}
+                    </div>
+                  </label>
+                ))}
+              </div>
+              {/* Round selector + apply */}
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <div style={{fontSize:12,color:"#37352f",fontWeight:600}}>Add to round:</div>
+                {[...Array(maxRound+2)].map((_,i)=>{
+                  const r=i+1;
+                  return(
+                    <button key={r} onClick={()=>setTargetRound(r)} style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:targetRound===r?"#37352f":"#f1f0ef",color:targetRound===r?"#fff":"#55534e",border:"none",borderRadius:5,padding:"4px 10px",cursor:"pointer",fontWeight:600}}>
+                      {r<=maxRound?`Round ${r}`:`Round ${r} (new)`}
+                    </button>
+                  );
+                })}
+                <button onClick={applyExtracted} disabled={!extracted.some(x=>x._selected)} style={{background:extracted.some(x=>x._selected)?"#1a56c4":"#c4c3bf",color:"#fff",border:"none",borderRadius:6,padding:"8px 18px",fontFamily:"'Lora',serif",fontSize:13,cursor:extracted.some(x=>x._selected)?"pointer":"not-allowed",fontWeight:600,marginLeft:"auto"}}>
+                  Add {extracted.filter(x=>x._selected).length} Item{extracted.filter(x=>x._selected).length!==1?"s":""}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {rounds.length===0&&(
         <div style={{border:"2px dashed #e8e4dc",borderRadius:10,padding:"40px 24px",textAlign:"center"}}>
@@ -3377,7 +3561,7 @@ ${JSON.stringify(brief)}`;
         <div style={{flex:1,overflowY:"auto"}}>
           {page==="overview"&&<OverviewPage brief={brief} setBrief={()=>{}} goTo={setPage} readonly meetingStage={activeProject?.meeting_stage||"discovery"}/>}
           {conceptIdx>=0&&brief?.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={()=>{}} readonly/>}
-          {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>({...prev,post_production:pp}));supabase.from("projects").update({post_production:pp,updated_at:new Date().toISOString()}).eq("id",activeProject.id);}} readonly/>}
+          {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>({...prev,post_production:pp}));supabase.from("projects").update({post_production:pp,updated_at:new Date().toISOString()}).eq("id",activeProject.id);}} readonly projectId={activeProject?.id} meetingHistory={arr(activeProject?.meeting_history)} fullTranscript={activeProject?.recall_transcript||""} concepts={arr(activeProject?.brief?.concepts)}/>}
         </div>
       </div>
     </div>
@@ -3548,7 +3732,7 @@ ${JSON.stringify(brief)}`;
           {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} onGenerateBrief={generateBriefFromSavedTranscript} briefGenError={briefGenError} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}} clients={clients} onClientLink={linkClientToProject} onClientUnlink={unlinkClientFromProject} onClientCreateAndLink={createAndLinkClient} meetingStage={activeProject?.meeting_stage||"discovery"} onStageChange={stage=>{setActiveProject(prev=>{const updated={...prev,meeting_stage:stage};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_stage:stage}:p));}}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
           {page==="shootday"&&<CallSheetPanel brief={brief} callSheet={activeProject?.call_sheet||{}} onUpdate={cs=>{setActiveProject(prev=>{const updated={...prev,call_sheet:cs};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
-          {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>{const updated={...prev,post_production:pp};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
+          {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>{const updated={...prev,post_production:pp};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"} projectId={activeProject?.id} meetingHistory={arr(activeProject?.meeting_history)} fullTranscript={activeProject?.recall_transcript||""} concepts={arr(activeProject?.brief?.concepts)}/>}
         </div>
         {/* Meeting Notes right panel — sits alongside the brief like the chat panel */}
         {viewingMeeting&&!meetingNotesExpanded&&(()=>{

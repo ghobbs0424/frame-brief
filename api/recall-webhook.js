@@ -62,6 +62,53 @@ export default async function handler(req, res) {
       return res.status(200).json({ botId: botData.id, status: botData.status });
     }
 
+    // ── Extract revision requests from text (transcript or dictation) ─────────
+    if (req.query.action === "extract-revisions") {
+      const { text, conceptTitles } = req.body || {};
+      if (!text?.trim()) return res.status(400).json({ error: "text required" });
+
+      const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY || process.env.VITE_ANTHROPIC_KEY;
+      if (!ANTHROPIC_KEY) return res.status(500).json({ error: "no Anthropic key" });
+
+      const conceptList = (conceptTitles || []).filter(Boolean).join('", "');
+      const EXTRACT_SYSTEM = `You are a post-production coordinator. Extract all revision requests from the text below and return ONLY valid JSON with no markdown:
+{"items":[{"timecode":"MM:SS","description":"clear actionable revision request","concept":"video/clip name if mentioned, else empty string","notes":"additional context if any"}]}
+
+Rules:
+- timecode: exact time mentioned ("1:23", "0:45"). Empty string if no time given.
+- description: one sentence, specific and actionable ("Reduce music volume during voiceover at this point")
+- concept: match to one of these if mentioned: "${conceptList || "any concept"}"
+- Extract EVERY revision request, even those without timecodes
+- If nothing sounds like a revision request, return {"items":[]}`;
+
+      const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-6",
+          max_tokens: 1500,
+          system: EXTRACT_SYSTEM,
+          messages: [{ role: "user", content: text.slice(0, 8000) }],
+        }),
+      });
+
+      const aiData = await aiRes.json();
+      if (!aiRes.ok || aiData.error) return res.status(500).json({ error: "AI failed: " + (aiData.error?.message || "") });
+
+      const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
+      let parsed = null;
+      try { parsed = JSON.parse(raw); } catch {}
+      if (!parsed) {
+        try { parsed = JSON.parse(raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"")); } catch {}
+      }
+      if (!parsed) {
+        try { const s=raw.indexOf("{");const e=raw.lastIndexOf("}");if(s!==-1&&e!==-1)parsed=JSON.parse(raw.slice(s,e+1).replace(/,(\s*[}\]])/g,"$1")); } catch(pe){ console.error("extract-revisions parse error:",pe.message); }
+      }
+      if (!parsed?.items) return res.status(500).json({ error: "AI returned invalid JSON", raw: raw.slice(0,200) });
+      console.log("extract-revisions: extracted", parsed.items.length, "items");
+      return res.status(200).json({ ok: true, items: parsed.items });
+    }
+
     // ── Re-analyze a specific meeting entry with AI (regenerate notes + briefUpdates) ──
     if (req.query.action === "reanalyze-meeting") {
       const { projectId, meetingId } = req.body || {};
