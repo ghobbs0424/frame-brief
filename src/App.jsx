@@ -1801,6 +1801,7 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
     </div>
   );
 
+  const isExcerptOnly=!meeting.transcriptText&&!!meeting.transcriptExcerpt;
   const TranscriptContent=()=>(
     <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
       {segments.length===0?(
@@ -1811,7 +1812,6 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
             if(!seg.speaker&&!seg.timestamp){
               return <div key={i} style={{fontSize:13,color:"#9b9a97",lineHeight:1.7,marginBottom:8,fontStyle:"italic"}}>{seg.text}</div>;
             }
-            // Show speaker header when speaker changes, or when this segment has its own timestamp
             const showHeader=i===0||segments[i-1].speaker!==seg.speaker||!!seg.timestamp;
             return(
               <div key={i} style={{marginBottom:showHeader?14:4}}>
@@ -1825,6 +1825,11 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
               </div>
             );
           })}
+          {isExcerptOnly&&(
+            <div style={{marginTop:20,padding:"10px 14px",background:"#fef9ed",border:"1px solid #f5e199",borderRadius:8,fontSize:12,color:"#92600e",lineHeight:1.6}}>
+              ⚠️ This meeting was recorded before full transcript storage was enabled — only the first 500 characters were saved. New meetings store the complete transcript automatically.
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -3583,7 +3588,8 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       if(!Array.isArray(parsed.concepts))parsed.concepts=[];
       if(!parsed.clientActionItems)parsed.clientActionItems=[];
       if(!parsed.internalTodos)parsed.internalTodos=[];
-      const newProject={id:crypto.randomUUID(),user_id:user.id,title:parsed.projectTitle||"Untitled",client_name:parsed.clientName||"",status:"Draft",brief:parsed,doc_count:validDocs.length,client_id:resolvedClientId||null,created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+      const discoveryMeeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:"discovery",summary:parsed.logline||"Initial brief created from meeting notes.",keyPoints:[],suggestedChanges:[],transcriptText:transcript.trim()||null,transcriptExcerpt:transcript.trim().slice(0,500),status:"reviewed"};
+      const newProject={id:crypto.randomUUID(),user_id:user.id,title:parsed.projectTitle||"Untitled",client_name:parsed.clientName||"",status:"Draft",brief:parsed,doc_count:validDocs.length,client_id:resolvedClientId||null,meeting_stage:"discovery",meeting_history:[discoveryMeeting],created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
       const saved=await saveProject(newProject);
       setActiveProject(saved||newProject);
       setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setDocs([]);setTranscript("");setInputClientId(null);setNewClientNameInput("");setScreen("doc");
