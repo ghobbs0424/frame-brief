@@ -1734,32 +1734,44 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
         clientActionItems:proj.brief.clientActionItems,internalTodos:proj.brief.internalTodos,
       }:{};
 
-      const REGEN_SYS=`You are a creative director AI. Analyze this meeting transcript against the existing brief. Return ONLY valid JSON (no markdown):
-{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary","keyPoints":["point 1","point 2","point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}],"actionItems":[{"owner":"Person Name","task":"specific task to complete","deadline":""}],"suggestedChanges":[{"field":"fieldName","description":"what changes","before":"old value","after":"new value as plain text"}],"briefUpdates":{"fieldName":"new exact value"}}
+      const REGEN_SYS=`You are a creative director AI. Analyze this meeting transcript against the existing brief. Return ONLY valid JSON (no markdown, no code fences). Keep ALL string values on a single line — no literal newlines inside strings. Keep values short.
+{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary","keyPoints":["point 1","point 2","point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}],"actionItems":[{"owner":"Person Name","task":"specific task to complete","deadline":""}],"suggestedChanges":[{"field":"fieldName","description":"what changes","before":"old value","after":"new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}
 
 RULES:
-- topics: 2-5 main subjects discussed, each with 2-4 bullet points.
-- actionItems: concrete next steps with owner (person name or "Client"/"Team"), specific task, and optional deadline.
-- briefUpdates: ACTUAL values to merge — dollar amounts, dates, updated text, full clientActionItems/internalTodos arrays.
-- suggestedChanges: 3-6 specific items with readable field names.`;
+- topics: 2-5 main subjects, each with 2-4 short bullet points (one line each).
+- actionItems: concrete next steps with owner (person name or "Client"/"Team"), task, optional deadline.
+- suggestedChanges: 3-6 specific items with readable field names.
+- briefUpdates: ONLY simple scalar updates — budget, timeline, date, logline, overview (1-2 sentences max). Do NOT include concepts arrays. Do NOT include long text blocks.`;
 
       const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",
         headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-        body:JSON.stringify({model:MODEL,max_tokens:3000,system:REGEN_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcriptText.slice(0,8000)}`}]}),
+        body:JSON.stringify({model:MODEL,max_tokens:1800,system:REGEN_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcriptText.slice(0,5000)}`}]}),
       });
       const aiData=await aiRes.json();
       if(!aiRes.ok||aiData.error)throw new Error(aiData?.error?.message||`AI error ${aiRes.status}`);
       const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
-      const clean=(s)=>s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
+      // Strip invalid control chars; also replace literal newlines/tabs inside string values
+      // (AI sometimes writes multi-line strings which are invalid JSON)
+      const clean=(s)=>{
+        // Remove invalid control chars but keep structural whitespace
+        let r=s.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
+        // Replace literal newlines/carriage returns inside JSON strings with a space
+        // Strategy: replace any \n or \r that appears between two non-whitespace chars (inside values)
+        r=r.replace(/(?<=[^,\[{\n\r])\n(?=[^\n\r]*[":,\}\]])/g," ");
+        return r;
+      };
       let parsed=null;
       try{parsed=JSON.parse(clean(raw));}catch{}
       if(!parsed){try{parsed=JSON.parse(clean(raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"").trim()));}catch{}}
       if(!parsed){
         try{
           const s=raw.indexOf("{");const e=raw.lastIndexOf("}");
-          if(s!==-1&&e!==-1)parsed=JSON.parse(clean(raw.slice(s,e+1)).replace(/,(\s*[}\]])/g,"$1"));
-        }catch(pe){console.error("Regenparse error:",pe.message);}
+          if(s!==-1&&e!==-1){
+            const slice=clean(raw.slice(s,e+1)).replace(/,(\s*[}\]])/g,"$1");
+            parsed=JSON.parse(slice);
+          }
+        }catch(pe){console.error("Regenparse error:",pe.message,"raw preview:",raw.slice(0,300));}
       }
       if(!parsed)throw new Error("AI returned an unexpected response — please try again");
 
