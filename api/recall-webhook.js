@@ -106,10 +106,10 @@ RULES — briefUpdates must have ACTUAL values to merge into the brief:
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
+          model: "claude-sonnet-4-6",
           max_tokens: 2000,
           system: REANALYZE_SYSTEM,
-          messages: [{ role: "user", content: `Existing brief (summary):\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcript.slice(0, 6000)}` }],
+          messages: [{ role: "user", content: `Existing brief (summary):\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcript.slice(0, 5000)}` }],
         }),
       });
 
@@ -120,13 +120,29 @@ RULES — briefUpdates must have ACTUAL values to merge into the brief:
       }
 
       const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
+      console.log("reanalyze-meeting raw response length:", raw.length, "preview:", raw.slice(0, 200));
       let parsed = null;
       try {
-        const s = raw.indexOf("{"); const e = raw.lastIndexOf("}");
-        if (s !== -1 && e !== -1) parsed = JSON.parse(raw.slice(s, e + 1).replace(/,\s*}/g, "}").replace(/,\s*]/g, "]"));
-      } catch (pe) { console.error("reanalyze-meeting parse error:", pe.message, "raw:", raw.slice(0, 300)); }
+        // Try direct parse first
+        parsed = JSON.parse(raw);
+      } catch {
+        try {
+          // Strip markdown code fences and retry
+          const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```\s*$/, "").trim();
+          parsed = JSON.parse(cleaned);
+        } catch {
+          try {
+            // Extract outermost JSON object
+            const s = raw.indexOf("{"); const e = raw.lastIndexOf("}");
+            if (s !== -1 && e !== -1) {
+              const slice = raw.slice(s, e + 1).replace(/,(\s*[}\]])/g, "$1");
+              parsed = JSON.parse(slice);
+            }
+          } catch (pe) { console.error("reanalyze-meeting parse error:", pe.message, "raw:", raw.slice(0, 500)); }
+        }
+      }
 
-      if (!parsed) return res.status(500).json({ error: "AI returned invalid JSON" });
+      if (!parsed) return res.status(500).json({ error: "AI returned invalid JSON", raw: raw.slice(0, 300) });
 
       const oldMeeting = existingHistory[meetingIdx];
       const updatedMeeting = {
@@ -626,10 +642,16 @@ RULES:
       console.log("Consultation raw length:", raw.length, "preview:", raw.slice(0, 200));
 
       let parsed = null;
-      try {
-        const s = raw.indexOf("{"); const e = raw.lastIndexOf("}");
-        if (s !== -1 && e !== -1) parsed = JSON.parse(raw.slice(s, e + 1).replace(/,\s*}/g, "}").replace(/,\s*]/g, "]"));
-      } catch (pe) { console.error("Consultation parse error:", pe.message); }
+      try { parsed = JSON.parse(raw); } catch {}
+      if (!parsed) {
+        try { parsed = JSON.parse(raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"")); } catch {}
+      }
+      if (!parsed) {
+        try {
+          const s = raw.indexOf("{"); const e = raw.lastIndexOf("}");
+          if (s !== -1 && e !== -1) parsed = JSON.parse(raw.slice(s, e + 1).replace(/,(\s*[}\]])/g,"$1"));
+        } catch (pe) { console.error("Consultation parse error:", pe.message, "raw:", raw.slice(0, 400)); }
+      }
 
       if (!parsed) {
         await supabase.from("projects").update({ recall_status: "brief_error", updated_at: new Date().toISOString() }).eq("id", projectId);
