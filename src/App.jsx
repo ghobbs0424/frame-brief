@@ -1680,15 +1680,25 @@ function formatFieldName(field){
     .trim();
 }
 
-function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand,onClose,onApply,onDismiss,onRegenerate,projectId}){
+function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand,onClose,onApply,onDismiss,onRegenerate,projectId,projects,onMove}){
   const[tab,setTab]=useState("notes");
   const[regenerating,setRegenerating]=useState(false);
   const[regenError,setRegenError]=useState(null);
+  const[moveOpen,setMoveOpen]=useState(false);
+  const[moving,setMoving]=useState(false);
   const isPending=meeting?.status==="pending_review";
   const changes=arr(meeting?.suggestedChanges);
   const[selected,setSelected]=useState(()=>changes.map((_,i)=>i));
   // Reset selection and regen state when meeting changes
-  React.useEffect(()=>{setSelected(arr(meeting?.suggestedChanges).map((_,i)=>i));setRegenError(null);},[meeting?.id]);
+  React.useEffect(()=>{setSelected(arr(meeting?.suggestedChanges).map((_,i)=>i));setRegenError(null);setMoveOpen(false);},[meeting?.id]);
+
+  async function handleMove(targetProjectId){
+    if(!onMove||moving)return;
+    setMoving(true);
+    try{ await onMove(meeting,targetProjectId); }
+    catch(e){ console.error("move failed",e); }
+    finally{ setMoving(false);setMoveOpen(false); }
+  }
   if(!meeting)return null;
   const sc=STAGE_COLORS[meeting.stage]||STAGE_COLORS.discovery;
   const segments=parseTranscript(fullTranscript||meeting.transcriptExcerpt||"");
@@ -1815,8 +1825,27 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
             <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:sc.bg,color:sc.c,borderRadius:20,padding:"2px 8px",fontWeight:600,textTransform:"uppercase",flexShrink:0}}>{label||(meeting.stage||"").replace("_"," ")}</span>
             <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{new Date(meeting.date).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</span>
           </div>
-          <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center"}}>
+          <div style={{display:"flex",gap:4,flexShrink:0,alignItems:"center",position:"relative"}}>
             {onRegenerate&&<button onClick={handleRegenerate} disabled={regenerating} title="Re-analyze transcript with AI" style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 8px",cursor:regenerating?"default":"pointer",fontSize:11,color:regenerating?"#c4c3bf":"#9b9a97",lineHeight:1,fontFamily:"'IBM Plex Mono',monospace"}} onMouseEnter={e=>{if(!regenerating)e.currentTarget.style.borderColor="#37352f";}} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{regenerating?"...":" ↻ Regenerate"}</button>}
+            {onMove&&arr(projects).filter(p=>p.id!==projectId).length>0&&(
+              <div style={{position:"relative"}}>
+                <button onClick={()=>setMoveOpen(o=>!o)} title="Move to another project" style={{background:moveOpen?"#37352f":"none",color:moveOpen?"#fff":"#9b9a97",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontSize:11,lineHeight:1,fontFamily:"'IBM Plex Mono',monospace"}} onMouseEnter={e=>{if(!moveOpen){e.currentTarget.style.borderColor="#37352f";e.currentTarget.style.color="#37352f";}}} onMouseLeave={e=>{if(!moveOpen){e.currentTarget.style.borderColor="#e8e4dc";e.currentTarget.style.color="#9b9a97";}}}>{moving?"…":"↗ Move"}</button>
+                {moveOpen&&(
+                  <>
+                    <div style={{position:"fixed",inset:0,zIndex:299}} onClick={()=>setMoveOpen(false)}/>
+                    <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:"#fff",border:"1px solid #e8e4dc",borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",zIndex:300,minWidth:220,maxHeight:260,overflowY:"auto"}}>
+                      <div style={{padding:"10px 14px 6px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",borderBottom:"1px solid #f1f0ef"}}>Move to project</div>
+                      {arr(projects).filter(p=>p.id!==projectId).map(p=>(
+                        <button key={p.id} onClick={()=>handleMove(p.id)} style={{display:"block",width:"100%",textAlign:"left",padding:"11px 14px",border:"none",borderBottom:"1px solid #f7f6f3",background:"none",cursor:"pointer",fontSize:13,color:"#37352f",fontFamily:"'Lora',serif"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                          <div style={{fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title||p.brief?.projectTitle||"Untitled"}</div>
+                          {p.client_name&&<div style={{fontSize:11,color:"#9b9a97",marginTop:2}}>{p.client_name}</div>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
             <button onClick={onToggleExpand} title={expanded?"Collapse":"Expand"} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:12,color:"#9b9a97",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.borderColor="#37352f"} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{expanded?"⊡":"⊞"}</button>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#9b9a97",padding:"2px 4px",lineHeight:1}}>✕</button>
           </div>
@@ -3320,6 +3349,25 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
     setPendingMeeting(null);
   }
 
+  async function moveMeetingToProject(meeting,targetProjectId){
+    if(!activeProject||!targetProjectId)return;
+    // Remove from current project
+    const sourceHistory=arr(activeProject.meeting_history).filter(m=>m.id!==meeting.id);
+    // Append to target project
+    const targetProject=projects.find(p=>p.id===targetProjectId);
+    const targetHistory=[...arr(targetProject?.meeting_history),meeting];
+    // Update Supabase
+    await Promise.all([
+      supabase.from("projects").update({meeting_history:sourceHistory,updated_at:new Date().toISOString()}).eq("id",activeProject.id),
+      supabase.from("projects").update({meeting_history:targetHistory,updated_at:new Date().toISOString()}).eq("id",targetProjectId),
+    ]);
+    // Update local state
+    const updatedSource={...activeProject,meeting_history:sourceHistory};
+    setActiveProject(updatedSource);
+    setProjects(ps=>ps.map(p=>p.id===activeProject.id?updatedSource:p.id===targetProjectId?{...p,meeting_history:targetHistory}:p));
+    setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);
+  }
+
   async function updateStatus(id,status){
     await supabase.from("projects").update({status,updated_at:new Date().toISOString()}).eq("id",id);
     setProjects(ps=>ps.map(p=>p.id===id?{...p,status}:p));
@@ -3783,7 +3831,7 @@ ${JSON.stringify(brief)}`;
           const stageLabel=(viewingMeeting.stage||"discovery").replace("_"," ");
           const sameStageIdx=history.slice(0,idx).filter(x=>x.stage===viewingMeeting.stage).length;
           const label=sameStageIdx===0?stageLabel.replace(/^\w/,c=>c.toUpperCase()):stageLabel.replace(/^\w/,c=>c.toUpperCase())+` #${sameStageIdx+1}`;
-          return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={false} onToggleExpand={()=>setMeetingNotesExpanded(true)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);}} onRegenerate={updated=>{setViewingMeeting(updated);const newHist=arr(activeProject?.meeting_history).map(m=>m.id===updated.id?updated:m);setActiveProject(p=>({...p,meeting_history:newHist,recall_status:"brief_pending_review"}));setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_history:newHist}:p));}} projectId={activeProject?.id}/>;
+          return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={false} onToggleExpand={()=>setMeetingNotesExpanded(true)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);}} onRegenerate={updated=>{setViewingMeeting(updated);const newHist=arr(activeProject?.meeting_history).map(m=>m.id===updated.id?updated:m);setActiveProject(p=>({...p,meeting_history:newHist,recall_status:"brief_pending_review"}));setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_history:newHist}:p));}} projectId={activeProject?.id} projects={projects} onMove={moveMeetingToProject}/>;
         })()}
         {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}} className="hide-on-mobile"><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div>}
       </div>
@@ -3794,7 +3842,7 @@ ${JSON.stringify(brief)}`;
         const stageLabel=(viewingMeeting.stage||"discovery").replace("_"," ");
         const sameStageIdx=history.slice(0,idx).filter(x=>x.stage===viewingMeeting.stage).length;
         const label=sameStageIdx===0?stageLabel.replace(/^\w/,c=>c.toUpperCase()):stageLabel.replace(/^\w/,c=>c.toUpperCase())+` #${sameStageIdx+1}`;
-        return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={true} onToggleExpand={()=>setMeetingNotesExpanded(false)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}} onRegenerate={updated=>{setViewingMeeting(updated);const newHist=arr(activeProject?.meeting_history).map(m=>m.id===updated.id?updated:m);setActiveProject(p=>({...p,meeting_history:newHist,recall_status:"brief_pending_review"}));setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_history:newHist}:p));}} projectId={activeProject?.id}/>;
+        return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={true} onToggleExpand={()=>setMeetingNotesExpanded(false)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}} onRegenerate={updated=>{setViewingMeeting(updated);const newHist=arr(activeProject?.meeting_history).map(m=>m.id===updated.id?updated:m);setActiveProject(p=>({...p,meeting_history:newHist,recall_status:"brief_pending_review"}));setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_history:newHist}:p));}} projectId={activeProject?.id} projects={projects} onMove={moveMeetingToProject}/>;
       })()}
       {chatOpen&&<div className="mobile-only" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:250,flexDirection:"column",justifyContent:"flex-end"}}><div style={{background:"#fff",borderRadius:"16px 16px 0 0",height:"80vh",display:"flex",flexDirection:"column",overflow:"hidden"}}><div style={{padding:"12px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}><span style={{fontWeight:700,fontSize:14}}>✦ AI Creative Director</span><button onClick={()=>setChatOpen(false)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97"}}>✕</button></div><div style={{flex:1,overflow:"hidden"}}><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)} hideHeader/></div></div></div>}
     </div>
