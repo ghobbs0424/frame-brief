@@ -1644,54 +1644,99 @@ function StageProgressBar({stage,meetingHistory,onMeetingClick}){
   );
 }
 
-// ─── MEETING HISTORY PANEL ────────────────────────────────────────────────────
-function MeetingHistoryPanel({meeting,onClose}){
+// ─── MEETING NOTES PAGE ───────────────────────────────────────────────────────
+function MeetingNotesPage({meeting,fullTranscript,onClose}){
+  const[tab,setTab]=useState("notes");
   if(!meeting)return null;
   const sc=STAGE_COLORS[meeting.stage]||STAGE_COLORS.discovery;
+
+  // Format transcript: split by newlines, detect speaker lines
+  const transcriptLines=(fullTranscript||meeting.transcriptExcerpt||"").split("\n").filter(l=>l.trim());
+
   return(
-    <div style={{position:"fixed",inset:0,zIndex:400,display:"flex",justifyContent:"flex-end"}} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{width:"min(480px,100vw)",background:"#fff",boxShadow:"-4px 0 24px rgba(0,0,0,0.12)",display:"flex",flexDirection:"column",overflowY:"auto"}}>
-        <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+    <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:"#fff"}}>
+      {/* Header */}
+      <div style={{padding:"20px 28px 0",borderBottom:"1px solid #f1f0ef",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+          <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:sc.bg,color:sc.c,borderRadius:20,padding:"2px 10px",fontWeight:600,textTransform:"uppercase"}}>{(meeting.stage||"").replace("_"," ")}</span>
+          <span style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>{new Date(meeting.date).toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}</span>
+        </div>
+        <div style={{fontSize:22,fontWeight:700,color:"#37352f",marginBottom:14}}>Meeting Notes</div>
+        {/* Tabs */}
+        <div style={{display:"flex",gap:0,borderBottom:"1px solid #f1f0ef",marginBottom:-1}}>
+          {[["notes","📋 Notes"],["transcript","🎙 Transcript"]].map(([t,label])=>(
+            <button key={t} onClick={()=>setTab(t)} style={{padding:"8px 16px",border:"none",background:"none",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",color:tab===t?"#37352f":"#9b9a97",fontWeight:tab===t?700:400,borderBottom:tab===t?"2px solid #37352f":"2px solid transparent",marginBottom:-1,transition:"all .15s"}}>{label}</button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{flex:1,overflowY:"auto",padding:"24px 28px",maxWidth:720}}>
+        {tab==="notes"&&(
+          <>
+            {meeting.summary&&(
+              <div style={{marginBottom:24}}>
+                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Summary</div>
+                <p style={{fontSize:15,color:"#37352f",lineHeight:1.9,fontStyle:"italic"}}>{meeting.summary}</p>
+              </div>
+            )}
+            {arr(meeting.keyPoints).length>0&&(
+              <div style={{marginBottom:24}}>
+                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Key Points</div>
+                {arr(meeting.keyPoints).map((p,i)=>(
+                  <div key={i} style={{display:"flex",gap:10,marginBottom:10,padding:"10px 14px",background:"#fafaf9",borderRadius:8,borderLeft:"3px solid #e97942"}}>
+                    <span style={{color:"#e97942",fontWeight:700,flexShrink:0,fontSize:14}}>·</span>
+                    <span style={{fontSize:13,color:"#37352f",lineHeight:1.7}}>{p}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {arr(meeting.suggestedChanges).length>0&&(
+              <div style={{marginBottom:24}}>
+                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Changes {meeting.status==="reviewed"?"Applied":"Suggested"}</div>
+                {arr(meeting.suggestedChanges).map((c,i)=>(
+                  <div key={i} style={{padding:"10px 14px",background:c.applied===false?"#f7f6f3":meeting.status==="pending_review"?"#fafaf9":"#e6f4ea",borderRadius:8,marginBottom:6,borderLeft:`3px solid ${c.applied===false?"#e0ddd8":meeting.status==="pending_review"?"#e0ddd8":"#1e7e34"}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                      <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em"}}>{c.field||"Update"}</span>
+                      {meeting.status==="reviewed"&&<span style={{fontSize:10,color:c.applied===false?"#9b9a97":"#1e7e34",fontFamily:"'IBM Plex Mono',monospace"}}>{c.applied===false?"· skipped":"· applied"}</span>}
+                    </div>
+                    <div style={{fontSize:13,color:"#37352f",lineHeight:1.6,overflowWrap:"break-word"}}>{c.description}</div>
+                    {c.before&&c.after&&(
+                      <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
+                        <div style={{fontSize:11,color:"#c0392b",fontFamily:"'IBM Plex Mono',monospace",background:"#fff2f2",borderRadius:4,padding:"4px 8px",overflowWrap:"break-word"}}>– {c.before}</div>
+                        <div style={{fontSize:11,color:"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",background:"#e6f4ea",borderRadius:4,padding:"4px 8px",overflowWrap:"break-word"}}>+ {c.after}</div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+        {tab==="transcript"&&(
           <div>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-              <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:sc.bg,color:sc.c,borderRadius:20,padding:"2px 10px",fontWeight:600,textTransform:"uppercase"}}>{meeting.stage?.replace("_"," ")}</span>
-              <span style={{fontSize:11,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>{new Date(meeting.date).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</span>
-            </div>
-            <div style={{fontSize:18,fontWeight:700,color:"#37352f"}}>Meeting Summary</div>
+            {transcriptLines.length===0?(
+              <div style={{textAlign:"center",padding:"40px 0",color:"#9b9a97",fontSize:13,fontStyle:"italic"}}>No transcript available for this meeting.</div>
+            ):(
+              <div style={{fontFamily:"'IBM Plex Mono',monospace"}}>
+                {transcriptLines.map((line,i)=>{
+                  // Detect speaker lines: "Name: text" or "Name (timestamp): text"
+                  const speakerMatch=line.match(/^([^:]+?)(?:\s*\([^)]*\))?:\s*(.+)$/);
+                  if(speakerMatch){
+                    return(
+                      <div key={i} style={{marginBottom:14}}>
+                        <div style={{fontSize:10,fontWeight:700,color:"#1a56c4",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:3}}>{speakerMatch[1].trim()}</div>
+                        <div style={{fontSize:13,color:"#37352f",lineHeight:1.8}}>{speakerMatch[2].trim()}</div>
+                      </div>
+                    );
+                  }
+                  // Plain line
+                  return(<div key={i} style={{fontSize:13,color:"#37352f",lineHeight:1.8,marginBottom:8}}>{line}</div>);
+                })}
+              </div>
+            )}
           </div>
-          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97",padding:4}}>✕</button>
-        </div>
-        <div style={{padding:"20px 24px",flex:1}}>
-          {meeting.summary&&(
-            <div style={{marginBottom:20}}>
-              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Summary</div>
-              <p style={{fontSize:14,color:"#37352f",lineHeight:1.8}}>{meeting.summary}</p>
-            </div>
-          )}
-          {arr(meeting.keyPoints).length>0&&(
-            <div style={{marginBottom:20}}>
-              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Key Points</div>
-              {arr(meeting.keyPoints).map((p,i)=><div key={i} style={{display:"flex",gap:8,marginBottom:6,fontSize:13,color:"#37352f",lineHeight:1.6}}><span style={{color:"#e97942",flexShrink:0}}>•</span><span>{p}</span></div>)}
-            </div>
-          )}
-          {arr(meeting.suggestedChanges).length>0&&(
-            <div style={{marginBottom:20}}>
-              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Changes Applied</div>
-              {arr(meeting.suggestedChanges).map((c,i)=>(
-                <div key={i} style={{padding:"8px 12px",background:c.applied===false?"#f7f6f3":"#e6f4ea",borderRadius:6,marginBottom:6,display:"flex",gap:8,alignItems:"flex-start",fontSize:12}}>
-                  <span style={{color:c.applied===false?"#c4c3bf":"#1e7e34",flexShrink:0,marginTop:1}}>{c.applied===false?"–":"✓"}</span>
-                  <span style={{color:"#37352f"}}>{c.description||c.field}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {meeting.transcriptExcerpt&&(
-            <div>
-              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Transcript Excerpt</div>
-              <div style={{fontSize:12,color:"#9b9a97",lineHeight:1.8,fontStyle:"italic",background:"#fafaf9",borderRadius:6,padding:"12px 14px",maxHeight:200,overflowY:"auto"}}>{meeting.transcriptExcerpt}</div>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
@@ -2146,7 +2191,7 @@ function MeetingsScreen({user,projects,onBack}){
 }
 
 // ─── CONSULTATION MODAL ────────────────────────────────────────────────────────
-function ConsultationModal({user,project,projects,onClose,onScheduled}){
+function JoinCallModal({user,project,projects,onClose,onScheduled}){
   const[tab,setTab]=useState("calendar");
   const[meetings,setMeetings]=useState([]);
   const[loading,setLoading]=useState(true);
@@ -2204,8 +2249,8 @@ function ConsultationModal({user,project,projects,onClose,onScheduled}){
       <div style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:500,maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,0.22)"}}>
         <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <div style={{fontWeight:700,fontSize:16,color:"#37352f",marginBottom:4}}>📅 Schedule Consultation</div>
-            <div style={{fontSize:12,color:"#9b9a97",lineHeight:1.5}}>{project?.title} — Frame Brief will join and suggest revisions to this brief</div>
+            <div style={{fontWeight:700,fontSize:16,color:"#37352f",marginBottom:4}}>📞 Join Call</div>
+            <div style={{fontSize:12,color:"#9b9a97",lineHeight:1.5}}>{project?.title} — Frame Brief will join and auto-generate meeting notes for this brief</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97",flexShrink:0,lineHeight:1,padding:"2px 4px"}}>✕</button>
         </div>
@@ -2251,10 +2296,110 @@ function ConsultationModal({user,project,projects,onClose,onScheduled}){
           <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
             <button onClick={onClose} style={{border:"1px solid #e8e4dc",background:"none",borderRadius:6,padding:"9px 16px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"'Lora',serif"}}>Cancel</button>
             <button onClick={tab==="calendar"&&calendarConnected?handleScheduleCalendar:handleScheduleUrl} disabled={scheduling||!canSubmit} style={{background:"#37352f",color:"#fff",border:"none",borderRadius:6,padding:"9px 18px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",opacity:scheduling||!canSubmit?0.5:1}}>
-              {scheduling?"Scheduling…":"Schedule Consultation"}
+              {scheduling?"Scheduling…":"Join Call"}
             </button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SCHEDULE CONSULTATION MODAL ─────────────────────────────────────────────
+function ScheduleConsultationModal({user,project,onClose,onScheduled}){
+  const[date,setDate]=useState("");
+  const[time,setTime]=useState("");
+  const[duration,setDuration]=useState("60");
+  const[attendeeEmail,setAttendeeEmail]=useState(project?.brief?.clientEmail||"");
+  const[scheduling,setScheduling]=useState(false);
+  const[error,setError]=useState("");
+  const[calendarConnected,setCalendarConnected]=useState(null);
+
+  useEffect(()=>{
+    supabase.from("user_settings").select("calendar_connected").eq("id",user.id).single()
+      .then(({data})=>setCalendarConnected(!!data?.calendar_connected));
+    // Pre-fill today + 1 day, 10am
+    const d=new Date();d.setDate(d.getDate()+1);d.setHours(10,0,0,0);
+    setDate(d.toISOString().slice(0,10));
+    setTime("10:00");
+  },[]);
+
+  async function handleSchedule(){
+    if(!date||!time)return;
+    setScheduling(true);setError("");
+    try{
+      const dateTime=new Date(`${date}T${time}:00`).toISOString();
+      const res=await fetch("/api/google-calendar-auth?action=create-calendar-event",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({userId:user.id,title:`${project?.title||"Consultation"} — Frame Brief`,dateTime,durationMinutes:parseInt(duration),attendeeEmail:attendeeEmail.trim()||null}),
+      });
+      const d=await res.json();
+      if(!res.ok||!d.ok)throw new Error(d.error||"Failed to create calendar event");
+      // Link bot to project if we got a meeting URL
+      if(d.meetingUrl){
+        await supabase.from("projects").update({meeting_stage:"consultation",updated_at:new Date().toISOString()}).eq("id",project.id);
+        onScheduled("consultation");
+      }
+      onClose();
+      // Show brief confirmation
+      alert(`✅ Consultation scheduled! Google Meet link created${d.meetingUrl?" — Frame Brief will auto-join":""}.`);
+    }catch(e){setError(e.message);}
+    setScheduling(false);
+  }
+
+  if(calendarConnected===null)return null;
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"#fff",borderRadius:14,width:"100%",maxWidth:460,boxShadow:"0 20px 60px rgba(0,0,0,0.22)"}}>
+        <div style={{padding:"20px 24px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+          <div>
+            <div style={{fontWeight:700,fontSize:16,color:"#37352f",marginBottom:4}}>📅 Schedule Consultation</div>
+            <div style={{fontSize:12,color:"#9b9a97",lineHeight:1.5}}>{project?.title} — creates a Google Meet event and sends a calendar invite</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97",flexShrink:0,lineHeight:1,padding:"2px 4px"}}>✕</button>
+        </div>
+        {!calendarConnected?(
+          <div style={{padding:"24px",textAlign:"center"}}>
+            <div style={{fontSize:32,marginBottom:10}}>🔗</div>
+            <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6}}>Connect Google Calendar first to schedule consultation meetings with auto-join.</p>
+          </div>
+        ):(
+          <div style={{padding:"20px 24px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+              <div>
+                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Date</div>
+                <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+              </div>
+              <div>
+                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Time</div>
+                <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+              </div>
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Duration</div>
+              <select value={duration} onChange={e=>setDuration(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",background:"#fff",boxSizing:"border-box"}}>
+                <option value="30">30 minutes</option>
+                <option value="45">45 minutes</option>
+                <option value="60">1 hour</option>
+                <option value="90">1.5 hours</option>
+                <option value="120">2 hours</option>
+              </select>
+            </div>
+            <div style={{marginBottom:20}}>
+              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Client Email (optional — sends invite)</div>
+              <input type="email" value={attendeeEmail} onChange={e=>setAttendeeEmail(e.target.value)} placeholder="client@email.com" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            </div>
+            {error&&<div style={{fontSize:12,color:"#c0392b",marginBottom:12}}>⚠ {error}</div>}
+            <div style={{display:"flex",justifyContent:"flex-end",gap:8}}>
+              <button onClick={onClose} style={{border:"1px solid #e8e4dc",background:"none",borderRadius:6,padding:"9px 16px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"'Lora',serif"}}>Cancel</button>
+              <button onClick={handleSchedule} disabled={scheduling||!date||!time} style={{background:"#e97942",color:"#fff",border:"none",borderRadius:6,padding:"9px 18px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600,opacity:scheduling||!date||!time?0.5:1}}>
+                {scheduling?"Scheduling…":"Create Meeting →"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2569,6 +2714,7 @@ function FrameBriefApp(){
   const[joinCallLoading,setJoinCallLoading]=useState(false);
   const[joinCallError,setJoinCallError]=useState("");
   const[showConsultationModal,setShowConsultationModal]=useState(false);
+  const[showScheduleConsultation,setShowScheduleConsultation]=useState(false);
   const brief=activeProject?.brief||null;
 
   useEffect(()=>{
@@ -3013,18 +3159,24 @@ ${JSON.stringify(brief)}`;
       {meetingHistory.length>0&&(<>
         <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",padding:"14px 10px 4px"}}>Meetings</div>
         {meetingHistory.map((m,i)=>{
-          const sc=STAGE_COLORS[m.stage]||STAGE_COLORS.discovery;
+          // Label: Discovery, Consultation, Consultation #2, etc.
+          const stageLabel=(m.stage||"discovery").replace("_"," ");
+          const sameStageIdx=meetingHistory.slice(0,i).filter(x=>x.stage===m.stage).length;
+          const label=sameStageIdx===0?stageLabel.replace(/^\w/,c=>c.toUpperCase()):stageLabel.replace(/^\w/,c=>c.toUpperCase())+` #${sameStageIdx+1}`;
+          const pageKey=`meeting-${i}`;
           return(
-            <button key={m.id||i} onClick={()=>{setViewingMeeting(m);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"7px 10px",border:"none",background:"none",cursor:"pointer",borderRadius:6,textAlign:"left"}} onMouseEnter={e=>e.currentTarget.style.background="#f1f0ef"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <span style={{fontSize:11,background:sc.bg,color:sc.c,borderRadius:20,padding:"1px 7px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",flexShrink:0,textTransform:"capitalize"}}>{(m.stage||"").replace("_"," ")}</span>
-              <span style={{fontSize:11,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace",flexShrink:0}}>{new Date(m.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</span>
-              {m.status==="pending_review"&&<span style={{width:6,height:6,borderRadius:"50%",background:"#e97942",flexShrink:0}}/>}
+            <button key={m.id||i} className={`nb ${page===pageKey?"on":""}`} onClick={()=>{setPage(pageKey);setSidebarOpen(false);}}>
+              <span style={{fontSize:13,flexShrink:0}}>🗒</span>
+              <span style={{overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:6}}>
+                {label}
+                {m.status==="pending_review"&&<span style={{width:6,height:6,borderRadius:"50%",background:"#e97942",flexShrink:0,display:"inline-block"}}/>}
+              </span>
             </button>
           );
         })}
       </>)}
-      {myRole!=="viewer"&&<button onClick={()=>{setShowJoinCall(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#1a56c4",fontFamily:"'Lora',serif",marginTop:6,borderRadius:6,fontWeight:600}} onMouseEnter={e=>e.currentTarget.style.background="#e8f0fe"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>📞 Join Call</button>}
-      {myRole!=="viewer"&&<button onClick={()=>{setShowConsultationModal(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#e97942",fontFamily:"'Lora',serif",marginTop:2,borderRadius:6,fontWeight:600}} onMouseEnter={e=>e.currentTarget.style.background="#fdeee4"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>📅 Schedule Consultation</button>}
+      {myRole!=="viewer"&&<button onClick={()=>{setShowConsultationModal(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#1a56c4",fontFamily:"'Lora',serif",marginTop:6,borderRadius:6,fontWeight:600}} onMouseEnter={e=>e.currentTarget.style.background="#e8f0fe"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>📞 Join Call</button>}
+      {myRole!=="viewer"&&<button onClick={()=>{setShowScheduleConsultation(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#e97942",fontFamily:"'Lora',serif",marginTop:2,borderRadius:6,fontWeight:600}} onMouseEnter={e=>e.currentTarget.style.background="#fdeee4"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>📅 Schedule Consultation</button>}
       <button onClick={()=>{setShowAddMeeting(true);setSidebarOpen(false);}} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#9b9a97",fontFamily:"'Lora',serif",marginTop:2,borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add Meeting Notes</button>
       {((brief?.clientActionItems?.length||0)+(brief?.internalTodos?.length||0))>0&&(<div style={{marginTop:16,padding:"12px 10px",borderTop:"1px solid #f1f0ef"}}><div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Progress</div>{brief.clientActionItems?.length>0&&(<div style={{marginBottom:6}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>✅ Client</span><span>{arr(brief.clientActionItems).filter(t=>t.done).length}/{arr(brief.clientActionItems).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#1e7e34",width:`${(arr(brief.clientActionItems).filter(t=>t.done).length/arr(brief.clientActionItems).length)*100}%`,transition:"width .3s"}}/></div></div>)}{brief.internalTodos?.length>0&&(<div><div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#9b9a97",marginBottom:3}}><span>🔒 Team</span><span>{arr(brief.internalTodos).filter(t=>t.done).length}/{arr(brief.internalTodos).length}</span></div><div style={{height:4,background:"#f1f0ef",borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:"#e97942",width:`${(arr(brief.internalTodos).filter(t=>t.done).length/arr(brief.internalTodos).length)*100}%`,transition:"width .3s"}}/></div></div>)}</div>)}
     </>);
@@ -3185,8 +3337,8 @@ ${JSON.stringify(brief)}`;
         </div>
       )}
       {showShareModal&&user&&<ShareModal project={activeProject} user={user} onClose={()=>setShowShareModal(false)} onProjectUpdate={p=>{setActiveProject(prev=>({...prev,...p}));setProjects(ps=>ps.map(pp=>pp.id===p.id?{...pp,...p}:pp));}}/>}
-      {showConsultationModal&&user&&activeProject&&<ConsultationModal user={user} project={activeProject} projects={projects} onClose={()=>setShowConsultationModal(false)} onScheduled={(stage)=>{const updated={...activeProject,meeting_stage:stage};setActiveProject(updated);setProjects(ps=>ps.map(p=>p.id===updated.id?updated:p));}}/>}
-      {viewingMeeting&&<MeetingHistoryPanel meeting={viewingMeeting} onClose={()=>setViewingMeeting(null)}/>}
+      {showConsultationModal&&user&&activeProject&&<JoinCallModal user={user} project={activeProject} projects={projects} onClose={()=>setShowConsultationModal(false)} onScheduled={(stage)=>{const updated={...activeProject,meeting_stage:stage};setActiveProject(updated);setProjects(ps=>ps.map(p=>p.id===updated.id?updated:p));}}/>}
+      {showScheduleConsultation&&user&&activeProject&&<ScheduleConsultationModal user={user} project={activeProject} onClose={()=>setShowScheduleConsultation(false)} onScheduled={(stage)=>{const updated={...activeProject,meeting_stage:stage};setActiveProject(updated);setProjects(ps=>ps.map(p=>p.id===updated.id?updated:p));}}/>}
       {reviewingMeeting&&myRole!=="viewer"&&<SuggestedChangesModal meeting={reviewingMeeting} currentBrief={brief} onApply={(indices)=>{applyMeetingChanges(reviewingMeeting,indices);setReviewingMeeting(null);}} onDismiss={()=>{dismissMeeting(reviewingMeeting);setReviewingMeeting(null);}}/>}
       {showJoinCall&&(
         <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setShowJoinCall(false);setJoinCallUrl("");setJoinCallError("");}}>
@@ -3241,6 +3393,11 @@ ${JSON.stringify(brief)}`;
         <div style={{flex:1,overflowY:"auto"}}>
           {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} onGenerateBrief={generateBriefFromSavedTranscript} briefGenError={briefGenError} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}} clients={clients} onClientLink={linkClientToProject} onClientUnlink={unlinkClientFromProject} onClientCreateAndLink={createAndLinkClient} meetingStage={activeProject?.meeting_stage||"discovery"} onStageChange={stage=>{setActiveProject(prev=>{const updated={...prev,meeting_stage:stage};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_stage:stage}:p));}}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
+          {page.startsWith("meeting-")&&(()=>{
+            const idx=parseInt(page.replace("meeting-",""));
+            const meeting=arr(activeProject?.meeting_history)[idx];
+            return meeting?<MeetingNotesPage meeting={meeting} fullTranscript={activeProject?.recall_transcript||""} onClose={()=>setPage("overview")}/>:null;
+          })()}
           {page==="shootday"&&<CallSheetPanel brief={brief} callSheet={activeProject?.call_sheet||{}} onUpdate={cs=>{setActiveProject(prev=>{const updated={...prev,call_sheet:cs};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
           {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>{const updated={...prev,post_production:pp};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
         </div>

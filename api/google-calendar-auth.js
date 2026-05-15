@@ -116,6 +116,7 @@ export default async function handler(req, res) {
               },
               automatic_leave: {
                 waiting_room_timeout: 3600,
+                everyone_left_timeout: 300,
               },
             },
           };
@@ -267,6 +268,69 @@ export default async function handler(req, res) {
 
       if (dbErr) return res.status(500).json({ error: dbErr.message });
       return res.status(200).json({ ok: true });
+    }
+
+    // ── Create a Google Calendar event with Meet link ────────────────────────
+    if (action === "create-calendar-event" && req.method === "POST") {
+      const { userId: uid, title, dateTime, durationMinutes, attendeeEmail } = req.body || {};
+      if (!uid || !title || !dateTime) return res.status(400).json({ error: "userId, title, dateTime required" });
+
+      // 1. Look up refresh token
+      const { data: settings } = await supabase
+        .from("user_settings")
+        .select("google_refresh_token")
+        .eq("id", uid)
+        .single();
+      if (!settings?.google_refresh_token) return res.status(400).json({ error: "No Google refresh token found. Reconnect Google Calendar." });
+
+      // 2. Exchange refresh token for access token
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          refresh_token: settings.google_refresh_token,
+          grant_type: "refresh_token",
+        }),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok || !tokenData.access_token) {
+        return res.status(500).json({ error: tokenData.error_description || "Failed to get access token" });
+      }
+      const accessToken = tokenData.access_token;
+
+      // 3. Compute end time
+      const startDt = new Date(dateTime);
+      const endDt = new Date(startDt.getTime() + (parseInt(durationMinutes) || 60) * 60000);
+      const endTime = endDt.toISOString();
+
+      // 4. Create calendar event
+      const eventRes = await fetch(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events?conferenceDataVersion=1",
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            summary: title,
+            start: { dateTime, timeZone: "America/Chicago" },
+            end: { dateTime: endTime, timeZone: "America/Chicago" },
+            attendees: attendeeEmail ? [{ email: attendeeEmail }] : [],
+            conferenceData: {
+              createRequest: {
+                requestId: `framebrief-${Date.now()}`,
+                conferenceSolutionKey: { type: "hangoutsMeet" },
+              },
+            },
+            reminders: { useDefault: true },
+          }),
+        }
+      );
+      const eventData = await eventRes.json();
+      if (!eventRes.ok) {
+        return res.status(eventRes.status).json({ error: eventData.error?.message || "Failed to create calendar event" });
+      }
+      return res.status(200).json({ ok: true, meetingUrl: eventData.hangoutLink || null, eventId: eventData.id });
     }
 
     return res.status(400).json({ error: "Unknown action" });
