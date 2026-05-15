@@ -2035,112 +2035,150 @@ function CallSheetPanel({brief,callSheet,onUpdate,readonly}){
 }
 
 // ─── POST PRODUCTION PANEL ────────────────────────────────────────────────────
-function PostProductionPanel({postProduction,onUpdate,readonly}){
+function PostProductionPanel({postProduction,onUpdate,readonly,concepts}){
   const pp=obj(postProduction);
-  const set=(field,val)=>onUpdate({...pp,[field]:val});
-  const FILE_FORMATS=["H.264 MP4","H.265 HEVC","ProRes 422","ProRes 4444","DNxHD","DXV","MOV"];
-  const RESOLUTIONS=["720p (1280×720)","1080p (1920×1080)","2K (2048×1080)","4K (3840×2160)","4K DCI (4096×2160)","6K","8K"];
-  const PLATFORMS=["YouTube","Instagram","TikTok","Vimeo","Client Delivery","Broadcast","Cinema"];
-  const ROUND_STATUSES=["In Review","Changes Requested","Approved","Delivered"];
+  const items=arr(pp.items);
+  const[addingRound,setAddingRound]=useState(null);
+  const[editingId,setEditingId]=useState(null);
+  const[draft,setDraft]=useState({});
+
+  const STATUS_STYLES={
+    pending:{bg:"#fdeee4",c:"#b94a1a",label:"Pending"},
+    in_progress:{bg:"#e8f0fe",c:"#1a56c4",label:"In Progress"},
+    done:{bg:"#e6f4ea",c:"#1e7e34",label:"Done"},
+    wont_fix:{bg:"#f1f0ef",c:"#9b9a97",label:"Won't Fix"},
+  };
+
+  const rounds=[...new Set(items.map(r=>r.round||1))].sort((a,b)=>a-b);
+  const maxRound=rounds.length?Math.max(...rounds):0;
+
+  function save(id,patch){
+    onUpdate({...pp,items:items.map(r=>r.id===id?{...r,...patch}:r)});
+    setEditingId(null);
+  }
+
+  function addItem(round,requestedBy){
+    const newItem={id:`ri-${Date.now()}`,round,timecode:"",description:"",status:"pending",requestedBy,concept:"",notes:"",createdAt:new Date().toISOString()};
+    onUpdate({...pp,items:[...items,newItem]});
+    setEditingId(newItem.id);
+    setDraft(newItem);
+    setAddingRound(null);
+  }
+
+  function removeItem(id){onUpdate({...pp,items:items.filter(r=>r.id!==id)});}
+
+  const statusCycle={pending:"in_progress",in_progress:"done",done:"wont_fix",wont_fix:"pending"};
+
   return(
-    <div style={{maxWidth:700,margin:"0 auto",padding:"32px 24px"}}>
-      <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:4}}>Post Production</div>
-      <h2 style={{fontSize:22,fontWeight:700,color:"#37352f",marginBottom:24}}>Delivery &amp; Revisions</h2>
-
-      <div style={{marginBottom:28}}>
-        <div style={{fontSize:13,fontWeight:700,color:"#37352f",marginBottom:12}}>Delivery Specs</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:12}}>
-          {[["File Format","fileFormat",FILE_FORMATS],["Resolution","resolution",RESOLUTIONS],["Platform","platform",PLATFORMS]].map(([label,field,opts])=>(
-            <div key={field}>
-              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{label}</div>
-              {readonly
-                ?<div style={{fontSize:13,color:"#37352f"}}>{pp[field]||"—"}</div>
-                :<select value={pp[field]||""} onChange={e=>set(field,e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",background:"#fafaf9",outline:"none",cursor:"pointer"}}>
-                  <option value="">Select…</option>
-                  {opts.map(o=><option key={o} value={o}>{o}</option>)}
-                </select>
-              }
-            </div>
-          ))}
-          {[["Aspect Ratio","aspectRatio","16:9"],["Color Space","colorSpace","Rec.709"],["Audio Specs","audioSpecs","Stereo 48kHz"]].map(([label,field,placeholder])=>(
-            <div key={field}>
-              <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:6}}>{label}</div>
-              {readonly
-                ?<div style={{fontSize:13,color:"#37352f"}}>{pp[field]||"—"}</div>
-                :<input value={pp[field]||""} onChange={e=>set(field,e.target.value)} placeholder={placeholder} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",background:"#fafaf9",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-              }
-            </div>
-          ))}
+    <div style={{maxWidth:760,margin:"0 auto",padding:"32px 24px"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+        <div>
+          <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:4}}>Post Production</div>
+          <h2 style={{fontSize:22,fontWeight:700,color:"#37352f",margin:0}}>Client Revisions</h2>
         </div>
+        {!readonly&&<button onClick={()=>{const r=maxRound+1;onUpdate({...pp,items:[...items,{id:`ri-${Date.now()}`,round:r,timecode:"",description:"",status:"pending",requestedBy:"team",concept:"",notes:"",createdAt:new Date().toISOString()}]});setAddingRound(r);}} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",fontWeight:600}}>+ New Round</button>}
       </div>
+      <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,marginBottom:28}}>Time-coded revision requests from client review. Both you and your client can add items — use the shared link to give your client access.</p>
 
-      <div style={{marginBottom:28}}>
-        <div style={{fontSize:13,fontWeight:700,color:"#37352f",marginBottom:12}}>Deadline Tracker</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:16}}>
-          {[["First Cut","firstCut"],["Client Review","clientReview"],["Final Delivery","finalDelivery"]].map(([label,field])=>(
-            <div key={field} style={{padding:"14px",background:"#fafaf9",borderRadius:8,border:"1px solid #f1f0ef"}}>
-              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>{label}</div>
-              {readonly
-                ?<div style={{fontSize:14,fontWeight:600,color:"#37352f"}}>{pp.deadlines?.[field]||"—"}</div>
-                :<input type="date" value={pp.deadlines?.[field]||""} onChange={e=>set("deadlines",{...obj(pp.deadlines),[field]:e.target.value})} style={{border:"none",outline:"none",background:"transparent",fontFamily:"'Lora',serif",fontSize:14,fontWeight:600,color:"#37352f",width:"100%",cursor:"pointer"}}/>
-              }
-            </div>
-          ))}
+      {rounds.length===0&&(
+        <div style={{border:"2px dashed #e8e4dc",borderRadius:10,padding:"40px 24px",textAlign:"center"}}>
+          <div style={{fontSize:28,marginBottom:12}}>✂️</div>
+          <div style={{fontSize:14,fontWeight:700,color:"#37352f",marginBottom:6}}>No revision rounds yet</div>
+          <div style={{fontSize:13,color:"#9b9a97",marginBottom:16,lineHeight:1.6}}>After sharing your first cut, add a revision round to start tracking feedback with timecodes.</div>
+          {!readonly&&<button onClick={()=>addItem(1,"team")} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 20px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer"}}>+ Add First Revision</button>}
+          {readonly&&<button onClick={()=>addItem(1,"client")} style={{background:"#1a56c4",color:"#fff",border:"none",padding:"8px 20px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer"}}>+ Add Revision Request</button>}
         </div>
-      </div>
+      )}
 
-      <div style={{marginBottom:28}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:700,color:"#37352f"}}>Revision Rounds</div>
-          {!readonly&&<button onClick={()=>set("revisions",[...arr(pp.revisions),{id:`rev-${Date.now()}`,status:"In Review",dateSent:"",dateDue:"",notes:"",clientNotes:""}])} style={{fontSize:12,color:"#1a56c4",background:"none",border:"1px solid #d2e3fc",borderRadius:6,padding:"4px 10px",cursor:"pointer",fontFamily:"'Lora',serif"}}>+ Add Round</button>}
-        </div>
-        {arr(pp.revisions).length===0&&<div style={{fontSize:13,color:"#c4c3bf",fontStyle:"italic"}}>No revision rounds yet.</div>}
-        {arr(pp.revisions).map((rev,i)=>{
-          const rs=ROUND_STATUSES.indexOf(rev.status||"In Review");
-          return(
-            <div key={rev.id||i} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"16px",marginBottom:12,background:"#fafaf9"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#37352f"}}>Round {i+1}</div>
-                <div style={{display:"flex",alignItems:"center",gap:8}}>
-                  {!readonly&&<select value={rev.status||"In Review"} onChange={e=>{const a=[...arr(pp.revisions)];a[i]={...a[i],status:e.target.value};set("revisions",a);}} style={{border:"1px solid #e8e4dc",borderRadius:6,padding:"4px 8px",fontFamily:"'Lora',serif",fontSize:11,color:"#37352f",background:"#fff",cursor:"pointer"}}>{ROUND_STATUSES.map(s=><option key={s}>{s}</option>)}</select>}
-                  {readonly&&<span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:rev.status==="Approved"?"#e6f4ea":rev.status==="Delivered"?"#f1f0ef":rev.status==="Changes Requested"?"#fff2f2":"#fdeee4",color:rev.status==="Approved"?"#1e7e34":rev.status==="Delivered"?"#55534e":rev.status==="Changes Requested"?"#c0392b":"#b94a1a",borderRadius:20,padding:"2px 8px",fontWeight:600}}>{rev.status}</span>}
-                  {!readonly&&<button onClick={()=>set("revisions",arr(pp.revisions).filter((_,j)=>j!==i))} style={{background:"none",border:"none",color:"#c4c3bf",cursor:"pointer",fontSize:14,padding:"0 2px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>✕</button>}
-                </div>
+      {rounds.map(round=>{
+        const roundItems=items.filter(r=>r.round===round);
+        const allDone=roundItems.length>0&&roundItems.every(r=>r.status==="done"||r.status==="wont_fix");
+        return(
+          <div key={round} style={{marginBottom:32}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#37352f"}}>Round {round}</div>
+              {allDone&&<span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:"#e6f4ea",color:"#1e7e34",borderRadius:20,padding:"2px 8px",fontWeight:600}}>✓ Complete</span>}
+              <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
+              <div style={{display:"flex",gap:6}}>
+                {!readonly&&<button onClick={()=>addItem(round,"team")} style={{fontSize:11,color:"#9b9a97",background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#37352f"} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>+ Add</button>}
+                {readonly&&<button onClick={()=>addItem(round,"client")} style={{fontSize:11,color:"#1a56c4",background:"none",border:"1px solid #d2e3fc",borderRadius:5,padding:"3px 8px",cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#1a56c4"} onMouseLeave={e=>e.currentTarget.style.borderColor="#d2e3fc"}>+ Request</button>}
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-                {[["Date Sent","dateSent"],["Date Due","dateDue"]].map(([label,field])=>(
-                  <div key={field}>
-                    <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>{label}</div>
-                    {readonly
-                      ?<div style={{fontSize:13,color:"#37352f"}}>{rev[field]||"—"}</div>
-                      :<input type="date" value={rev[field]||""} onChange={e=>{const a=[...arr(pp.revisions)];a[i]={...a[i],[field]:e.target.value};set("revisions",a);}} style={{border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 8px",fontFamily:"'Lora',serif",fontSize:12,color:"#37352f",background:"#fff",outline:"none",width:"100%",cursor:"pointer"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-                    }
-                  </div>
-                ))}
-              </div>
-              {!readonly&&(
-                <div style={{marginBottom:8}}>
-                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Internal Notes</div>
-                  <textarea value={rev.notes||""} onChange={e=>{const a=[...arr(pp.revisions)];a[i]={...a[i],notes:e.target.value};set("revisions",a);}} placeholder="Notes about this revision round…" rows={2} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontFamily:"'Lora',serif",fontSize:12,color:"#37352f",background:"#fff",outline:"none",resize:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-                </div>
-              )}
-              {readonly&&(
-                <div>
-                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Your Revision Notes</div>
-                  <textarea value={rev.clientNotes||""} onChange={e=>{const a=[...arr(pp.revisions)];a[i]={...a[i],clientNotes:e.target.value};set("revisions",a);}} placeholder="Add your feedback or revision requests here…" rows={3} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontFamily:"'Lora',serif",fontSize:12,color:"#37352f",background:"#fff",outline:"none",resize:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#1a56c4"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-                  <button onClick={()=>{set("revisions",arr(pp.revisions).map((r,j)=>j===i?{...r,clientNotesSaved:true,clientNotesSavedAt:new Date().toISOString()}:r));}} style={{marginTop:6,background:"#37352f",color:"#fff",border:"none",padding:"6px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer"}}>Submit Feedback</button>
-                </div>
-              )}
-              {!readonly&&rev.clientNotes&&(
-                <div style={{marginTop:8,padding:"10px 12px",background:"#e8f0fe",borderRadius:6,border:"1px solid #d2e3fc"}}>
-                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#1a56c4",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Client Feedback{rev.clientNotesSavedAt?` · ${new Date(rev.clientNotesSavedAt).toLocaleDateString()}`:""}</div>
-                  <div style={{fontSize:12,color:"#37352f",lineHeight:1.7}}>{rev.clientNotes}</div>
-                </div>
-              )}
             </div>
-          );
-        })}
-      </div>
+
+            {roundItems.length===0&&<div style={{fontSize:13,color:"#c4c3bf",fontStyle:"italic",paddingLeft:4}}>No items in this round yet.</div>}
+
+            {roundItems.map(item=>{
+              const st=STATUS_STYLES[item.status]||STATUS_STYLES.pending;
+              const isEditing=editingId===item.id;
+              const isClient=item.requestedBy==="client";
+              return(
+                <div key={item.id} style={{border:`1px solid ${isEditing?"#1a56c4":"#f1f0ef"}`,borderRadius:10,marginBottom:8,background:isEditing?"#f5f8ff":"#fff",transition:"all .15s"}}>
+                  {isEditing?(
+                    <div style={{padding:"14px 16px"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"90px 1fr",gap:10,marginBottom:10}}>
+                        <div>
+                          <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Timecode</div>
+                          <input value={draft.timecode||""} onChange={e=>setDraft(d=>({...d,timecode:e.target.value}))} placeholder="00:00" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 8px",fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#37352f",background:"#fff",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#1a56c4"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Revision Request</div>
+                          <input value={draft.description||""} onChange={e=>setDraft(d=>({...d,description:e.target.value}))} placeholder="Describe the change needed…" autoFocus style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 8px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",background:"#fff",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#1a56c4"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                        </div>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                        <div>
+                          <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Concept / Clip</div>
+                          <input value={draft.concept||""} onChange={e=>setDraft(d=>({...d,concept:e.target.value}))} placeholder="e.g. The Founder's FaceTime Drop" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 8px",fontFamily:"'Lora',serif",fontSize:12,color:"#37352f",background:"#fff",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#1a56c4"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:4}}>Notes</div>
+                          <input value={draft.notes||""} onChange={e=>setDraft(d=>({...d,notes:e.target.value}))} placeholder="Additional context…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 8px",fontFamily:"'Lora',serif",fontSize:12,color:"#37352f",background:"#fff",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#1a56c4"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                        <button onClick={()=>{setEditingId(null);setDraft({});}} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 12px",fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",color:"#9b9a97"}}>Cancel</button>
+                        <button onClick={()=>save(item.id,draft)} style={{background:"#1a56c4",color:"#fff",border:"none",borderRadius:6,padding:"6px 14px",fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",fontWeight:600}}>Save</button>
+                      </div>
+                    </div>
+                  ):(
+                    <div style={{display:"flex",alignItems:"flex-start",gap:0,padding:"12px 14px"}}>
+                      {/* Timecode chip */}
+                      <div style={{flexShrink:0,width:56,paddingRight:12,paddingTop:2}}>
+                        {item.timecode?<span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:"#f1f0ef",color:"#55534e",borderRadius:4,padding:"2px 6px",fontWeight:600}}>{item.timecode}</span>:<span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>—</span>}
+                      </div>
+                      {/* Content */}
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:item.concept||item.notes?4:0}}>
+                          <span style={{fontSize:13,color:"#37352f",lineHeight:1.55,flex:1,overflowWrap:"break-word"}}>{item.description||<span style={{color:"#c4c3bf",fontStyle:"italic"}}>No description</span>}</span>
+                        </div>
+                        {(item.concept||item.notes)&&<div style={{fontSize:11,color:"#9b9a97",lineHeight:1.5}}>{item.concept&&<span style={{marginRight:8}}>📹 {item.concept}</span>}{item.notes&&<span>{item.notes}</span>}</div>}
+                      </div>
+                      {/* Right: status + actions */}
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0,marginLeft:10}}>
+                        <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:isClient?"#e8f0fe":"#f7f6f3",color:isClient?"#1a56c4":"#9b9a97",borderRadius:20,padding:"1px 7px",fontWeight:600}}>{isClient?"Client":"Team"}</span>
+                        <button onClick={()=>save(item.id,{status:statusCycle[item.status]||"pending"})} title="Cycle status" style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:st.bg,color:st.c,border:"none",borderRadius:20,padding:"3px 8px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"}}>{st.label}</button>
+                        {((!readonly)||isClient)&&<button onClick={()=>{setEditingId(item.id);setDraft({...item});}} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"2px 7px",cursor:"pointer",fontSize:11,color:"#9b9a97"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#37352f"} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>✎</button>}
+                        {!readonly&&<button onClick={()=>removeItem(item.id)} style={{background:"none",border:"none",color:"#c4c3bf",cursor:"pointer",fontSize:14,padding:"0 2px",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>✕</button>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      })}
+
+      {/* Status legend */}
+      {items.length>0&&(
+        <div style={{display:"flex",gap:12,flexWrap:"wrap",paddingTop:16,borderTop:"1px solid #f1f0ef"}}>
+          <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>STATUS:</span>
+          {Object.entries(STATUS_STYLES).map(([k,v])=>(
+            <span key={k} style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:v.bg,color:v.c,borderRadius:20,padding:"2px 8px",fontWeight:600}}>{v.label}</span>
+          ))}
+          <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace",marginLeft:4}}>— click status badge to cycle</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -3113,21 +3151,33 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
     setLoadMsg("Generating brief from transcript…");
     setScreen("loading");
     try{
-      // Route through serverless function — Anthropic blocks direct browser calls on production
+      // Route through serverless function — triggers brief generation and returns immediately
       const res=await fetch("/api/recall-webhook?action=fetch-transcript",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({projectId:proj.id,botId:proj.recall_bot_id||""}),
       });
-      const d=await res.json();
-      if(!res.ok||!d.ok)throw new Error(d.message||"Brief generation failed");
-      // Reload project with the freshly generated brief
-      const{data:updated}=await supabase.from("projects").select("*").eq("id",proj.id).single();
-      if(updated){
-        setActiveProject(updated);
-        setProjects(ps=>ps.map(p=>p.id===proj.id?updated:p));
+      let d={};
+      try{d=await res.json();}catch{}
+      if(!res.ok)throw new Error(d.message||"Server error — please try again");
+      // Server returns immediately with status "generating" — poll Supabase until brief is ready
+      setLoadMsg("AI is writing your brief…");
+      let attempts=0;
+      while(attempts<30){
+        await new Promise(r=>setTimeout(r,3000));
+        attempts++;
+        const{data:updated}=await supabase.from("projects").select("*").eq("id",proj.id).single();
+        if(updated?.recall_status==="brief_ready"||updated?.recall_status==="brief_pending_review"||(updated?.brief&&Array.isArray(updated.brief?.concepts)&&updated.brief.concepts.length>0)){
+          setActiveProject(updated);
+          setProjects(ps=>ps.map(p=>p.id===proj.id?updated:p));
+          setPage("overview");setScreen("doc");
+          return;
+        }
+        if(updated?.recall_status==="brief_error"||updated?.recall_status==="transcription_failed"){
+          throw new Error("Brief generation failed on server");
+        }
       }
-      setPage("overview");setScreen("doc");
+      throw new Error("Brief generation timed out — please try again");
     }catch(err){
       console.error("generateBriefFromTranscript error:",err);
       setBriefGenError(true);

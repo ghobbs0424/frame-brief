@@ -80,38 +80,43 @@ export default async function handler(req, res) {
       const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY || process.env.VITE_ANTHROPIC_KEY;
       if (!ANTHROPIC_KEY) return res.status(500).json({ error: "no Anthropic key" });
 
-      const CONCEPT_SCHEMA = `{"id":"concept-N","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"hooks":[],"selectedHook":"","deliverableFormat":"","directorNotes":""}`;
+      // Use Haiku for speed (must complete within Vercel function timeout)
+      // Keep prompt compact — no full concept schema for reanalysis
+      const REANALYZE_SYSTEM = `You are a creative director AI. Analyze this meeting transcript against the existing brief. Return ONLY valid JSON (no markdown):
+{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary","keyPoints":["point 1","point 2","point 3"],"suggestedChanges":[{"field":"fieldName","description":"what changes","before":"old value","after":"new value as plain text"}],"briefUpdates":{"fieldName":"new exact value"}}
 
-      const CONSULTATION_SYSTEM = `You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and the existing brief, then return ONLY valid JSON, no markdown:
-{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value","after":"suggested new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}
+RULES — briefUpdates must have ACTUAL values to merge into the brief:
+- Dollar amounts → briefUpdates.budget = "$X,XXX"
+- Dates/timelines → briefUpdates.date or briefUpdates.timeline
+- Scope changes → briefUpdates.overview (updated text)
+- clientActionItems/internalTodos → full arrays with ALL items [{id:"ca-N",text:"",done:false}]
+- suggestedChanges: 3-6 specific items with readable field names`;
 
-RULES:
-- suggestedChanges: 3-8 specific changes. Use human-readable field names in "field" (e.g. "budget", "overview", "concepts[0].logline").
-- briefUpdates: REQUIRED — a partial JSON object with ACTUAL new values ready to merge. Only include changed fields:
-  * Scalar fields: budget, timeline, projectType, logline, overview, generalNotes, moodDescription, date, coverEmoji — set to exact new string.
-  * clientActionItems: full array [{id:"ca-N",text:"",done:false}] — include ALL items.
-  * internalTodos: full array [{id:"it-N",text:"",done:false}] — include ALL items.
-  * concepts: CRITICAL — if new concepts mentioned, generate full objects using schema: ${CONCEPT_SCHEMA}
-    - NEW concepts: assign id "concept-2", "concept-3" etc. Generate rich content for ALL fields.
-    - MODIFIED concepts: full object with same id, merging changes.
-    - Only include new or modified concepts (not unchanged ones).
-  * Extract EVERY specific value mentioned: dollar amounts → budget, dates → date/timeline, scope changes → concepts.`;
+      const briefSummary = {
+        projectTitle: project.brief?.projectTitle,
+        budget: project.brief?.budget,
+        timeline: project.brief?.timeline,
+        overview: project.brief?.overview,
+        concepts: (project.brief?.concepts || []).map(c => ({ id: c.id, title: c.title, logline: c.logline })),
+        clientActionItems: project.brief?.clientActionItems,
+        internalTodos: project.brief?.internalTodos,
+      };
 
       const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 8000,
-          system: CONSULTATION_SYSTEM,
-          messages: [{ role: "user", content: `Existing brief:\n${JSON.stringify(project.brief)}\n\nMeeting transcript:\n${transcript}` }],
+          model: "claude-haiku-4-5-20251001",
+          max_tokens: 2000,
+          system: REANALYZE_SYSTEM,
+          messages: [{ role: "user", content: `Existing brief (summary):\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcript.slice(0, 6000)}` }],
         }),
       });
 
       const aiData = await aiRes.json();
       if (!aiRes.ok || aiData.error) {
         console.error("reanalyze-meeting AI error:", JSON.stringify(aiData));
-        return res.status(500).json({ error: "AI analysis failed" });
+        return res.status(500).json({ error: "AI analysis failed: " + (aiData.error?.message || JSON.stringify(aiData)) });
       }
 
       const raw = (aiData.content || []).map(b => b.text || "").join("").trim();
@@ -186,8 +191,17 @@ RULES:
         }).eq("id", projectId);
       }
 
-      await generateBrief(projectId, text);
-      return res.status(200).json({ ok: true, transcriptLength: text.length });
+      // Mark as generating and return immediately — AI brief generation runs async
+      // (Vercel continues running the function after res.end() for a grace period)
+      await supabase.from("projects").update({
+        recall_status: "brief_generating",
+        updated_at: new Date().toISOString(),
+      }).eq("id", projectId);
+      res.status(200).json({ ok: true, transcriptLength: text.length, status: "generating" });
+
+      // Fire and don't await — let it finish in background
+      generateBrief(projectId, text).catch(e => console.error("fetch-transcript background generateBrief error:", e.message));
+      return;
     }
 
     // ── Receive Recall webhook ───────────────────────────────────────────────
