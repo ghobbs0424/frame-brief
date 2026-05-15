@@ -1721,15 +1721,18 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
   const NotesContent=()=>(
     <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
       {/* Summary */}
-      {meeting.summary&&(
-        <div style={{marginBottom:24}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+      <div style={{marginBottom:24}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
             <span style={{fontSize:13}}>✦</span>
             <span style={{fontSize:12,fontWeight:700,color:"#37352f"}}>Summary</span>
           </div>
-          <p style={{fontSize:13,color:"#37352f",lineHeight:1.85,background:"#fafaf9",borderRadius:8,padding:"14px 16px"}}>{meeting.summary}</p>
+          {onRegenerate&&<button onClick={handleRegenerate} disabled={regenerating} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 8px",cursor:regenerating?"default":"pointer",fontSize:11,color:regenerating?"#c4c3bf":"#9b9a97",lineHeight:1,fontFamily:"'IBM Plex Mono',monospace",flexShrink:0}} onMouseEnter={e=>{if(!regenerating)e.currentTarget.style.borderColor="#37352f";}} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{regenerating?"…":"↻ Regenerate"}</button>}
         </div>
-      )}
+        {regenError&&<div style={{fontSize:11,color:"#c0392b",background:"#fff2f2",border:"1px solid #fcc",borderRadius:5,padding:"6px 10px",marginBottom:8}}>{regenError}</div>}
+        {regenerating&&<div style={{fontSize:12,color:"#9b9a97",display:"flex",alignItems:"center",gap:6,marginBottom:8}}><span className="spin" style={{display:"inline-block",fontSize:13}}>⟳</span> Re-analyzing…</div>}
+        {meeting.summary&&<p style={{fontSize:13,color:"#37352f",lineHeight:1.85,background:"#fafaf9",borderRadius:8,padding:"14px 16px",margin:0}}>{meeting.summary}</p>}
+      </div>
       {/* Key Points */}
       {arr(meeting.keyPoints).length>0&&(
         <div style={{marginBottom:24}}>
@@ -1845,19 +1848,16 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
                 )}
               </div>
             )}
-            {onRegenerate&&<button onClick={handleRegenerate} disabled={regenerating} title="Re-analyze transcript with AI" style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 8px",cursor:regenerating?"default":"pointer",fontSize:11,color:regenerating?"#c4c3bf":"#9b9a97",lineHeight:1,fontFamily:"'IBM Plex Mono',monospace"}} onMouseEnter={e=>{if(!regenerating)e.currentTarget.style.borderColor="#37352f";}} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{regenerating?"...":" ↻ Regenerate"}</button>}
             <button onClick={onToggleExpand} title={expanded?"Collapse":"Expand"} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"3px 7px",cursor:"pointer",fontSize:12,color:"#9b9a97",lineHeight:1}} onMouseEnter={e=>e.currentTarget.style.borderColor="#37352f"} onMouseLeave={e=>e.currentTarget.style.borderColor="#e8e4dc"}>{expanded?"⊡":"⊞"}</button>
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#9b9a97",padding:"2px 4px",lineHeight:1}}>✕</button>
           </div>
         </div>
-        {regenError&&<div style={{padding:"6px 14px",fontSize:11,color:"#c0392b",background:"#fff2f2",borderBottom:"1px solid #fcc"}}>{regenError}</div>}
-        <div style={{display:"flex"}}>
+          <div style={{display:"flex"}}>
           {[["notes","Notes"],["transcript","Transcript"]].map(([t,l])=>(
             <button key={t} onClick={()=>setTab(t)} style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontSize:12,fontFamily:"'Lora',serif",color:tab===t?"#37352f":"#9b9a97",fontWeight:tab===t?700:400,borderBottom:tab===t?"2px solid #37352f":"2px solid transparent",marginBottom:-1,transition:"all .15s"}}>{l}</button>
           ))}
         </div>
       </div>
-      {regenerating&&<div style={{padding:"10px 16px",fontSize:12,color:"#9b9a97",background:"#fafaf9",borderBottom:"1px solid #f1f0ef",display:"flex",alignItems:"center",gap:8}}><span className="spin" style={{display:"inline-block",fontSize:14}}>⟳</span> Re-analyzing transcript…</div>}
       {tab==="notes"?<NotesContent/>:<TranscriptContent/>}
       {/* Apply/Dismiss footer — only shown when pending and on notes tab */}
       {isPending&&tab==="notes"&&onApply&&(
