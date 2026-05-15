@@ -35,7 +35,7 @@ export default async function handler(req, res) {
         redirect_uri: process.env.GOOGLE_REDIRECT_URI,
         response_type: "code",
         scope: [
-          "https://www.googleapis.com/auth/calendar.events.readonly",
+          "https://www.googleapis.com/auth/calendar.events",
           "https://www.googleapis.com/auth/userinfo.email",
         ].join(" "),
         access_type: "offline",
