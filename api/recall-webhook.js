@@ -256,16 +256,16 @@ RULES — briefUpdates must have ACTUAL values to merge into the brief:
         }).eq("id", projectId);
       }
 
-      // Mark as generating and return immediately — AI brief generation runs async
-      // (Vercel continues running the function after res.end() for a grace period)
+      // Send response immediately so the browser stops waiting, then run generateBrief
+      // while the Vercel function is still alive (handler stays alive until it resolves).
       await supabase.from("projects").update({
         recall_status: "brief_generating",
         updated_at: new Date().toISOString(),
       }).eq("id", projectId);
       res.status(200).json({ ok: true, transcriptLength: text.length, status: "generating" });
 
-      // Fire and don't await — let it finish in background
-      generateBrief(projectId, text).catch(e => console.error("fetch-transcript background generateBrief error:", e.message));
+      // Await so the function stays alive (60s maxDuration in vercel.json) until brief is saved.
+      await generateBrief(projectId, text);
       return;
     }
 
@@ -716,6 +716,7 @@ RULES:
         suggestedChanges: parsed.suggestedChanges || [],
         briefUpdates: parsed.briefUpdates && typeof parsed.briefUpdates === "object" && Object.keys(parsed.briefUpdates).length > 0 ? parsed.briefUpdates : null,
         transcriptExcerpt: transcriptText.slice(0, 500),
+        transcriptText,
         status: "pending_review",
       };
 
@@ -800,6 +801,7 @@ RULES:
         keyPoints: [],
         suggestedChanges: [],
         transcriptExcerpt: transcriptText.slice(0, 500),
+        transcriptText,
         status: "reviewed",
       };
       const existingHistory = Array.isArray(project?.meeting_history) ? project.meeting_history : [];

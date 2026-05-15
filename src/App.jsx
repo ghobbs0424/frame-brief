@@ -3467,19 +3467,22 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       // Server returns immediately with status "generating" — poll Supabase until brief is ready
       setLoadMsg("AI is writing your brief…");
       let attempts=0;
-      while(attempts<30){
+      while(attempts<40){
         await new Promise(r=>setTimeout(r,3000));
         attempts++;
         const{data:updated}=await supabase.from("projects").select("*").eq("id",proj.id).single();
-        if(updated?.recall_status==="brief_ready"||updated?.recall_status==="brief_pending_review"||(updated?.brief&&Array.isArray(updated.brief?.concepts)&&updated.brief.concepts.length>0)){
+        if(!updated)continue;
+        if(updated.recall_status==="brief_ready"||updated.recall_status==="brief_pending_review"||(Array.isArray(updated.brief?.concepts)&&updated.brief.concepts.length>0)){
           setActiveProject(updated);
           setProjects(ps=>ps.map(p=>p.id===proj.id?updated:p));
           setPage("overview");setScreen("doc");
           return;
         }
-        if(updated?.recall_status==="brief_error"||updated?.recall_status==="transcription_failed"){
-          throw new Error("Brief generation failed on server");
+        if(updated.recall_status==="brief_error"||updated.recall_status==="transcription_failed"||updated.recall_status==="transcription_error"){
+          throw new Error("Brief generation failed — please try again");
         }
+        // brief_generating means the server function is still running — keep waiting
+        if(attempts%5===0)setLoadMsg(`Still generating… (${attempts*3}s)`);
       }
       throw new Error("Brief generation timed out — please try again");
     }catch(err){
@@ -3517,6 +3520,8 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       if(fenced)jsonStr=fenced[1].trim();
       else{const s=raw.indexOf("{"),e=raw.lastIndexOf("}");if(s!==-1&&e!==-1)jsonStr=raw.slice(s,e+1);}
       jsonStr=jsonStr.replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
+      // Strip unescaped control characters that break JSON.parse
+      jsonStr=jsonStr.replace(/[\x00-\x1F\x7F]/g,ch=>ch==="\n"?"\\n":ch==="\r"?"\\r":ch==="\t"?"\\t":"");
       const parsed=JSON.parse(jsonStr);
       if(!Array.isArray(parsed.concepts))parsed.concepts=[];
       if(!parsed.clientActionItems)parsed.clientActionItems=[];
