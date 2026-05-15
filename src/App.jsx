@@ -3084,6 +3084,7 @@ function FrameBriefApp(){
   const[showAddMeeting,setShowAddMeeting]=useState(false);
   const[addMeetingTranscript,setAddMeetingTranscript]=useState("");
   const[addMeetingLoading,setAddMeetingLoading]=useState(false);
+  const[addMeetingError,setAddMeetingError]=useState("");
   const[showJoinCall,setShowJoinCall]=useState(false);
   const[joinCallUrl,setJoinCallUrl]=useState("");
   const[joinCallLoading,setJoinCallLoading]=useState(false);
@@ -3275,19 +3276,31 @@ function FrameBriefApp(){
   async function processManualMeeting(transcriptText){
     if(!activeProject||!transcriptText.trim())return;
     setAddMeetingLoading(true);
+    setAddMeetingError("");
     try{
       const hasExistingBrief=arr(activeProject.brief?.concepts).length>0;
       const stageHint=activeProject.meeting_stage||"discovery";
-      const system=`You are a creative director AI. Analyze this meeting transcript for a production project. Return ONLY valid JSON:
+      const system=`You are a creative director AI. Analyze this meeting transcript for a production project. Return ONLY valid JSON with no markdown fences. Keep all string values short — no long passages of text in any field:
 {"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary","keyPoints":["",""],"suggestedChanges":[{"field":"fieldName","description":"what to change","before":"old value","after":"new value"}],"briefUpdates":{}}
-${hasExistingBrief?"suggestedChanges lists specific changes to the existing brief. briefUpdates is a partial brief update (only changed fields).":"If this is a discovery meeting, briefUpdates can be the full brief structure."}`;
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:4000,system,messages:[{role:"user",content:`Current project: ${JSON.stringify(activeProject.brief)}\n\nTranscript:\n${transcriptText}`}]})});
+${hasExistingBrief?"suggestedChanges lists specific changes to the existing brief. briefUpdates is a partial brief update (only changed fields, plain short values).":"If this is a discovery meeting, briefUpdates can be the full brief structure with concise values."}`;
+      // Cap transcript sent to AI at 8000 chars to keep response size manageable; full text is still saved below
+      const transcriptForAI=transcriptText.slice(0,8000);
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:4000,system,messages:[{role:"user",content:`Current project: ${JSON.stringify(activeProject.brief)}\n\nTranscript:\n${transcriptForAI}`}]})});
       const aiData=await res.json();
       const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
       const s=raw.indexOf("{"),e=raw.lastIndexOf("}");
       if(s===-1||e===-1)throw new Error("No JSON in response");
-      const parsed=JSON.parse(raw.slice(s,e+1));
-      const meeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:parsed.stage||stageHint,summary:parsed.summary||"",keyPoints:parsed.keyPoints||[],suggestedChanges:parsed.suggestedChanges||[],briefUpdates:parsed.briefUpdates||null,transcriptExcerpt:transcriptText.slice(0,500),transcriptText,status:"pending_review"};
+      // Clean common JSON issues: unescaped control characters inside string values
+      const cleaned=raw.slice(s,e+1).replace(/[\x00-\x1F\x7F]/g,ch=>ch==="\n"?"\\n":ch==="\r"?"\\r":ch==="\t"?"\\t":"");
+      let parsed;
+      try{parsed=JSON.parse(cleaned);}
+      catch(pe){
+        // Last resort: extract just the scalar fields we need
+        console.error("processManualMeeting JSON parse failed, attempting field extraction:",pe.message);
+        const get=(key)=>{const m=raw.match(new RegExp(`"${key}"\\s*:\\s*"([^"\\\\]*(\\\\.[^"\\\\]*)*)"`,));return m?m[1]:"";};
+        parsed={stage:get("stage")||stageHint,summary:get("summary")||"Meeting processed — review transcript for details.",keyPoints:[],suggestedChanges:[],briefUpdates:null};
+      }
+      const meeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:parsed.stage||stageHint,summary:parsed.summary||"",keyPoints:arr(parsed.keyPoints),suggestedChanges:arr(parsed.suggestedChanges),briefUpdates:parsed.briefUpdates||null,transcriptExcerpt:transcriptText.slice(0,500),transcriptText,status:"pending_review"};
       const newHistory=[...arr(activeProject.meeting_history),meeting];
       const updatedProject={...activeProject,meeting_stage:parsed.stage||stageHint,meeting_history:newHistory};
       setActiveProject(updatedProject);
@@ -3296,7 +3309,10 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       setPendingMeeting(meeting);
       setShowAddMeeting(false);
       setAddMeetingTranscript("");
-    }catch(err){console.error("processManualMeeting error:",err);}
+    }catch(err){
+      console.error("processManualMeeting error:",err);
+      setAddMeetingError(err.message||"Failed to process meeting. Please try again.");
+    }
     setAddMeetingLoading(false);
   }
 
@@ -3807,7 +3823,8 @@ ${JSON.stringify(brief)}`;
           <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:"28px 28px 24px",width:"min(560px,100%)",boxShadow:"0 8px 32px rgba(0,0,0,0.15)"}}>
             <div style={{fontSize:18,fontWeight:700,color:"#37352f",marginBottom:6}}>Add Meeting Notes</div>
             <div style={{fontSize:13,color:"#9b9a97",marginBottom:16,lineHeight:1.6}}>Paste transcript or notes from your meeting. AI will detect the stage, summarize, and suggest changes.</div>
-            <textarea value={addMeetingTranscript} onChange={e=>setAddMeetingTranscript(e.target.value)} rows={8} placeholder="Paste meeting transcript or notes here…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"12px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",resize:"vertical",boxSizing:"border-box",marginBottom:16}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            <textarea value={addMeetingTranscript} onChange={e=>{setAddMeetingTranscript(e.target.value);setAddMeetingError("");}} rows={8} placeholder="Paste meeting transcript or notes here…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"12px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",resize:"vertical",boxSizing:"border-box",marginBottom:12}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            {addMeetingError&&<div style={{background:"#fff3f0",border:"1px solid #fca5a5",borderRadius:6,padding:"8px 12px",fontSize:12,color:"#b91c1c",marginBottom:12}}>{addMeetingError}</div>}
             <div style={{display:"flex",gap:10}}>
               <button onClick={()=>processManualMeeting(addMeetingTranscript)} disabled={!addMeetingTranscript.trim()||addMeetingLoading} style={{background:"#37352f",color:"#fff",border:"none",padding:"10px 20px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:addMeetingTranscript.trim()&&!addMeetingLoading?"pointer":"not-allowed",opacity:addMeetingTranscript.trim()&&!addMeetingLoading?1:0.5,display:"flex",alignItems:"center",gap:8}}>
                 {addMeetingLoading&&<div className="spin" style={{width:13,height:13,border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid #fff",borderRadius:"50%"}}/>}
