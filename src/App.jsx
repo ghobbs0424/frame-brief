@@ -1701,7 +1701,7 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
   }
   if(!meeting)return null;
   const sc=STAGE_COLORS[meeting.stage]||STAGE_COLORS.discovery;
-  const segments=parseTranscript(fullTranscript||meeting.transcriptExcerpt||"");
+  const segments=parseTranscript(fullTranscript||meeting.transcriptText||meeting.transcriptExcerpt||"");
   function toggleChange(i){setSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i]);}
   async function handleRegenerate(){
     if(!projectId||regenerating)return;
@@ -3287,7 +3287,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       const s=raw.indexOf("{"),e=raw.lastIndexOf("}");
       if(s===-1||e===-1)throw new Error("No JSON in response");
       const parsed=JSON.parse(raw.slice(s,e+1));
-      const meeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:parsed.stage||stageHint,summary:parsed.summary||"",keyPoints:parsed.keyPoints||[],suggestedChanges:parsed.suggestedChanges||[],briefUpdates:parsed.briefUpdates||null,transcriptExcerpt:transcriptText.slice(0,500),status:"pending_review"};
+      const meeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:parsed.stage||stageHint,summary:parsed.summary||"",keyPoints:parsed.keyPoints||[],suggestedChanges:parsed.suggestedChanges||[],briefUpdates:parsed.briefUpdates||null,transcriptExcerpt:transcriptText.slice(0,500),transcriptText,status:"pending_review"};
       const newHistory=[...arr(activeProject.meeting_history),meeting];
       const updatedProject={...activeProject,meeting_stage:parsed.stage||stageHint,meeting_history:newHistory};
       setActiveProject(updatedProject);

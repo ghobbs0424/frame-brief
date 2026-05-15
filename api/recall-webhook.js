@@ -117,12 +117,14 @@ Rules:
       const { data: project } = await supabase.from("projects").select("*").eq("id", projectId).single();
       if (!project) return res.status(404).json({ error: "project not found" });
 
-      const transcript = project.recall_transcript;
-      if (!transcript?.trim()) return res.status(400).json({ error: "no transcript stored for this project" });
-
       const existingHistory = Array.isArray(project.meeting_history) ? project.meeting_history : [];
       const meetingIdx = meetingId ? existingHistory.findIndex(m => m.id === meetingId) : existingHistory.length - 1;
       if (meetingIdx === -1) return res.status(404).json({ error: "meeting not found in history" });
+
+      const meeting = existingHistory[meetingIdx];
+      // For bot recordings: use project-level transcript. For manual entries: use the meeting's own stored text.
+      const transcript = project.recall_transcript || meeting?.transcriptText || meeting?.transcriptExcerpt;
+      if (!transcript?.trim()) return res.status(400).json({ error: "no transcript stored for this meeting" });
 
       const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY || process.env.VITE_ANTHROPIC_KEY;
       if (!ANTHROPIC_KEY) return res.status(500).json({ error: "no Anthropic key" });
