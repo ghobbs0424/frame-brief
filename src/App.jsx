@@ -3353,14 +3353,16 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
     if(!activeProject||!targetProjectId)return;
     // Remove from current project
     const sourceHistory=arr(activeProject.meeting_history).filter(m=>m.id!==meeting.id);
-    // Append to target project
-    const targetProject=projects.find(p=>p.id===targetProjectId);
-    const targetHistory=[...arr(targetProject?.meeting_history),meeting];
-    // Update Supabase
-    await Promise.all([
+    // Fetch target project's current meeting_history fresh from Supabase to avoid stale local state
+    const{data:targetData}=await supabase.from("projects").select("meeting_history").eq("id",targetProjectId).single();
+    const targetHistory=[...arr(targetData?.meeting_history),{...meeting,status:meeting.status==="pending_review"?"reviewed":meeting.status}];
+    // Update both projects
+    const[srcRes,tgtRes]=await Promise.all([
       supabase.from("projects").update({meeting_history:sourceHistory,updated_at:new Date().toISOString()}).eq("id",activeProject.id),
       supabase.from("projects").update({meeting_history:targetHistory,updated_at:new Date().toISOString()}).eq("id",targetProjectId),
     ]);
+    if(srcRes.error)console.error("moveMeeting source update error:",srcRes.error.message);
+    if(tgtRes.error)console.error("moveMeeting target update error:",tgtRes.error.message);
     // Update local state
     const updatedSource={...activeProject,meeting_history:sourceHistory};
     setActiveProject(updatedSource);
