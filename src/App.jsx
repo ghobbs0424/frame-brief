@@ -1711,7 +1711,7 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
   }
   if(!meeting)return null;
   const sc=STAGE_COLORS[meeting.stage]||STAGE_COLORS.discovery;
-  const segments=parseTranscript(fullTranscript||meeting.transcriptText||meeting.transcriptExcerpt||"");
+  const segments=parseTranscript(meeting.transcriptText||meeting.transcriptExcerpt||fullTranscript||"");
   function toggleChange(i){setSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i]);}
   async function handleRegenerate(){
     if(!projectId||regenerating)return;
@@ -3302,7 +3302,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       const s=raw.indexOf("{"),e=raw.lastIndexOf("}");
       if(s===-1||e===-1)throw new Error("No JSON in response");
       // Clean common JSON issues: unescaped control characters inside string values
-      const cleaned=raw.slice(s,e+1).replace(/[\x00-\x1F\x7F]/g,ch=>ch==="\n"?"\\n":ch==="\r"?"\\r":ch==="\t"?"\\t":"");
+      const cleaned=raw.slice(s,e+1).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
       let parsed;
       try{parsed=JSON.parse(cleaned);}
       catch(pe){
@@ -3451,6 +3451,19 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
 
       if(hasExistingBrief){
         // ── Consultation flow ──
+        // Dedup: skip if this exact transcript was already processed (Recall webhook retries)
+        const transcriptKey=transcriptText.slice(0,500);
+        const isDuplicate=arr(proj.meeting_history).some(m=>
+          m.transcriptExcerpt===transcriptKey||
+          (m.transcriptText&&m.transcriptText.slice(0,500)===transcriptKey)
+        );
+        if(isDuplicate){
+          const{data:latest}=await supabase.from("projects").select("*").eq("id",proj.id).single();
+          const final=latest||proj;
+          setActiveProject(final);setProjects(ps=>ps.map(p=>p.id===proj.id?final:p));
+          setPage("overview");setScreen("doc");
+          return;
+        }
         const CONCEPT_SCHEMA=`{"id":"concept-N","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"hooks":[],"selectedHook":"","deliverableFormat":"","directorNotes":""}`;
         const CONSULT_SYS=`You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and the existing brief, then return ONLY valid JSON, no markdown:\n{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value (quote from brief if possible)","after":"suggested new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}\n\nRULES:\n- stage: discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).\n- suggestedChanges: 3-6 specific changes with plain-text "after" descriptions for display only.\n- briefUpdates: partial JSON with ACTUAL new values to merge. Only include changed fields. Scalar fields (budget, timeline, projectType, logline, overview, generalNotes, moodDescription, date, coverEmoji) = new string. clientActionItems/internalTodos = full arrays including existing. concepts: if client requests new concepts, generate full objects using schema: ${CONCEPT_SCHEMA} — assign incremented IDs, rich content for all fields. Include only new/modified concepts. Do NOT include unchanged fields.`;
         const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
@@ -3467,7 +3480,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
         if(!parsed){
           try{
             const s=raw.indexOf("{");const e=raw.lastIndexOf("}");
-            if(s!==-1&&e!==-1){let js=raw.slice(s,e+1).replace(/[\x00-\x1F\x7F]/g,ch=>ch==="\n"?"\\n":ch==="\r"?"\\r":ch==="\t"?"\\t":"");parsed=JSON.parse(js);}
+            if(s!==-1&&e!==-1){let js=raw.slice(s,e+1).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");parsed=JSON.parse(js);}
           }catch{}
         }
         if(!parsed)throw new Error("Failed to parse AI response — please try again");
@@ -3504,7 +3517,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
           const s=raw.indexOf("{");const e=raw.lastIndexOf("}");
           if(s!==-1&&e!==-1){
             let js=raw.slice(s,e+1).replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
-            js=js.replace(/[\x00-\x1F\x7F]/g,ch=>ch==="\n"?"\\n":ch==="\r"?"\\r":ch==="\t"?"\\t":"");
+            js=js.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
             brief=JSON.parse(js);
           }
         }catch(pe){console.error("Discovery parse error:",pe.message);}
@@ -3565,7 +3578,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       else{const s=raw.indexOf("{"),e=raw.lastIndexOf("}");if(s!==-1&&e!==-1)jsonStr=raw.slice(s,e+1);}
       jsonStr=jsonStr.replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
       // Strip unescaped control characters that break JSON.parse
-      jsonStr=jsonStr.replace(/[\x00-\x1F\x7F]/g,ch=>ch==="\n"?"\\n":ch==="\r"?"\\r":ch==="\t"?"\\t":"");
+      jsonStr=jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
       const parsed=JSON.parse(jsonStr);
       if(!Array.isArray(parsed.concepts))parsed.concepts=[];
       if(!parsed.clientActionItems)parsed.clientActionItems=[];

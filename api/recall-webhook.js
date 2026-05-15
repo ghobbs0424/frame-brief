@@ -640,6 +640,21 @@ async function generateBrief(projectId, transcriptText) {
 
     if (hasExistingBrief) {
       // ── Consultation flow: detect stage, summarize, suggest changes + actual updates ──
+      // Dedup: skip if this transcript was already processed (handles Recall webhook retries)
+      const existingHistoryCheck = Array.isArray(project.meeting_history) ? project.meeting_history : [];
+      const transcriptKey = transcriptText.slice(0, 500);
+      const isDuplicate = existingHistoryCheck.some(m =>
+        m.transcriptExcerpt === transcriptKey ||
+        (m.transcriptText && m.transcriptText.slice(0, 500) === transcriptKey)
+      );
+      if (isDuplicate) {
+        console.log("generateBrief: duplicate transcript for project", projectId, "— skipping");
+        const hasPending = existingHistoryCheck.some(m => m.status === "pending_review");
+        if (hasPending) {
+          await supabase.from("projects").update({ recall_status: "brief_pending_review", updated_at: new Date().toISOString() }).eq("id", projectId);
+        }
+        return;
+      }
       const CONCEPT_SCHEMA = `{"id":"concept-N","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"hooks":[],"selectedHook":"","deliverableFormat":"","directorNotes":""}`;
 
       const CONSULTATION_SYSTEM = `You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and the existing brief, then return ONLY valid JSON, no markdown:
