@@ -320,7 +320,19 @@ RULES:
         const hasBot = !!(evt.bot || evt.bot_id || evt.scheduled_bot);
         if (hasBot) continue;
 
-        const linkedProjectId = settings.meeting_project_links?.[evt.id] || null;
+        // Resolve linked project: check Recall event ID first, then Google Calendar event ID
+        const googleCalEvtId = evt.raw?.id || null;
+        let linkedProjectId = settings.meeting_project_links?.[evt.id] ||
+          (googleCalEvtId ? settings.meeting_project_links?.[googleCalEvtId] : null) || null;
+
+        // If found via Google Calendar ID, save the Recall event ID mapping for future lookups
+        if (linkedProjectId && googleCalEvtId && !settings.meeting_project_links?.[evt.id]) {
+          const updatedLinks = { ...(settings.meeting_project_links || {}), [evt.id]: linkedProjectId };
+          await supabase.from("user_settings").update({ meeting_project_links: updatedLinks, updated_at: new Date().toISOString() }).eq("id", settings.id);
+          settings.meeting_project_links = updatedLinks;
+          console.log("calendar sync: saved Recall event ID link for project:", linkedProjectId, "recallEvtId:", evt.id);
+        }
+
         const botRes = await fetch(
           `https://${RECALL_REGION}.recall.ai/api/v2/calendar-events/${evt.id}/bot/`,
           {
@@ -335,6 +347,7 @@ RULES:
                   calendar_event_id: evt.id,
                   user_id: settings.id,
                   event_title: evt.raw?.summary || "Calendar Meeting",
+                  ...(linkedProjectId ? { project_id: linkedProjectId } : {}),
                 },
                 automatic_leave: {
                   waiting_room_timeout: 3600,
@@ -570,6 +583,17 @@ async function resolveCalendarBotProject(botId) {
     const botData = await botRes.json();
     console.log("resolveCalendarBotProject — metadata:", botData.metadata, "calendar_meetings:", botData.calendar_meetings?.length);
 
+    // Fast path: bot was created for a known project — link directly
+    const directProjectId = botData.metadata?.project_id || null;
+    if (directProjectId) {
+      const { data: linked } = await supabase.from("projects").select("*").eq("id", directProjectId).single();
+      if (linked) {
+        await supabase.from("projects").update({ recall_bot_id: botId, recall_status: "bot_joined", updated_at: new Date().toISOString() }).eq("id", directProjectId);
+        console.log("resolveCalendarBotProject: fast-path linked via metadata.project_id:", directProjectId);
+        return { ...linked, recall_bot_id: botId };
+      }
+    }
+
     // Primary: use metadata injected when bot was created
     let userId = botData.metadata?.user_id || null;
     let calendarMeetingId = botData.metadata?.calendar_event_id || null;
@@ -595,8 +619,25 @@ async function resolveCalendarBotProject(botId) {
       .from("user_settings").select("id, meeting_project_links").eq("id", userId).single();
     if (!settings) { console.error("resolveCalendarBotProject: settings not found for user:", userId); return null; }
 
-    // Check if this meeting is already linked to a project
-    const linkedProjectId = calendarMeetingId ? settings.meeting_project_links?.[calendarMeetingId] : null;
+    // Check if this meeting is linked to a project — try Recall event ID first, then Google Calendar event ID
+    let linkedProjectId = calendarMeetingId ? settings.meeting_project_links?.[calendarMeetingId] : null;
+
+    if (!linkedProjectId) {
+      // Fallback: look up by Google Calendar event ID (stored in calendar_meetings[0].raw.id)
+      const googleCalId = botData.calendar_meetings?.[0]?.raw?.id || null;
+      if (googleCalId) {
+        linkedProjectId = settings.meeting_project_links?.[googleCalId] || null;
+        if (linkedProjectId) {
+          console.log("resolveCalendarBotProject: found project via Google Calendar ID:", googleCalId, "→", linkedProjectId);
+          // Save Recall event ID mapping so future lookups don't need the fallback
+          if (calendarMeetingId) {
+            const updatedLinks = { ...(settings.meeting_project_links || {}), [calendarMeetingId]: linkedProjectId };
+            await supabase.from("user_settings").update({ meeting_project_links: updatedLinks, updated_at: new Date().toISOString() }).eq("id", userId);
+          }
+        }
+      }
+    }
+
     if (linkedProjectId) {
       const { data: linked } = await supabase.from("projects").select("*").eq("id", linkedProjectId).single();
       if (linked) {
