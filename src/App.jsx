@@ -3671,30 +3671,30 @@ ${JSON.stringify(brief)}`;
           {!aiEditing&&dbSaving&&<span style={{fontSize:11,color:"#c4c3bf",fontStyle:"italic",flexShrink:0}}>Saving…</span>}
         </div>
         <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center",position:"relative"}}>
-          {/* Desktop: individual buttons */}
+          {/* Desktop buttons */}
           {myRole==="owner"&&<button className="tbtn hide-on-mobile" onClick={()=>setShowShareModal(true)}>🔗 Share{activeProject?.share_enabled&&<span style={{marginLeft:4,width:6,height:6,borderRadius:"50%",background:"#e97942",display:"inline-block",verticalAlign:"middle"}}/>}</button>}
-          {/* Mobile: ⋯ more menu */}
+          <button className="tbtn hide-on-mobile" onClick={()=>setShareMode(true)}>👁 Client</button>
+          {(myRole==="owner"||myRole==="editor")&&<button className={`tbtn hide-on-mobile ${chatOpen?"on":""}`} onClick={()=>setChatOpen(o=>!o)}>{chatOpen?"✕ AI":"✦ AI"}</button>}
+          {/* Mobile: ⋯ more menu containing Share, Client, AI */}
           <div className="mobile-only" style={{position:"relative"}}>
             <button onClick={()=>setMoreMenuOpen(o=>!o)} style={{background:moreMenuOpen?"#37352f":"none",color:moreMenuOpen?"#fff":"#37352f",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 11px",fontSize:14,cursor:"pointer",fontFamily:"'Lora',serif",lineHeight:1}}>⋯</button>
             {moreMenuOpen&&(
               <>
                 <div style={{position:"fixed",inset:0,zIndex:149}} onClick={()=>setMoreMenuOpen(false)}/>
                 <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:"#fff",border:"1px solid #e8e4dc",borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",zIndex:150,minWidth:180,overflow:"hidden"}}>
-                  {myRole==="owner"&&<button onClick={()=>{setMoreMenuOpen(false);setShowShareModal(true);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"13px 16px",border:"none",background:"none",cursor:"pointer",fontSize:14,color:"#37352f",fontFamily:"'Lora',serif",textAlign:"left"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                  {myRole==="owner"&&<button onClick={()=>{setMoreMenuOpen(false);setShowShareModal(true);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"13px 16px",border:"none",background:"none",cursor:"pointer",fontSize:14,color:"#37352f",fontFamily:"'Lora',serif",textAlign:"left"}}>
                     🔗 <span>Share{activeProject?.share_enabled&&<span style={{marginLeft:6,width:6,height:6,borderRadius:"50%",background:"#e97942",display:"inline-block",verticalAlign:"middle"}}/>}</span>
                   </button>}
-                  {myRole!=="viewer"&&<button onClick={()=>{setMoreMenuOpen(false);setShowScheduleConsultation(true);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"13px 16px",border:"none",borderTop:"1px solid #f1f0ef",background:"none",cursor:"pointer",fontSize:14,color:"#37352f",fontFamily:"'Lora',serif",textAlign:"left"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                    📅 <span>Schedule Consultation</span>
-                  </button>}
-                  {myRole!=="viewer"&&<button onClick={()=>{setMoreMenuOpen(false);setShowConsultationModal(true);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"13px 16px",border:"none",borderTop:"1px solid #f1f0ef",background:"none",cursor:"pointer",fontSize:14,color:"#37352f",fontFamily:"'Lora',serif",textAlign:"left"}} onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                    📞 <span>Join Call</span>
+                  <button onClick={()=>{setMoreMenuOpen(false);setShareMode(true);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"13px 16px",border:"none",borderTop:myRole==="owner"?"1px solid #f1f0ef":"none",background:"none",cursor:"pointer",fontSize:14,color:"#37352f",fontFamily:"'Lora',serif",textAlign:"left"}}>
+                    👁 <span>Client View</span>
+                  </button>
+                  {(myRole==="owner"||myRole==="editor")&&<button onClick={()=>{setMoreMenuOpen(false);setChatOpen(o=>!o);}} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"13px 16px",border:"none",borderTop:"1px solid #f1f0ef",background:chatOpen?"#f0f4ff":"none",cursor:"pointer",fontSize:14,color:chatOpen?"#1a56c4":"#37352f",fontFamily:"'Lora',serif",textAlign:"left"}}>
+                    ✦ <span>{chatOpen?"Close AI":"AI Assistant"}</span>
                   </button>}
                 </div>
               </>
             )}
           </div>
-          <button className="tbtn" onClick={()=>setShareMode(true)}>👁 Client</button>
-          {(myRole==="owner"||myRole==="editor")&&<button className={`tbtn ${chatOpen?"on":""}`} onClick={()=>setChatOpen(o=>!o)}>{chatOpen?"✕ AI":"✦ AI"}</button>}
         </div>
       </div>
       {myRole!=="owner"&&<div style={{background:myRole==="editor"?"#fef3e2":"#e8f0fe",borderBottom:"1px solid",borderBottomColor:myRole==="editor"?"#fde8c8":"#d2e3fc",padding:"7px 20px",fontSize:12,color:myRole==="editor"?"#92400e":"#1a56c4",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
