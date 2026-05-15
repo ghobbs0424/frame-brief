@@ -2692,18 +2692,35 @@ function ScheduleConsultationModal({user,project,onClose,onScheduled}){
             <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6}}>Connect Google Calendar first to schedule consultation meetings with auto-join.</p>
           </div>
         ):(
-          <div style={{padding:"20px 24px"}}>
-            {/* On mobile stack date+time; side-by-side on desktop */}
-            <div style={{display:"grid",gridTemplateColumns:isMobile?"1fr":"1fr 1fr",gap:12,marginBottom:14}}>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Date</div>
-                <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box",minWidth:0}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+          <div style={{padding:"20px 24px",overflow:"hidden"}}>
+            {/* Date + Time: side-by-side on desktop, stacked on mobile */}
+            {isMobile?(
+              <>
+                <div style={{marginBottom:14,overflow:"hidden"}}>
+                  <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Date</div>
+                  <div style={{border:"1px solid #e8e4dc",borderRadius:8,overflow:"hidden"}}>
+                    <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{display:"block",width:"100%",border:"none",padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box",background:"transparent"}}/>
+                  </div>
+                </div>
+                <div style={{marginBottom:14,overflow:"hidden"}}>
+                  <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Time</div>
+                  <div style={{border:"1px solid #e8e4dc",borderRadius:8,overflow:"hidden"}}>
+                    <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{display:"block",width:"100%",border:"none",padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box",background:"transparent"}}/>
+                  </div>
+                </div>
+              </>
+            ):(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+                <div>
+                  <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Date</div>
+                  <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                </div>
+                <div>
+                  <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Time</div>
+                  <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                </div>
               </div>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Time</div>
-                <input type="time" value={time} onChange={e=>setTime(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box",minWidth:0}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-              </div>
-            </div>
+            )}
             <div style={{marginBottom:14}}>
               <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Duration</div>
               <select value={duration} onChange={e=>setDuration(e.target.value)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",background:"#fff",boxSizing:"border-box"}}>
