@@ -1667,64 +1667,95 @@ function parseTranscript(text){
   return segments;
 }
 
-function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand,onClose}){
+// Convert raw field paths to readable labels: clientActionItems → Client Action Items
+function formatFieldName(field){
+  if(!field)return"Update";
+  return field
+    .replace(/\[(\d+)\]/g,"[$1]")
+    .replace(/\.([a-z])/g,(m,c)=>" → "+c.toUpperCase())
+    .replace(/([A-Z])/g," $1")
+    .replace(/\[(\d+)\]/g," $1")
+    .replace(/^\w/,c=>c.toUpperCase())
+    .replace(/\s+/g," ")
+    .trim();
+}
+
+function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand,onClose,onApply,onDismiss}){
   const[tab,setTab]=useState("notes");
+  const isPending=meeting?.status==="pending_review";
+  const changes=arr(meeting?.suggestedChanges);
+  const[selected,setSelected]=useState(()=>changes.map((_,i)=>i));
+  // Reset selection when meeting changes
+  React.useEffect(()=>{setSelected(arr(meeting?.suggestedChanges).map((_,i)=>i));},[meeting?.id]);
   if(!meeting)return null;
   const sc=STAGE_COLORS[meeting.stage]||STAGE_COLORS.discovery;
   const segments=parseTranscript(fullTranscript||meeting.transcriptExcerpt||"");
+  function toggleChange(i){setSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i]);}
 
   const panelStyle=expanded
     ?{position:"fixed",inset:0,zIndex:300,background:"#fff",display:"flex",flexDirection:"column",overflow:"hidden"}
-    :{width:380,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden",background:"#fff"};
+    :{width:400,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden",background:"#fff"};
 
   const NotesContent=()=>(
     <div style={{flex:1,overflowY:"auto",padding:"20px 22px"}}>
       {/* Summary */}
       {meeting.summary&&(
-        <div style={{marginBottom:22}}>
+        <div style={{marginBottom:24}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
             <span style={{fontSize:13}}>✦</span>
             <span style={{fontSize:12,fontWeight:700,color:"#37352f"}}>Summary</span>
           </div>
-          <p style={{fontSize:13,color:"#37352f",lineHeight:1.85,background:"#fafaf9",borderRadius:8,padding:"12px 14px"}}>{meeting.summary}</p>
+          <p style={{fontSize:13,color:"#37352f",lineHeight:1.85,background:"#fafaf9",borderRadius:8,padding:"14px 16px"}}>{meeting.summary}</p>
         </div>
       )}
-      {/* Key Points as action-item style */}
+      {/* Key Points */}
       {arr(meeting.keyPoints).length>0&&(
-        <div style={{marginBottom:22}}>
+        <div style={{marginBottom:24}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
             <span style={{fontSize:13}}>☑</span>
             <span style={{fontSize:12,fontWeight:700,color:"#37352f"}}>Key Points</span>
           </div>
           {arr(meeting.keyPoints).map((p,i)=>(
-            <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"9px 12px",background:"#fff",border:"1px solid #f1f0ef",borderRadius:8,marginBottom:6}}>
-              <span style={{width:20,height:20,borderRadius:4,background:"#e8f0fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#1a56c4",flexShrink:0,marginTop:1}}>·</span>
+            <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",background:"#fff",border:"1px solid #f1f0ef",borderRadius:8,marginBottom:8}}>
+              <span style={{width:20,height:20,borderRadius:4,background:"#e8f0fe",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:"#1a56c4",flexShrink:0,marginTop:1,fontWeight:700}}>·</span>
               <span style={{fontSize:13,color:"#37352f",lineHeight:1.7,flex:1}}>{p}</span>
             </div>
           ))}
         </div>
       )}
-      {/* Brief changes */}
-      {arr(meeting.suggestedChanges).length>0&&(
-        <div style={{marginBottom:22}}>
-          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10}}>
-            <span style={{fontSize:13}}>✎</span>
-            <span style={{fontSize:12,fontWeight:700,color:"#37352f"}}>Brief Changes {meeting.status==="reviewed"?"(Applied)":"(Pending)"}</span>
+      {/* Brief changes — interactive when pending, read-only when reviewed */}
+      {changes.length>0&&(
+        <div style={{marginBottom:8}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:13}}>✎</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#37352f"}}>Brief Changes</span>
+            </div>
+            {isPending&&<span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:"#fdeee4",color:"#b94a1a",borderRadius:20,padding:"2px 8px",fontWeight:600}}>PENDING REVIEW</span>}
           </div>
-          {arr(meeting.suggestedChanges).map((c,i)=>{
-            const applied=meeting.status==="reviewed"&&c.applied!==false;
-            const skipped=meeting.status==="reviewed"&&c.applied===false;
+          {changes.map((c,i)=>{
+            const reviewed=meeting.status==="reviewed";
+            const applied=reviewed&&c.applied!==false;
+            const skipped=reviewed&&c.applied===false;
+            const sel=isPending&&selected.includes(i);
             return(
-              <div key={i} style={{padding:"10px 12px",borderRadius:8,marginBottom:6,border:"1px solid #f1f0ef",background:skipped?"#f7f6f3":applied?"#f0faf4":"#fff"}}>
-                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
-                  <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:skipped?"#f1f0ef":applied?"#d1f0dc":"#e8f0fe",color:skipped?"#9b9a97":applied?"#1e7e34":"#1a56c4",borderRadius:20,padding:"1px 7px",fontWeight:600,textTransform:"uppercase"}}>{c.field||"update"}</span>
-                  {meeting.status==="reviewed"&&<span style={{fontSize:10,color:skipped?"#c4c3bf":"#1e7e34",fontFamily:"'IBM Plex Mono',monospace"}}>{skipped?"skipped":"✓ applied"}</span>}
+              <div key={i}
+                onClick={isPending?()=>toggleChange(i):undefined}
+                style={{padding:"14px 16px",borderRadius:10,marginBottom:12,border:`1.5px solid ${isPending?(sel?"#1a56c4":"#e8e4dc"):skipped?"#f1f0ef":applied?"#b7e4c7":"#f1f0ef"}`,background:isPending?(sel?"#f5f8ff":"#fff"):skipped?"#f7f6f3":applied?"#f0faf4":"#fff",cursor:isPending?"pointer":"default",transition:"all .15s"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                  {isPending&&(
+                    <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${sel?"#1a56c4":"#d4d2ce"}`,background:sel?"#1a56c4":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {sel&&<span style={{color:"#fff",fontSize:10,lineHeight:1}}>✓</span>}
+                    </div>
+                  )}
+                  <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:skipped?"#f1f0ef":applied?"#d1f0dc":isPending?"#e8f0fe":"#e8f0fe",color:skipped?"#9b9a97":applied?"#1e7e34":"#1a56c4",borderRadius:6,padding:"3px 8px",fontWeight:600,letterSpacing:"0.04em",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{formatFieldName(c.field)}</span>
+                  {reviewed&&<span style={{fontSize:10,color:skipped?"#c4c3bf":"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",flexShrink:0}}>{skipped?"skipped":"✓ applied"}</span>}
                 </div>
-                <div style={{fontSize:12,color:"#37352f",lineHeight:1.6,overflowWrap:"break-word"}}>{c.description}</div>
+                <div style={{fontSize:13,color:"#37352f",lineHeight:1.65,overflowWrap:"break-word",marginBottom:c.before&&c.after?10:0}}>{c.description}</div>
                 {c.before&&c.after&&(
-                  <div style={{marginTop:7,display:"flex",flexDirection:"column",gap:3}}>
-                    <div style={{fontSize:11,color:"#c0392b",fontFamily:"'IBM Plex Mono',monospace",background:"#fff2f2",borderRadius:4,padding:"3px 8px",overflowWrap:"break-word",whiteSpace:"pre-wrap"}}>– {c.before}</div>
-                    <div style={{fontSize:11,color:"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",background:"#e6f4ea",borderRadius:4,padding:"3px 8px",overflowWrap:"break-word",whiteSpace:"pre-wrap"}}>+ {c.after}</div>
+                  <div style={{display:"flex",flexDirection:"column",gap:4}}>
+                    <div style={{fontSize:11,color:"#c0392b",fontFamily:"'IBM Plex Mono',monospace",background:"#fff2f2",borderRadius:6,padding:"6px 10px",overflowWrap:"break-word",whiteSpace:"pre-wrap",lineHeight:1.6}}>– {c.before}</div>
+                    <div style={{fontSize:11,color:"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",background:"#e6f4ea",borderRadius:6,padding:"6px 10px",overflowWrap:"break-word",whiteSpace:"pre-wrap",lineHeight:1.6}}>+ {c.after}</div>
                   </div>
                 )}
               </div>
@@ -1745,17 +1776,16 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
             if(!seg.speaker){
               return <div key={i} style={{fontSize:13,color:"#9b9a97",lineHeight:1.7,marginBottom:8,fontStyle:"italic"}}>{seg.text}</div>;
             }
-            // New speaker block — only show speaker header if different from previous
             const showHeader=i===0||segments[i-1].speaker!==seg.speaker;
             return(
-              <div key={i} style={{marginBottom:showHeader?14:6}}>
+              <div key={i} style={{marginBottom:showHeader?16:5}}>
                 {showHeader&&(
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                     <span style={{fontSize:11,fontWeight:700,color:"#37352f",fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",letterSpacing:"0.06em"}}>{seg.speaker}</span>
-                    {seg.timestamp&&<span style={{fontSize:10,background:"#f1f0ef",color:"#9b9a97",borderRadius:4,padding:"1px 6px",fontFamily:"'IBM Plex Mono',monospace"}}>{seg.timestamp}</span>}
+                    {seg.timestamp&&<span style={{fontSize:10,background:"#f1f0ef",color:"#9b9a97",borderRadius:4,padding:"2px 7px",fontFamily:"'IBM Plex Mono',monospace"}}>{seg.timestamp}</span>}
                   </div>
                 )}
-                <div style={{fontSize:13,color:"#37352f",lineHeight:1.8,paddingLeft:showHeader?0:0}}>{seg.text}</div>
+                <div style={{fontSize:13,color:"#37352f",lineHeight:1.8}}>{seg.text}</div>
               </div>
             );
           })}
@@ -1778,14 +1808,23 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
             <button onClick={onClose} style={{background:"none",border:"none",fontSize:16,cursor:"pointer",color:"#9b9a97",padding:"2px 4px",lineHeight:1}}>✕</button>
           </div>
         </div>
-        {/* Tabs */}
         <div style={{display:"flex"}}>
-          {[["notes","Notes"],["transcript","Transcript"]].map(([t,label])=>(
-            <button key={t} onClick={()=>setTab(t)} style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontSize:12,fontFamily:"'Lora',serif",color:tab===t?"#37352f":"#9b9a97",fontWeight:tab===t?700:400,borderBottom:tab===t?"2px solid #37352f":"2px solid transparent",marginBottom:-1,transition:"all .15s"}}>{label}</button>
+          {[["notes","Notes"],["transcript","Transcript"]].map(([t,l])=>(
+            <button key={t} onClick={()=>setTab(t)} style={{padding:"6px 14px",border:"none",background:"none",cursor:"pointer",fontSize:12,fontFamily:"'Lora',serif",color:tab===t?"#37352f":"#9b9a97",fontWeight:tab===t?700:400,borderBottom:tab===t?"2px solid #37352f":"2px solid transparent",marginBottom:-1,transition:"all .15s"}}>{l}</button>
           ))}
         </div>
       </div>
       {tab==="notes"?<NotesContent/>:<TranscriptContent/>}
+      {/* Apply/Dismiss footer — only shown when pending and on notes tab */}
+      {isPending&&tab==="notes"&&onApply&&(
+        <div style={{padding:"12px 16px",borderTop:"1px solid #f1f0ef",display:"flex",gap:8,flexShrink:0,background:"#fafaf9"}}>
+          <button onClick={()=>onApply(changes.map((_,i)=>i))} style={{flex:1,background:"#37352f",color:"#fff",border:"none",padding:"9px 14px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",fontWeight:600}}>Apply All</button>
+          {selected.length>0&&selected.length<changes.length&&(
+            <button onClick={()=>onApply(selected)} style={{flex:1,background:"#1a56c4",color:"#fff",border:"none",padding:"9px 14px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",fontWeight:600}}>Apply {selected.length}</button>
+          )}
+          <button onClick={onDismiss} style={{padding:"9px 12px",border:"1px solid #e8e4dc",borderRadius:6,fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",color:"#9b9a97",background:"transparent"}}>Dismiss</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -3453,7 +3492,7 @@ ${JSON.stringify(brief)}`;
           const stageLabel=(viewingMeeting.stage||"discovery").replace("_"," ");
           const sameStageIdx=history.slice(0,idx).filter(x=>x.stage===viewingMeeting.stage).length;
           const label=sameStageIdx===0?stageLabel.replace(/^\w/,c=>c.toUpperCase()):stageLabel.replace(/^\w/,c=>c.toUpperCase())+` #${sameStageIdx+1}`;
-          return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={false} onToggleExpand={()=>setMeetingNotesExpanded(true)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);}}/>;
+          return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={false} onToggleExpand={()=>setMeetingNotesExpanded(true)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);}}/>;
         })()}
         {chatOpen&&<div style={{width:340,borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",flexShrink:0,overflow:"hidden"}} className="hide-on-mobile"><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div>}
       </div>
@@ -3464,7 +3503,7 @@ ${JSON.stringify(brief)}`;
         const stageLabel=(viewingMeeting.stage||"discovery").replace("_"," ");
         const sameStageIdx=history.slice(0,idx).filter(x=>x.stage===viewingMeeting.stage).length;
         const label=sameStageIdx===0?stageLabel.replace(/^\w/,c=>c.toUpperCase()):stageLabel.replace(/^\w/,c=>c.toUpperCase())+` #${sameStageIdx+1}`;
-        return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={true} onToggleExpand={()=>setMeetingNotesExpanded(false)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}}/>;
+        return <MeetingNotesPanel meeting={viewingMeeting} fullTranscript={activeProject?.recall_transcript||""} label={label} expanded={true} onToggleExpand={()=>setMeetingNotesExpanded(false)} onClose={()=>{setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}} onApply={(indices)=>{applyMeetingChanges(viewingMeeting,indices);setViewingMeeting(m=>m?{...m,status:"reviewed"}:m);}} onDismiss={()=>{dismissMeeting(viewingMeeting);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);}}/>;
       })()}
       {chatOpen&&<div className="mobile-only" style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:250,flexDirection:"column",justifyContent:"flex-end"}}><div style={{background:"#fff",borderRadius:"16px 16px 0 0",height:"80vh",display:"flex",flexDirection:"column",overflow:"hidden"}}><div style={{padding:"12px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}><span style={{fontWeight:700,fontSize:14}}>✦ AI Creative Director</span><button onClick={()=>setChatOpen(false)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",color:"#9b9a97"}}>✕</button></div><div style={{flex:1,overflow:"hidden"}}><AIChatPanel chatLog={chatLog} onSend={sendChat} busy={chatBusy} onClose={()=>setChatOpen(false)}/></div></div></div>}
     </div>
