@@ -3351,19 +3351,19 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
 
   async function moveMeetingToProject(meeting,targetProjectId){
     if(!activeProject||!targetProjectId)return;
-    // Remove from current project
+    const meetingToMove={...meeting,status:meeting.status==="pending_review"?"reviewed":meeting.status};
+    // Fetch target project's current meeting_history fresh from Supabase
+    const{data:targetData,error:fetchErr}=await supabase.from("projects").select("meeting_history").eq("id",targetProjectId).single();
+    if(fetchErr){console.error("moveMeeting fetch target error:",fetchErr.message);alert("Could not load target project. Please try again.");return;}
+    const targetHistory=[...arr(targetData?.meeting_history),meetingToMove];
+    // Update TARGET first — if this fails, source is untouched and meeting is safe
+    const tgtRes=await supabase.from("projects").update({meeting_history:targetHistory,updated_at:new Date().toISOString()}).eq("id",targetProjectId);
+    if(tgtRes.error){console.error("moveMeeting target update error:",tgtRes.error.message);alert("Failed to move meeting to target project. Please try again.");return;}
+    // Target confirmed — now remove from source
     const sourceHistory=arr(activeProject.meeting_history).filter(m=>m.id!==meeting.id);
-    // Fetch target project's current meeting_history fresh from Supabase to avoid stale local state
-    const{data:targetData}=await supabase.from("projects").select("meeting_history").eq("id",targetProjectId).single();
-    const targetHistory=[...arr(targetData?.meeting_history),{...meeting,status:meeting.status==="pending_review"?"reviewed":meeting.status}];
-    // Update both projects
-    const[srcRes,tgtRes]=await Promise.all([
-      supabase.from("projects").update({meeting_history:sourceHistory,updated_at:new Date().toISOString()}).eq("id",activeProject.id),
-      supabase.from("projects").update({meeting_history:targetHistory,updated_at:new Date().toISOString()}).eq("id",targetProjectId),
-    ]);
-    if(srcRes.error)console.error("moveMeeting source update error:",srcRes.error.message);
-    if(tgtRes.error)console.error("moveMeeting target update error:",tgtRes.error.message);
-    // Update local state
+    const srcRes=await supabase.from("projects").update({meeting_history:sourceHistory,updated_at:new Date().toISOString()}).eq("id",activeProject.id);
+    if(srcRes.error){console.error("moveMeeting source update error:",srcRes.error.message);alert("Meeting copied to target project but could not be removed from this project. Please delete it here manually.");return;}
+    // Both succeeded — update local state
     const updatedSource={...activeProject,meeting_history:sourceHistory};
     setActiveProject(updatedSource);
     setProjects(ps=>ps.map(p=>p.id===activeProject.id?updatedSource:p.id===targetProjectId?{...p,meeting_history:targetHistory}:p));
