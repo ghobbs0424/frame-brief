@@ -1778,13 +1778,20 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
 RULES:
 - topics: 2-5 main subjects, each with 2-4 short bullet points (one line each).
 - actionItems: concrete next steps with owner (person name or "Client"/"Team"), task, optional deadline.
-- suggestedChanges: 3-6 specific items with readable field names.
-- briefUpdates: ONLY simple scalar updates — budget, timeline, date, logline, overview (1-2 sentences max). Do NOT include concepts arrays. Do NOT include long text blocks.`;
+- suggestedChanges: 3-6 specific items with readable field names. ALWAYS flag changes to budget, timeline, or scope — even if mentioned casually at the end of the call.
+- briefUpdates: ONLY simple scalar updates — budget, timeline, date, logline, overview (1-2 sentences max). Do NOT include concepts arrays. Do NOT include long text blocks.
+- IMPORTANT: If a value is mentioned or revised LATER in the transcript, it overrides an earlier value. Treat later statements as corrections. For example, if budget is "$500" early on but "$3,000" is mentioned near the end, use "$3,000" as the new value and flag it as a change.
+- Read the ENTIRE transcript carefully — budget, timeline, and scope changes are often mentioned casually at the end of a conversation.`;
+
+      // Send up to 20,000 chars — budget/scope changes often appear late in the transcript
+      const transcriptForAI=transcriptText.length>20000
+        ? transcriptText.slice(0,10000)+"...[middle omitted]..."+transcriptText.slice(-8000)
+        : transcriptText;
 
       const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
         method:"POST",
         headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-        body:JSON.stringify({model:MODEL,max_tokens:1800,system:REGEN_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcriptText.slice(0,5000)}`}]}),
+        body:JSON.stringify({model:MODEL,max_tokens:2000,system:REGEN_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcriptForAI}`}]}),
       });
       const aiData=await aiRes.json();
       if(!aiRes.ok||aiData.error)throw new Error(aiData?.error?.message||`AI error ${aiRes.status}`);

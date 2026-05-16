@@ -717,7 +717,8 @@ RULES:
 - stage: discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).
 - topics: 2-5 main subjects discussed, each with 2-4 bullet points. Group related discussion points together.
 - actionItems: concrete next steps with a clear owner (person's name or "Client"/"Team"), specific task, and deadline if mentioned.
-- suggestedChanges: 3-6 specific changes with plain-text "after" descriptions for display only.
+- suggestedChanges: 3-6 specific changes with plain-text "after" descriptions for display only. ALWAYS flag budget, timeline, and scope changes — even if mentioned casually late in the call.
+- IMPORTANT: If a value is mentioned or revised LATER in the transcript, it overrides an earlier value. Treat later statements as corrections. E.g., if budget starts at "$500" but "$3,000" is mentioned near the end, use "$3,000" as the new value and include it in both suggestedChanges and briefUpdates.
 - briefUpdates: a partial JSON object with ACTUAL new values ready to merge into the brief. Only include changed fields. Use correct types:
   * Scalar fields: budget, timeline, projectType, logline, overview, generalNotes, moodDescription, date, coverEmoji — set to new string value.
   * clientActionItems: full array [{id:"ca-N",text:"",done:false}] — include ALL items (existing + new).
