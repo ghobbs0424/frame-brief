@@ -190,7 +190,7 @@ function SharedIdeaView({idea}){
 }
 
 // ─── IDEA PAGE (expanded view) ────────────────────────────────────────────────
-function IdeaPage({ idea, onBack, onUpdate, user, projects, onLinkProject, onUnlinkProject }) {
+function IdeaPage({ idea, onBack, onUpdate, user, projects, onLinkProject, onUnlinkProject, workspaces, currentWsId, onMove }) {
   const [localIdea, setLocalIdea] = useState(idea);
   const [shareState, setShareState] = useState("idle");
   const [chatLog, setChatLog] = useState([]);
@@ -199,6 +199,7 @@ function IdeaPage({ idea, onBack, onUpdate, user, projects, onLinkProject, onUnl
   const [hooksBusy, setHooksBusy] = useState(false);
   const [hooksErr, setHooksErr] = useState("");
   const [showLinkPicker, setShowLinkPicker] = useState(false);
+  const [showMovePicker, setShowMovePicker] = useState(false);
   const brief = localIdea.brief;
   const set = (k, v) => {
     const updated = { ...localIdea, brief: { ...brief, [k]: v } };
@@ -326,6 +327,24 @@ ${JSON.stringify(brief)}`;
               <button onClick={()=>{if(window.confirm("Remove from project?"))onUnlinkProject&&(setLocalIdea(prev=>({...prev,linkedProjectId:null})),onUnlinkProject());}} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:12,padding:"2px 4px"}} title="Unlink">✕</button>
             </div>
           : <button onClick={()=>setShowLinkPicker(true)} className="tbtn" style={{flexShrink:0}}>📁 Link to Project</button>
+        )}
+        {/* Move to workspace */}
+        {onMove&&(workspaces||[]).filter(w=>w.id!==currentWsId).length>0&&(
+          <div style={{position:"relative",flexShrink:0}}>
+            <button className="tbtn" onClick={()=>setShowMovePicker(p=>!p)}>↗ Move</button>
+            {showMovePicker&&(
+              <div onClick={e=>e.stopPropagation()} style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:"#fff",border:"1px solid #f1f0ef",borderRadius:8,boxShadow:"0 4px 20px rgba(0,0,0,0.12)",zIndex:400,minWidth:200,overflow:"hidden"}}>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em",padding:"10px 14px 4px"}}>Move to workspace</div>
+                {(workspaces||[]).filter(w=>w.id!==currentWsId).map(w=>(
+                  <button key={w.id} onClick={()=>{onMove(localIdea.id,w.id);setShowMovePicker(false);}}
+                    style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,color:"#37352f",fontFamily:"'Lora',serif",textAlign:"left"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span style={{fontSize:16}}>{w.emoji}</span><span>{w.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
         {user&&brief&&<button className={`tbtn${chatOpen?" on":""}`} onClick={()=>setChatOpen(o=>!o)} style={{flexShrink:0}}>{chatOpen?"✕ AI":"✦ AI"}</button>}
         {user&&brief&&<button onClick={handleShare} disabled={shareState==="saving"} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 12px",fontSize:12,color:shareState==="copied"?"#1e7e34":"#55534e",cursor:"pointer",fontFamily:"'Lora',serif",flexShrink:0,whiteSpace:"nowrap"}}>{shareState==="saving"?"Saving…":shareState==="copied"?"✓ Copied":"🔗 Share"}</button>}
@@ -604,6 +623,7 @@ function IdeaCapture({ user, onBack, projects, onOpenProject }) {
   const [ideaSidebarOpen, setIdeaSidebarOpen] = useState(true);
   const [showProjectPicker, setShowProjectPicker] = useState(false);
   const [pickerTargetId, setPickerTargetId] = useState(null);
+  const [moveMenuOpen, setMoveMenuOpen] = useState(null); // ideaId whose move-to-workspace dropdown is open
 
   useEffect(() => { loadData(); }, []);
 
@@ -785,6 +805,26 @@ function IdeaCapture({ user, onBack, projects, onOpenProject }) {
     setIdeas(prev => ({ ...prev, [wsId]: (prev[wsId]||[]).map(i => i.id === ideaId ? { ...i, linkedProjectId: null } : i) }));
   }
 
+  async function moveIdeaToWorkspace(ideaId, targetWsId) {
+    const sourceWsId = Object.keys(ideas).find(k => (ideas[k]||[]).some(i => i.id === ideaId));
+    if (!sourceWsId || sourceWsId === targetWsId) return;
+    const idea = (ideas[sourceWsId]||[]).find(i => i.id === ideaId);
+    if (!idea) return;
+    // Optimistic UI update
+    setIdeas(prev => ({
+      ...prev,
+      [sourceWsId]: (prev[sourceWsId]||[]).filter(i => i.id !== ideaId),
+      [targetWsId]: [...(prev[targetWsId]||[]), idea],
+    }));
+    setMoveMenuOpen(null);
+    // If we were viewing this idea's page, go back since it's no longer in activeWs
+    if (openIdea === ideaId && sourceWsId === activeWs) {
+      setOpenIdea(null);
+      setActiveWs(targetWsId);
+    }
+    await supabase.from("ideas").update({ workspace_id: targetWsId, updated_at: new Date().toISOString() }).eq("id", ideaId);
+  }
+
   const ws = workspaces.find(w => w.id === activeWs);
   const wsIdeas = ideas[activeWs] || [];
 
@@ -793,7 +833,8 @@ function IdeaCapture({ user, onBack, projects, onOpenProject }) {
     const ideaData = wsIdeas.find(i => i.id === openIdea);
     if (ideaData) return (
       <IdeaPage idea={ideaData} onBack={() => setOpenIdea(null)} onUpdate={updateIdea} user={user}
-        projects={projects} onLinkProject={proj => linkIdeaToProject(ideaData.id, proj)} onUnlinkProject={() => unlinkIdeaFromProject(ideaData.id)} />
+        projects={projects} onLinkProject={proj => linkIdeaToProject(ideaData.id, proj)} onUnlinkProject={() => unlinkIdeaFromProject(ideaData.id)}
+        workspaces={workspaces} currentWsId={activeWs} onMove={moveIdeaToWorkspace} />
     );
   }
 
@@ -869,7 +910,7 @@ function IdeaCapture({ user, onBack, projects, onOpenProject }) {
 
   return (
     <div style={{ height: "100vh", display: "flex", flexDirection: "column", overflow: "hidden" }}
-      onClick={() => { setWsMenuOpen(null); setShowEmojiPicker(false); }}>
+      onClick={() => { setWsMenuOpen(null); setShowEmojiPicker(false); setMoveMenuOpen(null); }}>
 
       {/* Mobile sidebar overlay + drawer */}
 
@@ -949,6 +990,25 @@ AI will generate a full creative brief with script, shot list, locations, and to
                               </span>
                             : <button onClick={e=>{e.stopPropagation();setPickerTargetId(idea.id);setShowProjectPicker(true);}} style={{fontSize:11,background:"#e8f0fe",color:"#1a56c4",border:"none",borderRadius:20,padding:"3px 10px",cursor:"pointer",fontFamily:"'Lora',serif",whiteSpace:"nowrap"}}>+ Link to Project</button>
                           )}
+                          {/* Move to workspace */}
+                          <div style={{position:"relative"}}>
+                            <button onClick={e=>{e.stopPropagation();setMoveMenuOpen(moveMenuOpen===idea.id?null:idea.id);}}
+                              style={{background:"none",border:"none",color:"#c4c3bf",cursor:"pointer",fontSize:13,padding:"2px 4px",lineHeight:1}}
+                              title="Move to workspace"
+                              onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>↗</button>
+                            {moveMenuOpen===idea.id&&(
+                              <div onClick={e=>e.stopPropagation()} style={{position:"absolute",right:0,top:"100%",marginTop:4,background:"#fff",border:"1px solid #f1f0ef",borderRadius:8,boxShadow:"0 4px 16px rgba(0,0,0,0.1)",zIndex:400,minWidth:180,overflow:"hidden"}}>
+                                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.08em",padding:"8px 12px 4px"}}>Move to workspace</div>
+                                {(workspaces||[]).filter(w=>w.id!==activeWs).map(w=>(
+                                  <button key={w.id} onClick={()=>moveIdeaToWorkspace(idea.id,w.id)}
+                                    style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 12px",border:"none",background:"none",cursor:"pointer",fontSize:13,color:"#37352f",fontFamily:"'Lora',serif",textAlign:"left"}}
+                                    onMouseEnter={e=>e.currentTarget.style.background="#f7f6f3"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                                    <span style={{fontSize:15}}>{w.emoji}</span><span>{w.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                           <button onClick={e => { e.stopPropagation(); deleteIdea(idea.id); }} style={{ background: "none", border: "none", color: "#ddd", cursor: "pointer", fontSize: 13, padding: "2px 4px" }}
                             onMouseEnter={e => e.currentTarget.style.color = "#c0392b"} onMouseLeave={e => e.currentTarget.style.color = "#ddd"}>🗑</button>
                         </div>
