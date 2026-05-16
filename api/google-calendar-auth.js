@@ -99,14 +99,6 @@ export default async function handler(req, res) {
       const eventsData = await eventsRes.json();
       const rawEvents = eventsData.results || eventsData || [];
 
-      // Pre-load project titles for all linked projects so we can name bots properly
-      const allLinkedProjectIds = Object.values(settings.meeting_project_links || {}).filter(Boolean);
-      const projectTitleMap = {};
-      if (allLinkedProjectIds.length > 0) {
-        const { data: linkedProjects } = await supabase.from("projects").select("id, title").in("id", allLinkedProjectIds);
-        for (const p of (linkedProjects || [])) projectTitleMap[p.id] = p.title;
-      }
-
       // Schedule or immediately trigger bots
       for (const m of rawEvents) {
         const hasBot = (m.bots?.length > 0) || !!(m.bot || m.bot_id || m.scheduled_bot);
@@ -125,12 +117,9 @@ export default async function handler(req, res) {
             await supabase.from("user_settings").update({ meeting_project_links: updatedLinks, updated_at: new Date().toISOString() }).eq("id", userId);
             settings.meeting_project_links = updatedLinks;
           }
-          // Name bot with project title if this is a linked (consultation) meeting
-          const projectTitle = linkedProjectId ? projectTitleMap[linkedProjectId] : null;
-          const botName = projectTitle ? `${projectTitle} — Consultation` : "Frame Brief";
           const body = {
             bot_config: {
-              bot_name: botName,
+              bot_name: "Frame Brief",
               webhook_url: "https://framebriefai.com/api/recall-webhook",
               metadata: {
                 calendar_event_id: m.id,

@@ -312,14 +312,6 @@ RULES:
       const events = eventsData.results || [];
       console.log("calendar sync: fetched", events.length, "events for calendar:", calendarId);
 
-      // Pre-load project titles for all linked projects so we can name bots properly
-      const allLinkedProjectIds = Object.values(settings.meeting_project_links || {}).filter(Boolean);
-      const projectTitleMap = {};
-      if (allLinkedProjectIds.length > 0) {
-        const { data: linkedProjects } = await supabase.from("projects").select("id, title").in("id", allLinkedProjectIds);
-        for (const p of (linkedProjects || [])) projectTitleMap[p.id] = p.title;
-      }
-
       const now = new Date();
       for (const evt of events) {
         if (evt.is_deleted || !evt.meeting_url) continue;
@@ -341,10 +333,6 @@ RULES:
           console.log("calendar sync: saved Recall event ID link for project:", linkedProjectId, "recallEvtId:", evt.id);
         }
 
-        // Name bot with project title if this is a linked (consultation) meeting
-        const projectTitle = linkedProjectId ? projectTitleMap[linkedProjectId] : null;
-        const botName = projectTitle ? `${projectTitle} — Consultation` : "Frame Brief";
-
         const botRes = await fetch(
           `https://${RECALL_REGION}.recall.ai/api/v2/calendar-events/${evt.id}/bot/`,
           {
@@ -353,7 +341,7 @@ RULES:
             body: JSON.stringify({
               deduplication_key: `framebrief-${evt.id}`,
               bot_config: {
-                bot_name: botName,
+                bot_name: "Frame Brief",
                 webhook_url: "https://framebriefai.com/api/recall-webhook",
                 metadata: {
                   calendar_event_id: evt.id,

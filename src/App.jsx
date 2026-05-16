@@ -2827,7 +2827,7 @@ function ScheduleConsultationModal({user,project,onClose,onScheduled}){
       const res=await fetch("/api/google-calendar-auth?action=create-calendar-event",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({userId:user.id,title:`${project?.title||"Consultation"} — Frame Brief`,dateTime,durationMinutes:parseInt(duration),attendeeEmail:attendeeEmail.trim()||null}),
+        body:JSON.stringify({userId:user.id,title:`${project?.title||"Consultation"} — Consultation`,dateTime,durationMinutes:parseInt(duration),attendeeEmail:attendeeEmail.trim()||null}),
       });
       const d=await res.json();
       if(!res.ok||!d.ok)throw new Error(d.error||"Failed to create calendar event");
