@@ -429,7 +429,7 @@ RULES:
           recall_transcript: text || null,
           updated_at: new Date().toISOString(),
         }).eq("id", botProject.id);
-        if (text.trim()) await generateBrief(botProject.id, text);
+        if (text.trim()) await generateBrief(botProject.id, text, botProject._calendarEventId || null);
       }
 
       return res.status(200).json({ ok: true, calendarBot: true });
@@ -590,7 +590,7 @@ async function resolveCalendarBotProject(botId) {
       if (linked) {
         await supabase.from("projects").update({ recall_bot_id: botId, recall_status: "bot_joined", updated_at: new Date().toISOString() }).eq("id", directProjectId);
         console.log("resolveCalendarBotProject: fast-path linked via metadata.project_id:", directProjectId);
-        return { ...linked, recall_bot_id: botId };
+        return { ...linked, recall_bot_id: botId, _calendarEventId: botData.metadata?.calendar_event_id || null };
       }
     }
 
@@ -644,7 +644,7 @@ async function resolveCalendarBotProject(botId) {
         // Update bot id on the existing project
         await supabase.from("projects").update({ recall_bot_id: botId, recall_status: "bot_joined", updated_at: new Date().toISOString() }).eq("id", linkedProjectId);
         console.log("resolveCalendarBotProject: linked to existing project:", linkedProjectId);
-        return { ...linked, recall_bot_id: botId };
+        return { ...linked, recall_bot_id: botId, _calendarEventId: calendarMeetingId };
       }
     }
 
@@ -660,14 +660,14 @@ async function resolveCalendarBotProject(botId) {
 
     if (createErr) { console.error("resolveCalendarBotProject: project create failed:", createErr.message); return null; }
     console.log("resolveCalendarBotProject: auto-created project:", newProject.id, "for user:", userId);
-    return newProject;
+    return { ...newProject, _calendarEventId: calendarMeetingId };
   } catch (err) {
     console.error("resolveCalendarBotProject error:", err.message);
     return null;
   }
 }
 
-async function generateBrief(projectId, transcriptText) {
+async function generateBrief(projectId, transcriptText, calendarEventId = null) {
   try {
     const ANTHROPIC_KEY = process.env.ANTHROPIC_KEY || process.env.VITE_ANTHROPIC_KEY;
     console.log("generateBrief — ANTHROPIC_KEY present:", !!ANTHROPIC_KEY, "key prefix:", ANTHROPIC_KEY ? ANTHROPIC_KEY.slice(0, 7) : "MISSING", "projectId:", projectId, "transcriptLength:", transcriptText?.length);
@@ -784,7 +784,20 @@ RULES:
       };
 
       const existingHistory = Array.isArray(project.meeting_history) ? project.meeting_history : [];
-      const newHistory = [...existingHistory, meeting];
+
+      // Replace any matching scheduled placeholder (matched by scheduledEventId == calendarEventId from bot metadata)
+      const scheduledIdx = calendarEventId
+        ? existingHistory.findIndex(m => m.status === "scheduled" && m.scheduledEventId === calendarEventId)
+        : existingHistory.findIndex(m => m.status === "scheduled");
+      let newHistory;
+      if (scheduledIdx >= 0) {
+        // Preserve the scheduled meeting's date (when it was scheduled for) in the completed record
+        meeting.date = existingHistory[scheduledIdx].date || meeting.date;
+        newHistory = [...existingHistory.slice(0, scheduledIdx), meeting, ...existingHistory.slice(scheduledIdx + 1)];
+        console.log("Replaced scheduled placeholder at index", scheduledIdx, "with completed meeting notes");
+      } else {
+        newHistory = [...existingHistory, meeting];
+      }
 
       const { error: dbErr } = await supabase.from("projects").update({
         meeting_stage: parsed.stage || "consultation",

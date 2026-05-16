@@ -1713,6 +1713,44 @@ function MeetingNotesPanel({meeting,fullTranscript,label,expanded,onToggleExpand
     finally{ setMoving(false);setMoveOpen(false); }
   }
   if(!meeting)return null;
+
+  // Scheduled meeting — show upcoming consultation card instead of notes UI
+  if(meeting.status==="scheduled"){
+    const meetingDate=meeting.date?new Date(meeting.date):null;
+    const isPast=meetingDate&&meetingDate<new Date();
+    const dateStr=meetingDate?meetingDate.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"}):null;
+    const timeStr=meetingDate?meetingDate.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit",hour12:true}):null;
+    const panelStyle=expanded
+      ?{position:"fixed",inset:0,zIndex:200,background:"#fff",display:"flex",flexDirection:"column",overflow:"hidden"}
+      :{position:"fixed",top:0,right:0,bottom:0,width:"min(440px,100vw)",zIndex:150,background:"#fff",borderLeft:"1px solid #f1f0ef",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"-4px 0 20px rgba(0,0,0,0.08)"};
+    return(
+      <div style={panelStyle}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 18px",borderBottom:"1px solid #f1f0ef",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:16}}>📅</span>
+            <span style={{fontWeight:700,fontSize:14,color:"#37352f"}}>{label||"Consultation"}</span>
+            <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:"#e8f0fe",color:"#1a56c4",borderRadius:4,padding:"2px 7px",fontWeight:600}}>{isPast?"IN PROGRESS":"UPCOMING"}</span>
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={onToggleExpand} style={{background:"none",border:"1px solid #e8e4dc",borderRadius:5,padding:"4px 10px",fontSize:11,cursor:"pointer",color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>{expanded?"⊡ Collapse":"⊞ Expand"}</button>
+            <button onClick={onClose} style={{background:"none",border:"none",fontSize:18,cursor:"pointer",color:"#c4c3bf",lineHeight:1,padding:"2px 6px"}}>✕</button>
+          </div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"28px 24px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",textAlign:"center",gap:16}}>
+          <div style={{fontSize:48}}>{isPast?"🔴":"📅"}</div>
+          <div style={{fontWeight:700,fontSize:18,color:"#37352f"}}>{isPast?"Meeting In Progress":"Consultation Scheduled"}</div>
+          {dateStr&&<div style={{fontSize:14,color:"#9b9a97",lineHeight:1.6}}>{dateStr}<br/>{timeStr}</div>}
+          <div style={{fontSize:13,color:"#c4c3bf",lineHeight:1.6,maxWidth:320}}>{isPast?"Frame Brief has joined the call and is recording. Notes will appear here automatically when the meeting ends.":"Frame Brief will auto-join this meeting and generate full notes + suggested brief changes when it ends."}</div>
+          {meeting.meetLink&&(
+            <a href={meeting.meetLink} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:8,background:"#1a56c4",color:"#fff",borderRadius:8,padding:"10px 20px",textDecoration:"none",fontFamily:"'Lora',serif",fontSize:13,fontWeight:600,marginTop:8}}>
+              🎥 Join Meeting
+            </a>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   const sc=STAGE_COLORS[meeting.stage]||STAGE_COLORS.discovery;
   const segments=parseTranscript(meeting.transcriptText||meeting.transcriptExcerpt||fullTranscript||"");
   function toggleChange(i){setSelected(prev=>prev.includes(i)?prev.filter(x=>x!==i):[...prev,i]);}
@@ -2838,8 +2876,22 @@ function ScheduleConsultationModal({user,project,onClose,onScheduled}){
           body:JSON.stringify({userId:user.id,meetingId:d.eventId,projectId:project.id}),
         });
       }
-      await supabase.from("projects").update({meeting_stage:"consultation",updated_at:new Date().toISOString()}).eq("id",project.id);
-      onScheduled("consultation");
+      // Add a scheduled-meeting placeholder to meeting_history so it shows up immediately
+      const{data:proj}=await supabase.from("projects").select("meeting_history").eq("id",project.id).single();
+      const existingHistory=Array.isArray(proj?.meeting_history)?proj.meeting_history:[];
+      const scheduledMeeting={
+        id:`m-scheduled-${Date.now()}`,
+        date:new Date(`${date}T${time}:00`).toISOString(),
+        stage:"consultation",
+        status:"scheduled",
+        summary:"Consultation scheduled — Frame Brief will auto-join and generate notes.",
+        keyPoints:[],topics:[],actionItems:[],suggestedChanges:[],
+        scheduledEventId:d.eventId||null,
+        meetLink:d.meetingUrl||null,
+      };
+      const newHistory=[...existingHistory,scheduledMeeting];
+      await supabase.from("projects").update({meeting_stage:"consultation",meeting_history:newHistory,updated_at:new Date().toISOString()}).eq("id",project.id);
+      onScheduled("consultation",newHistory);
       onClose();
       alert(`✅ Consultation scheduled! Frame Brief will auto-join the meeting and add the recording to this project.`);
     }catch(e){setError(e.message);}
@@ -3817,17 +3869,25 @@ ${JSON.stringify(brief)}`;
       <button className={`nb ${page==="postprod"?"on":""}`} onClick={()=>{setPage("postprod");setSidebarOpen(false);}}><span style={{fontSize:15,flexShrink:0}}>✂️</span><span>Post Production</span></button>
       {meetingHistory.length>0&&(<>
         <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",padding:"14px 10px 4px"}}>Meetings</div>
+        {activeProject?.recall_status==="bot_joined"&&(
+          <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",margin:"0 0 4px",borderRadius:6,background:"#fff5f5",border:"1px solid #ffc9c9"}}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:"#e53e3e",flexShrink:0,animation:"pulse 1.5s infinite"}}/>
+            <span style={{fontSize:11,color:"#e53e3e",fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>Recording…</span>
+          </div>
+        )}
         {meetingHistory.map((m,i)=>{
           // Label: Discovery, Consultation, Consultation #2, etc.
           const stageLabel=(m.stage||"discovery").replace("_"," ");
           const sameStageIdx=meetingHistory.slice(0,i).filter(x=>x.stage===m.stage).length;
           const label=sameStageIdx===0?stageLabel.replace(/^\w/,c=>c.toUpperCase()):stageLabel.replace(/^\w/,c=>c.toUpperCase())+` #${sameStageIdx+1}`;
           const isActive=viewingMeetingIdx===i;
+          const isScheduled=m.status==="scheduled";
           return(
             <button key={m.id||i} className={`nb ${isActive?"on":""}`} onClick={()=>{setViewingMeeting(m);setViewingMeetingIdx(i);setMeetingNotesExpanded(window.innerWidth<=768);setSidebarOpen(false);}}>
-              <span style={{fontSize:13,flexShrink:0}}>🗒</span>
-              <span style={{overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:6}}>
-                {label}
+              <span style={{fontSize:13,flexShrink:0}}>{isScheduled?"📅":"🗒"}</span>
+              <span style={{overflow:"hidden",textOverflow:"ellipsis",display:"flex",alignItems:"center",gap:6,flex:1,minWidth:0}}>
+                <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
+                {isScheduled&&<span style={{fontSize:9,fontFamily:"'IBM Plex Mono',monospace",background:"#e8f0fe",color:"#1a56c4",borderRadius:3,padding:"1px 5px",flexShrink:0,fontWeight:600}}>SOON</span>}
                 {m.status==="pending_review"&&<span style={{width:6,height:6,borderRadius:"50%",background:"#e97942",flexShrink:0,display:"inline-block"}}/>}
               </span>
             </button>
@@ -4018,7 +4078,7 @@ ${JSON.stringify(brief)}`;
       )}
       {showShareModal&&user&&<ShareModal project={activeProject} user={user} onClose={()=>setShowShareModal(false)} onProjectUpdate={p=>{setActiveProject(prev=>({...prev,...p}));setProjects(ps=>ps.map(pp=>pp.id===p.id?{...pp,...p}:pp));}}/>}
       {showConsultationModal&&user&&activeProject&&<JoinCallModal user={user} project={activeProject} projects={projects} onClose={()=>setShowConsultationModal(false)} onScheduled={(stage)=>{const updated={...activeProject,meeting_stage:stage};setActiveProject(updated);setProjects(ps=>ps.map(p=>p.id===updated.id?updated:p));}}/>}
-      {showScheduleConsultation&&user&&activeProject&&<ScheduleConsultationModal user={user} project={activeProject} onClose={()=>setShowScheduleConsultation(false)} onScheduled={(stage)=>{const updated={...activeProject,meeting_stage:stage};setActiveProject(updated);setProjects(ps=>ps.map(p=>p.id===updated.id?updated:p));}}/>}
+      {showScheduleConsultation&&user&&activeProject&&<ScheduleConsultationModal user={user} project={activeProject} onClose={()=>setShowScheduleConsultation(false)} onScheduled={(stage,newHistory)=>{const updated={...activeProject,meeting_stage:stage,...(newHistory?{meeting_history:newHistory}:{})};setActiveProject(updated);setProjects(ps=>ps.map(p=>p.id===updated.id?updated:p));}}/>}
       {reviewingMeeting&&myRole!=="viewer"&&<SuggestedChangesModal meeting={reviewingMeeting} currentBrief={brief} onApply={(indices)=>{applyMeetingChanges(reviewingMeeting,indices);setReviewingMeeting(null);}} onDismiss={()=>{dismissMeeting(reviewingMeeting);setReviewingMeeting(null);}}/>}
       {showJoinCall&&(
         <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setShowJoinCall(false);setJoinCallUrl("");setJoinCallError("");}}>
