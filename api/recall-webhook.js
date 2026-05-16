@@ -695,6 +695,14 @@ async function generateBrief(projectId, transcriptText) {
 
     console.log("generateBrief — hasExistingBrief:", hasExistingBrief, "conceptCount:", project?.brief?.concepts?.length);
 
+    // Save transcript FIRST — before any Claude call — so it's never lost if Claude times out.
+    // The browser detects "transcript_ready" and can re-trigger generation client-side.
+    await supabase.from("projects").update({
+      recall_transcript: transcriptText,
+      recall_status: "transcript_ready",
+      updated_at: new Date().toISOString(),
+    }).eq("id", projectId);
+
     if (hasExistingBrief) {
       // ── Consultation flow: detect stage, summarize, suggest changes + actual updates ──
       // Dedup: skip if this transcript was already processed (handles Recall webhook retries)
