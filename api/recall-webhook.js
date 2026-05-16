@@ -312,6 +312,14 @@ RULES:
       const events = eventsData.results || [];
       console.log("calendar sync: fetched", events.length, "events for calendar:", calendarId);
 
+      // Pre-load project titles for all linked projects so we can name bots properly
+      const allLinkedProjectIds = Object.values(settings.meeting_project_links || {}).filter(Boolean);
+      const projectTitleMap = {};
+      if (allLinkedProjectIds.length > 0) {
+        const { data: linkedProjects } = await supabase.from("projects").select("id, title").in("id", allLinkedProjectIds);
+        for (const p of (linkedProjects || [])) projectTitleMap[p.id] = p.title;
+      }
+
       const now = new Date();
       for (const evt of events) {
         if (evt.is_deleted || !evt.meeting_url) continue;
@@ -333,6 +341,10 @@ RULES:
           console.log("calendar sync: saved Recall event ID link for project:", linkedProjectId, "recallEvtId:", evt.id);
         }
 
+        // Name bot with project title if this is a linked (consultation) meeting
+        const projectTitle = linkedProjectId ? projectTitleMap[linkedProjectId] : null;
+        const botName = projectTitle ? `${projectTitle} — Consultation` : "Frame Brief";
+
         const botRes = await fetch(
           `https://${RECALL_REGION}.recall.ai/api/v2/calendar-events/${evt.id}/bot/`,
           {
@@ -341,7 +353,7 @@ RULES:
             body: JSON.stringify({
               deduplication_key: `framebrief-${evt.id}`,
               bot_config: {
-                bot_name: "Frame Brief",
+                bot_name: botName,
                 webhook_url: "https://framebriefai.com/api/recall-webhook",
                 metadata: {
                   calendar_event_id: evt.id,
@@ -703,10 +715,12 @@ async function generateBrief(projectId, transcriptText) {
       const CONCEPT_SCHEMA = `{"id":"concept-N","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"hooks":[],"selectedHook":"","deliverableFormat":"","directorNotes":""}`;
 
       const CONSULTATION_SYSTEM = `You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and the existing brief, then return ONLY valid JSON, no markdown:
-{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value (quote from brief if possible)","after":"suggested new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}
+{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}],"actionItems":[{"owner":"Person Name","task":"specific task to complete","deadline":""}],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value (quote from brief if possible)","after":"suggested new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}
 
 RULES:
 - stage: discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).
+- topics: 2-5 main subjects discussed, each with 2-4 bullet points. Group related discussion points together.
+- actionItems: concrete next steps with a clear owner (person's name or "Client"/"Team"), specific task, and deadline if mentioned.
 - suggestedChanges: 3-6 specific changes with plain-text "after" descriptions for display only.
 - briefUpdates: a partial JSON object with ACTUAL new values ready to merge into the brief. Only include changed fields. Use correct types:
   * Scalar fields: budget, timeline, projectType, logline, overview, generalNotes, moodDescription, date, coverEmoji — set to new string value.
@@ -763,7 +777,9 @@ RULES:
         date: new Date().toISOString(),
         stage: parsed.stage || "consultation",
         summary: parsed.summary || "",
-        keyPoints: parsed.keyPoints || [],
+        keyPoints: Array.isArray(parsed.keyPoints) ? parsed.keyPoints : [],
+        topics: Array.isArray(parsed.topics) ? parsed.topics : [],
+        actionItems: Array.isArray(parsed.actionItems) ? parsed.actionItems : [],
         suggestedChanges: parsed.suggestedChanges || [],
         briefUpdates: parsed.briefUpdates && typeof parsed.briefUpdates === "object" && Object.keys(parsed.briefUpdates).length > 0 ? parsed.briefUpdates : null,
         transcriptExcerpt: transcriptText.slice(0, 500),
@@ -798,7 +814,7 @@ RULES:
     }
 
     // ── Discovery flow: generate full brief ───────────────────────────────────
-    const SYSTEM = `You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object with no markdown or backticks. For each concept, generate 3-5 compelling opening hooks in the "hooks" array — each hook is a single punchy sentence that grabs attention in the first 3 seconds, varying styles: emotional, curiosity-driven, bold statement, question, cinematic. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}]}`;
+    const SYSTEM = `You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object with no markdown or backticks. For each concept, generate 3-5 compelling opening hooks in the "hooks" array — each hook is a single punchy sentence that grabs attention in the first 3 seconds, varying styles: emotional, curiosity-driven, bold statement, question, cinematic. Also extract meeting notes: a 2-3 sentence summary, 3-5 key points from the discussion, and 2-4 main topics discussed. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"2-3 sentence summary of the discovery meeting","keyPoints":["key point 1","key point 2","key point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}]},"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}]}`;
 
     const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -844,12 +860,15 @@ RULES:
     }
 
     if (brief) {
+      const meetingNotes = brief.meetingNotes || {};
       const meetingRecord = {
         id: `m-${Date.now()}`,
         date: new Date().toISOString(),
         stage: "discovery",
-        summary: brief.logline || "Initial discovery meeting — brief generated.",
-        keyPoints: [],
+        summary: meetingNotes.summary || brief.logline || "Initial discovery meeting — brief generated.",
+        keyPoints: Array.isArray(meetingNotes.keyPoints) ? meetingNotes.keyPoints : [],
+        topics: Array.isArray(meetingNotes.topics) ? meetingNotes.topics : [],
+        actionItems: [],
         suggestedChanges: [],
         transcriptExcerpt: transcriptText.slice(0, 500),
         transcriptText,

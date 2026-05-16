@@ -27,10 +27,10 @@ Budget: $6,500. Timeline: 3 weeks shoot, 2 weeks post.`;
 
 const SYSTEM_PROMPT = `You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object — no markdown, no backticks, no explanation, just raw JSON.
 
-Create one concept per deliverable. Generate 3-5 clientActionItems (things the client must do before shoot) and 3-5 internalTodos (internal team tasks).
+Create one concept per deliverable. Generate 3-5 clientActionItems (things the client must do before shoot) and 3-5 internalTodos (internal team tasks). Also extract meetingNotes: a 2-3 sentence summary of the meeting, 3-5 key points discussed, and 2-4 main topics covered.
 
 Return exactly this structure:
-{"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[{"name":"","address":"","description":""}],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","address":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":[],"selectedHook":""}]}`;
+{"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[{"name":"","address":"","description":""}],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"2-3 sentence summary of the discovery meeting","keyPoints":["key point 1","key point 2","key point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}]},"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","address":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":[],"selectedHook":""}]}`;
 
 // ─── SAFETY HELPERS ──────────────────────────────────────────────────────────
 // arr() always returns an array — prevents "reading 'length' of undefined"
@@ -2831,14 +2831,17 @@ function ScheduleConsultationModal({user,project,onClose,onScheduled}){
       });
       const d=await res.json();
       if(!res.ok||!d.ok)throw new Error(d.error||"Failed to create calendar event");
-      // Link bot to project if we got a meeting URL
-      if(d.meetingUrl){
-        await supabase.from("projects").update({meeting_stage:"consultation",updated_at:new Date().toISOString()}).eq("id",project.id);
-        onScheduled("consultation");
+      // Link the Google Calendar event ID to this project so the bot can find it
+      if(d.eventId){
+        await fetch("/api/google-calendar-auth?action=link-meeting",{
+          method:"POST",headers:{"Content-Type":"application/json"},
+          body:JSON.stringify({userId:user.id,meetingId:d.eventId,projectId:project.id}),
+        });
       }
+      await supabase.from("projects").update({meeting_stage:"consultation",updated_at:new Date().toISOString()}).eq("id",project.id);
+      onScheduled("consultation");
       onClose();
-      // Show brief confirmation
-      alert(`✅ Consultation scheduled! Google Meet link created${d.meetingUrl?" — Frame Brief will auto-join":""}.`);
+      alert(`✅ Consultation scheduled! Frame Brief will auto-join the meeting and add the recording to this project.`);
     }catch(e){setError(e.message);}
     setScheduling(false);
   }
@@ -3636,7 +3639,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
         setPage("overview");setScreen("doc");
       } else {
         // ── Discovery flow: generate full brief ──
-        const DISC_SYS=`You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object with no markdown or backticks. For each concept, generate 3-5 compelling opening hooks in the "hooks" array — each hook is a single punchy sentence that grabs attention in the first 3 seconds, varying styles: emotional, curiosity-driven, bold statement, question, cinematic. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}]}`;
+        const DISC_SYS=`You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object with no markdown or backticks. For each concept, generate 3-5 compelling opening hooks in the "hooks" array — each hook is a single punchy sentence that grabs attention in the first 3 seconds, varying styles: emotional, curiosity-driven, bold statement, question, cinematic. Also extract meetingNotes: a 2-3 sentence summary of the discovery meeting, 3-5 key points discussed, and 2-4 main topics covered. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"2-3 sentence summary of the discovery meeting","keyPoints":["key point 1","key point 2","key point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}]},"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}]}`;
         const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
           method:"POST",
           headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
@@ -3658,10 +3661,11 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
         if(!Array.isArray(brief.concepts))brief.concepts=[];
         if(!brief.clientActionItems)brief.clientActionItems=[];
         if(!brief.internalTodos)brief.internalTodos=[];
+        const mn=brief.meetingNotes||{};
         const meetingRecord={
           id:`m-${Date.now()}`,date:new Date().toISOString(),stage:"discovery",
-          summary:brief.logline||"Initial discovery meeting — brief generated.",
-          keyPoints:[],topics:[],actionItems:[],suggestedChanges:[],
+          summary:mn.summary||brief.logline||"Initial discovery meeting — brief generated.",
+          keyPoints:arr(mn.keyPoints),topics:arr(mn.topics),actionItems:[],suggestedChanges:[],
           transcriptExcerpt:transcriptText.slice(0,500),transcriptText,status:"reviewed",
         };
         await supabase.from("projects").update({
@@ -3716,7 +3720,8 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       if(!Array.isArray(parsed.concepts))parsed.concepts=[];
       if(!parsed.clientActionItems)parsed.clientActionItems=[];
       if(!parsed.internalTodos)parsed.internalTodos=[];
-      const discoveryMeeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:"discovery",summary:parsed.logline||"Initial brief created from meeting notes.",keyPoints:[],topics:[],actionItems:[],suggestedChanges:[],transcriptText:transcript.trim()||null,transcriptExcerpt:transcript.trim().slice(0,500),status:"reviewed"};
+      const mn=parsed.meetingNotes||{};
+      const discoveryMeeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:"discovery",summary:mn.summary||parsed.logline||"Initial brief created from meeting notes.",keyPoints:arr(mn.keyPoints),topics:arr(mn.topics),actionItems:[],suggestedChanges:[],transcriptText:transcript.trim()||null,transcriptExcerpt:transcript.trim().slice(0,500),status:"reviewed"};
       const newProject={id:crypto.randomUUID(),user_id:user.id,title:parsed.projectTitle||"Untitled",client_name:parsed.clientName||"",status:"Draft",brief:parsed,doc_count:validDocs.length,client_id:resolvedClientId||null,meeting_stage:"discovery",meeting_history:[discoveryMeeting],created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
       const saved=await saveProject(newProject);
       setActiveProject(saved||newProject);

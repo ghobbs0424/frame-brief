@@ -99,20 +99,44 @@ export default async function handler(req, res) {
       const eventsData = await eventsRes.json();
       const rawEvents = eventsData.results || eventsData || [];
 
+      // Pre-load project titles for all linked projects so we can name bots properly
+      const allLinkedProjectIds = Object.values(settings.meeting_project_links || {}).filter(Boolean);
+      const projectTitleMap = {};
+      if (allLinkedProjectIds.length > 0) {
+        const { data: linkedProjects } = await supabase.from("projects").select("id, title").in("id", allLinkedProjectIds);
+        for (const p of (linkedProjects || [])) projectTitleMap[p.id] = p.title;
+      }
+
       // Schedule or immediately trigger bots
       for (const m of rawEvents) {
         const hasBot = (m.bots?.length > 0) || !!(m.bot || m.bot_id || m.scheduled_bot);
         const hasMeetingUrl = !!(m.meeting_url);
         if (!hasBot && hasMeetingUrl) {
           const alreadyStarted = new Date(m.start_time) <= new Date();
+          // Resolve linked project: check Recall.ai event ID first, then Google Calendar event ID
+          const googleCalendarEventId = m.raw?.id || null;
+          const linkedProjectId =
+            settings.meeting_project_links?.[m.id] ||
+            (googleCalendarEventId ? settings.meeting_project_links?.[googleCalendarEventId] : null) ||
+            null;
+          // If linked via Google Calendar ID but not Recall ID, save the Recall ID link too
+          if (linkedProjectId && googleCalendarEventId && !settings.meeting_project_links?.[m.id]) {
+            const updatedLinks = { ...(settings.meeting_project_links || {}), [m.id]: linkedProjectId };
+            await supabase.from("user_settings").update({ meeting_project_links: updatedLinks, updated_at: new Date().toISOString() }).eq("id", userId);
+            settings.meeting_project_links = updatedLinks;
+          }
+          // Name bot with project title if this is a linked (consultation) meeting
+          const projectTitle = linkedProjectId ? projectTitleMap[linkedProjectId] : null;
+          const botName = projectTitle ? `${projectTitle} — Consultation` : "Frame Brief";
           const body = {
             bot_config: {
-              bot_name: "Frame Brief",
+              bot_name: botName,
               webhook_url: "https://framebriefai.com/api/recall-webhook",
               metadata: {
                 calendar_event_id: m.id,
                 user_id: userId,
                 event_title: m.raw?.summary || "Calendar Meeting",
+                ...(linkedProjectId ? { project_id: linkedProjectId } : {}),
               },
               automatic_leave: {
                 waiting_room_timeout: 3600,
