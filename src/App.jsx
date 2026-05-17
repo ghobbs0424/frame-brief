@@ -25,12 +25,34 @@ We also discussed a behind-the-scenes EPK mini documentary — 5-7 minutes — c
 Deliverables: 4-minute music video, 60-second Instagram reel, 5-7 minute EPK documentary, 8-10 production stills.
 Budget: $6,500. Timeline: 3 weeks shoot, 2 weeks post.`;
 
-const SYSTEM_PROMPT = `You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object — no markdown, no backticks, no explanation, just raw JSON.
+const SYSTEM_PROMPT = `You are a creative director AI for a video and photography production company. Analyze the provided context (meeting notes, emails, documents, voice input) and return ONLY a valid JSON object — no markdown, no backticks, no explanation, just raw JSON.
 
-Create one concept per deliverable. Generate 3-5 clientActionItems (things the client must do before shoot) and 3-5 internalTodos (internal team tasks). Also extract meetingNotes: a 2-3 sentence summary of the meeting, 3-5 key points discussed, and 2-4 main topics covered.
+Generate BOTH a client-facing pitch deck AND a full production brief simultaneously.
 
 Return exactly this structure:
-{"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[{"name":"","address":"","description":""}],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"2-3 sentence summary of the discovery meeting","keyPoints":["key point 1","key point 2","key point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}]},"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","address":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":[],"selectedHook":""}]}`;
+{"pitchDeck":{"headline":"Compelling short project headline","tagline":"One punchy sentence that captures the vision","overview":"2-3 sentence client-facing summary of what we're creating and why","approach":"How we'll bring this to life — creative direction and methodology","deliverables":[{"title":"","description":"","format":""}],"timeline":"","investment":"","nextSteps":["","",""]},"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[{"name":"","address":"","description":""}],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"2-3 sentence summary","keyPoints":["key point 1","key point 2","key point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}]},"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","address":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}]}
+
+RULES: Create one concept per deliverable. Generate 3-5 clientActionItems and 3-5 internalTodos. For each concept generate 3-5 hooks (punchy opening sentences). Fill every field with real content — never leave placeholders or empty strings where context is available. Infer missing details intelligently from whatever context is provided.`;
+
+// ─── INTAKE SYSTEM PROMPT (returns both pitchDeck + brief) ───────────────────
+const CONCEPT_SCHEMA_INLINE=`{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}`;
+const INTAKE_SYSTEM_PROMPT=`You are a creative director AI for a video and photography production company. Analyze ALL provided context (notes, documents, references, transcript, budget range, project type) and return ONLY a valid JSON object with exactly two top-level keys — "pitchDeck" and "brief". No markdown, no backticks, no explanation, just raw JSON. All string values must stay on a single line.
+
+PITCH DECK STRUCTURE — client-facing proposal with tiered packages:
+{"coverTitle":"","clientName":"","tagline":"one-sentence hook","coverEmoji":"🎬","packages":[{"id":"pkg-1","name":"Essential","price":"$X,XXX","highlight":"short positioning line","deliverables":["item1","item2","item3"],"timeline":"X weeks","idealFor":"type of client"}],"approach":"2-3 sentences on creative approach","whyUs":"2 sentences on why this team","nextSteps":["Schedule pre-production call","Sign contract + 50% deposit","Receive detailed shot list"],"investmentNote":"All packages are fully customizable."}
+
+BRIEF STRUCTURE — internal production document:
+{"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[{"name":"","address":"","description":""}],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"","keyPoints":[],"topics":[{"title":"","points":[]}]},"concepts":[${CONCEPT_SCHEMA_INLINE}]}
+
+RULES:
+- Generate exactly the number of packages specified (default 2). Name them tiers: Essential / Standard / Premium, or similar.
+- Package prices must align with the budget range if given — the lowest tier should start near the low end.
+- For each concept generate 3-5 hooks[] (punchy single sentences varying style: emotional / curiosity / bold / question / cinematic).
+- Extract meetingNotes.summary (2-3 sentences), keyPoints (3-5 bullets), topics (2-4 subjects with bullet points each).
+- Use projectTitle and clientName from the provided PROJECT TITLE if given; otherwise extract from context.
+- If a project type is given, use it for brief.projectType.
+- brief.budget should reflect the mid-tier package price or the budget range given.
+- pitchDeck.packages and brief.concepts should be complementary — each concept maps to the scope of a package.`;
 
 // ─── SAFETY HELPERS ──────────────────────────────────────────────────────────
 // arr() always returns an array — prevents "reading 'length' of undefined"
@@ -3309,6 +3331,228 @@ function ShareModal({project,user,onClose,onProjectUpdate}){
   );
 }
 
+// ─── INTAKE WORKSPACE ─────────────────────────────────────────────────────────
+const PROJECT_TYPES=["Video Production","Photography","Brand Content","Real Estate","Music Video","Event","Commercial","Documentary","Other"];
+const BUDGET_RANGES=["Under $1K","$1K–$3K","$3K–$5K","$5K–$10K","$10K+","To be discussed"];
+
+function IntakeScreen({
+  transcript,setTranscript,docs,setDocs,
+  clients,inputClientId,setInputClientId,newClientNameInput,setNewClientNameInput,
+  errMsg,
+  intakeProjectType,setIntakeProjectType,
+  intakeRawTranscript,setIntakeRawTranscript,
+  showMeetingBot,setShowMeetingBot,
+  inputGenerating,
+  onGenerate,onBack,onBotStarted,onLoadSample,
+}){
+  const [clientOpen,setClientOpen]=useState(false);
+  const [voiceInterim,setVoiceInterim]=useState("");
+  const fileInputRef=useRef(null);
+
+  const validDocs=arr(docs).filter(d=>!d.error);
+  const hasContent=transcript.trim().length>0||validDocs.length>0||intakeRawTranscript.trim().length>0;
+  const canGenerate=hasContent&&!inputGenerating;
+
+  const selectedClient=clients.find(c=>c.id===inputClientId);
+  const clientLabel=inputClientId==="__new__"?(newClientNameInput||"New client…"):(selectedClient?.name||"No client");
+
+  const mono={fontFamily:"'IBM Plex Mono',monospace"};
+  const serif={fontFamily:"'Lora',serif"};
+
+  async function handleFileInput(e){
+    const files=Array.from(e.target.files||[]);
+    if(!files.length)return;
+    const results=[];
+    for(const f of files){
+      const ext=(f.name.split(".").pop()||"").toLowerCase();
+      try{
+        if(ext==="pdf"){const b64=await readB64(f);results.push({name:f.name,type:"pdf",base64:b64,size:f.size});}
+        else{const text=await readText(f);results.push({name:f.name,type:"text",content:text,size:f.size});}
+      }catch{results.push({error:`${f.name} — could not read`});}
+    }
+    setDocs(prev=>[...prev,...results]);
+    e.target.value="";
+  }
+
+  const pillTypes=["Video","Photography","Real Estate","Music Video","Brand","Event","Commercial","Documentary","Other"];
+
+  return(
+    <div style={{minHeight:"100vh",background:"#fff"}}>
+      <div style={{borderBottom:"1px solid #f1f0ef",padding:"11px 20px",display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,background:"rgba(255,255,255,0.97)",backdropFilter:"blur(10px)",zIndex:10}}>
+        <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",...serif,display:"flex",alignItems:"center",gap:4}}>← Projects</button>
+        <span style={{color:"#e8e4dc"}}>·</span>
+        <span style={{fontSize:13,fontWeight:700,color:"#37352f"}}>New Project</span>
+      </div>
+
+      <div style={{maxWidth:680,margin:"0 auto",padding:"36px 20px 80px"}}>
+
+        <div style={{display:"flex",gap:10,alignItems:"flex-start",marginBottom:20,flexWrap:"wrap"}}>
+          <div style={{position:"relative"}}>
+            <button onClick={()=>setClientOpen(o=>!o)}
+              style={{display:"flex",alignItems:"center",gap:6,padding:"7px 13px",border:"1px solid #e8e4dc",borderRadius:20,background:clientOpen?"#f1f0ef":"#fff",cursor:"pointer",fontSize:13,...serif,color:"#37352f",transition:"background .12s"}}
+              onMouseEnter={e=>e.currentTarget.style.background="#f1f0ef"} onMouseLeave={e=>e.currentTarget.style.background=clientOpen?"#f1f0ef":"#fff"}>
+              <span>{inputClientId&&inputClientId!=="__new__"?"👤 ":""}{clientLabel}</span>
+              <span style={{fontSize:10,color:"#9b9a97"}}>▾</span>
+            </button>
+            {clientOpen&&(
+              <>
+                <div style={{position:"fixed",inset:0,zIndex:49}} onClick={()=>setClientOpen(false)}/>
+                <div style={{position:"absolute",left:0,top:"calc(100% + 6px)",background:"#fff",border:"1px solid #e8e4dc",borderRadius:10,boxShadow:"0 8px 24px rgba(0,0,0,0.1)",zIndex:50,minWidth:200,overflow:"hidden"}}>
+                  <button onClick={()=>{setInputClientId(null);setClientOpen(false);}}
+                    style={{display:"block",width:"100%",padding:"10px 14px",border:"none",background:!inputClientId?"#f1f0ef":"transparent",cursor:"pointer",fontSize:13,...serif,color:"#9b9a97",textAlign:"left"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#f1f0ef"} onMouseLeave={e=>e.currentTarget.style.background=!inputClientId?"#f1f0ef":"transparent"}>
+                    No client
+                  </button>
+                  {clients.map(c=>(
+                    <button key={c.id} onClick={()=>{setInputClientId(c.id);setClientOpen(false);}}
+                      style={{display:"block",width:"100%",padding:"10px 14px",border:"none",borderTop:"1px solid #f1f0ef",background:inputClientId===c.id?"#e8f0fe":"transparent",cursor:"pointer",fontSize:13,...serif,color:inputClientId===c.id?"#1a56c4":"#37352f",textAlign:"left",fontWeight:inputClientId===c.id?700:400}}
+                      onMouseEnter={e=>e.currentTarget.style.background=inputClientId===c.id?"#e8f0fe":"#f1f0ef"} onMouseLeave={e=>e.currentTarget.style.background=inputClientId===c.id?"#e8f0fe":"transparent"}>
+                      {c.name}{c.company?` (${c.company})`:""}
+                    </button>
+                  ))}
+                  <button onClick={()=>{setInputClientId("__new__");setClientOpen(false);}}
+                    style={{display:"block",width:"100%",padding:"10px 14px",border:"none",borderTop:"1px solid #f1f0ef",background:"transparent",cursor:"pointer",fontSize:13,...serif,color:"#1a56c4",textAlign:"left"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#e8f0fe"} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    + New client…
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          {inputClientId==="__new__"&&(
+            <input value={newClientNameInput} onChange={e=>setNewClientNameInput(e.target.value)}
+              placeholder="New client name…" autoFocus
+              style={{padding:"7px 13px",border:"1px solid #37352f",borderRadius:20,outline:"none",fontSize:13,...serif,color:"#37352f",background:"#fff"}}/>
+          )}
+        </div>
+
+        <div style={{display:"flex",gap:6,overflowX:"auto",paddingBottom:6,marginBottom:24,scrollbarWidth:"none"}}>
+          {pillTypes.map(t=>{
+            const on=intakeProjectType===t;
+            return(
+              <button key={t} onClick={()=>setIntakeProjectType(on?"":t)}
+                style={{flexShrink:0,padding:"6px 14px",borderRadius:20,border:`1px solid ${on?"#37352f":"#e8e4dc"}`,background:on?"#37352f":"transparent",color:on?"#fff":"#9b9a97",fontSize:12,...serif,cursor:"pointer",transition:"all .15s",fontWeight:on?600:400}}
+                onMouseEnter={e=>{if(!on){e.currentTarget.style.borderColor="#9b9a97";e.currentTarget.style.color="#37352f";}}}
+                onMouseLeave={e=>{if(!on){e.currentTarget.style.borderColor="#e8e4dc";e.currentTarget.style.color="#9b9a97";}}}>
+                {t}
+              </button>
+            );
+          })}
+        </div>
+
+        {errMsg&&<div style={{background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:8,padding:"11px 15px",marginBottom:16,fontSize:13,color:"#c0392b",lineHeight:1.6,...serif}}><strong>Error:</strong> {errMsg}</div>}
+
+        <div style={{border:"1px solid #e8e4dc",borderRadius:14,background:"#fafaf9",overflow:"hidden"}}>
+
+          {validDocs.length>0&&(
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,padding:"14px 16px 0"}}>
+              {validDocs.map((doc,i)=>(
+                <span key={i} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",background:"#e8f0fe",border:"1px solid #c5d8fc",borderRadius:20,fontSize:12,...mono,color:"#1a56c4"}}>
+                  📄 {doc.name.length>24?doc.name.slice(0,22)+"…":doc.name}
+                  <button onClick={()=>setDocs(prev=>prev.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"#1a56c4",fontSize:13,lineHeight:1,padding:"0 0 0 2px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#1a56c4"}>✕</button>
+                </span>
+              ))}
+              {arr(docs).filter(d=>d.error).map((d,i)=>(
+                <span key={`err-${i}`} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:20,fontSize:12,...mono,color:"#c0392b"}}>
+                  ⚠ {d.error}
+                </span>
+              ))}
+            </div>
+          )}
+
+          <textarea
+            value={transcript}
+            onChange={e=>{if(e.target.value.length<=HARD_LIMIT)setTranscript(e.target.value);}}
+            placeholder={"Paste emails, notes, messages, or describe the project…\n\nFrame Brief will generate a pitch deck and brief."}
+            style={{width:"100%",border:"none",outline:"none",resize:"none",background:"transparent",fontSize:14,lineHeight:1.85,color:"#37352f",padding:"20px 20px 6px",...serif,boxSizing:"border-box",minHeight:200,display:"block"}}
+            rows={9}
+          />
+
+          {showMeetingBot&&(
+            <div style={{margin:"0 16px 6px",borderTop:"1px solid #f1f0ef",paddingTop:10}}>
+              <div style={{fontSize:11,...mono,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Paste Transcript (optional)</div>
+              <textarea rows={4} value={intakeRawTranscript} onChange={e=>setIntakeRawTranscript(e.target.value)}
+                placeholder="Paste a raw transcript from Zoom, Otter.ai, or any service…"
+                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 12px",...serif,fontSize:13,lineHeight:1.7,color:"#37352f",outline:"none",resize:"vertical",background:"#fff",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            </div>
+          )}
+
+          {transcript.length>0&&(
+            <div style={{padding:"0 20px 2px",textAlign:"right"}}>
+              <span style={{fontSize:11,...mono,color:transcript.length>=HARD_LIMIT?"#c0392b":transcript.length>STANDARD_LIMIT?"#b45309":"#c4c3bf"}}>
+                {transcript.length.toLocaleString()} / {HARD_LIMIT.toLocaleString()}
+              </span>
+            </div>
+          )}
+
+          <div style={{display:"flex",alignItems:"center",gap:4,padding:"10px 12px",borderTop:"1px solid #f1f0ef"}}>
+            <input ref={fileInputRef} type="file" multiple accept=".pdf,.doc,.docx,.txt,.md" style={{display:"none"}} onChange={handleFileInput}/>
+            <button onClick={()=>fileInputRef.current?.click()} title="Attach file"
+              style={{width:34,height:34,border:"none",background:"none",cursor:"pointer",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,color:"#9b9a97",transition:"background .12s"}}
+              onMouseEnter={e=>{e.currentTarget.style.background="#f1f0ef";e.currentTarget.style.color="#37352f";}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="#9b9a97";}}>
+              +
+            </button>
+            <VoiceMicBtn onTranscript={(final,interim)=>{
+              if(final){const combined=(transcript+(transcript?" ":"")+final).trim();if(combined.length<=HARD_LIMIT)setTranscript(combined);}
+              setVoiceInterim(interim);
+            }}/>
+            {voiceInterim&&<span style={{fontSize:12,color:"#9b9a97",fontStyle:"italic",...serif,maxWidth:140,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{voiceInterim}…</span>}
+            <button onClick={()=>setShowMeetingBot(o=>!o)} title="Meeting Bot"
+              style={{width:34,height:34,border:"none",background:showMeetingBot?"#e8f0fe":"none",cursor:"pointer",borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",fontSize:16,color:showMeetingBot?"#1a56c4":"#9b9a97",transition:"background .12s"}}
+              onMouseEnter={e=>{e.currentTarget.style.background=showMeetingBot?"#dce7ff":"#f1f0ef";}} onMouseLeave={e=>{e.currentTarget.style.background=showMeetingBot?"#e8f0fe":"none";}}>
+              🤖
+            </button>
+            <div style={{flex:1}}/>
+            <button onClick={onGenerate} disabled={!canGenerate}
+              style={{display:"flex",alignItems:"center",gap:7,padding:"8px 18px",border:"none",borderRadius:8,background:canGenerate?"#37352f":"#e8e4dc",color:canGenerate?"#fff":"#9b9a97",fontSize:13,...serif,fontWeight:700,cursor:canGenerate?"pointer":"not-allowed",transition:"background .2s"}}>
+              {inputGenerating&&<span className="spin" style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid #fff",borderRadius:"50%",display:"inline-block"}}/>}
+              {inputGenerating?"✦ Generating…":"✦ Generate"}
+            </button>
+          </div>
+        </div>
+
+        {inputGenerating&&(
+          <div style={{marginTop:14,padding:"14px 18px",background:"#fafaf9",border:"1px solid #f1f0ef",borderRadius:10,display:"flex",flexDirection:"column",gap:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:"#e97942",display:"inline-block",animation:"pulse 1.2s ease-in-out infinite"}}/>
+              <span style={{fontSize:13,color:"#9b9a97",...serif,animation:"pulse 1.2s ease-in-out infinite"}}>Building pitch deck…</span>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:"#1a56c4",display:"inline-block",animation:"pulse 1.2s ease-in-out infinite",animationDelay:"0.4s"}}/>
+              <span style={{fontSize:13,color:"#9b9a97",...serif,animation:"pulse 1.2s ease-in-out infinite",animationDelay:"0.4s"}}>Building brief…</span>
+            </div>
+          </div>
+        )}
+
+        {showMeetingBot&&(
+          <div style={{marginTop:12,border:"1px solid #e8e4dc",borderRadius:12,overflow:"hidden",background:"#fff"}}>
+            <div style={{padding:"12px 16px",borderBottom:"1px solid #f1f0ef",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:16}}>🤖</span>
+              <span style={{fontSize:13,fontWeight:700,color:"#37352f",...serif}}>Meeting Bot</span>
+              <button onClick={()=>setShowMeetingBot(false)} style={{marginLeft:"auto",background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:16,lineHeight:1,padding:"0 4px"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>✕</button>
+            </div>
+            <div style={{padding:"14px 16px"}}>
+              <MeetingBotPanel projectId={null} onBotStarted={onBotStarted} recallStatus={null}/>
+            </div>
+          </div>
+        )}
+
+        {!hasContent&&!inputGenerating&&(
+          <div style={{textAlign:"center",marginTop:18}}>
+            <button onClick={onLoadSample}
+              style={{background:"none",border:"none",color:"#c4c3bf",fontSize:12,...serif,cursor:"pointer",textDecoration:"underline"}}
+              onMouseEnter={e=>e.currentTarget.style.color="#9b9a97"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>
+              Load sample project →
+            </button>
+          </div>
+        )}
+
+      </div>
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 function FrameBriefApp(){
   const[user,setUser]=useState(null);
@@ -3339,6 +3583,9 @@ function FrameBriefApp(){
   const[activeClientId,setActiveClientId]=useState(null);
   const[inputClientId,setInputClientId]=useState(null);
   const[newClientNameInput,setNewClientNameInput]=useState("");
+  const[selectedProjectType,setSelectedProjectType]=useState("");
+  const[showMeetingBot,setShowMeetingBot]=useState(false);
+  const[inputGenerating,setInputGenerating]=useState(false);
   const[viewingMeeting,setViewingMeeting]=useState(null);
   const[viewingMeetingIdx,setViewingMeetingIdx]=useState(null);
   const[meetingNotesExpanded,setMeetingNotesExpanded]=useState(false);
@@ -3346,6 +3593,14 @@ function FrameBriefApp(){
   const[briefGenError,setBriefGenError]=useState(false);
   const[reviewingMeeting,setReviewingMeeting]=useState(null);
   const[showAddMeeting,setShowAddMeeting]=useState(false);
+  // Intake workspace state
+  const[intakeTitle,setIntakeTitle]=useState("");
+  const[intakeProjectType,setIntakeProjectType]=useState("");
+  const[intakeRefLinks,setIntakeRefLinks]=useState([]);
+  const[intakeBudgetRange,setIntakeBudgetRange]=useState("");
+  const[intakePackageCount,setIntakePackageCount]=useState(2);
+  const[intakeRequirements,setIntakeRequirements]=useState("");
+  const[intakeRawTranscript,setIntakeRawTranscript]=useState("");
   const[addMeetingTranscript,setAddMeetingTranscript]=useState("");
   const[addMeetingLoading,setAddMeetingLoading]=useState(false);
   const[addMeetingError,setAddMeetingError]=useState("");
@@ -3677,7 +3932,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
     });
   }
 
-  const STEPS=["Reading your transcript…","Reading documents…","Identifying deliverables…","Building concept pages…","Writing shot lists…","Almost ready…"];
+  const STEPS=["Reading all your context…","✦ Building pitch deck…","✦ Building brief…","Identifying deliverables…","Building concept pages…","Writing shot lists…","Almost ready…"];
   useEffect(()=>{if(screen!=="loading")return;let i=0;const t=setInterval(()=>{i=(i+1)%STEPS.length;setLoadMsg(STEPS[i]);},2000);return()=>clearInterval(t);},[screen]);
 
   async function generateBriefFromTranscript(project){
@@ -3808,8 +4063,9 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
 
   async function generate(){
     const validDocs=docs.filter(d=>!d.error);
-    if(!transcript.trim()&&validDocs.length===0)return;
-    setErrMsg("");setScreen("loading");
+    const allText=(transcript.trim()+(intakeRawTranscript.trim()?"\n\nRAW TRANSCRIPT:\n"+intakeRawTranscript.trim():"")).trim();
+    if(!allText&&validDocs.length===0)return;
+    setErrMsg("");setInputGenerating(true);
     let resolvedClientId=inputClientId;
     if(inputClientId==="__new__"&&newClientNameInput.trim()){
       const{data}=await supabase.from("clients").insert({name:newClientNameInput.trim(),user_id:user.id}).select().single();
@@ -3817,35 +4073,72 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       else resolvedClientId=null;
     }else if(inputClientId==="__new__"){resolvedClientId=null;}
     try{
+      // Fetch reference URLs in parallel (silently skip failures)
+      const fetchedRefs=[];
+      const validLinks=intakeRefLinks.filter(l=>l.url.trim());
+      if(validLinks.length>0){
+        const fetches=validLinks.map(link=>
+          fetch("/api/fetch-url",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({url:link.url.trim()})})
+            .then(r=>r.ok?r.json():null).catch(()=>null)
+        );
+        const results=await Promise.all(fetches);
+        results.forEach((r,i)=>{if(r?.text)fetchedRefs.push({label:validLinks[i].label||validLinks[i].url,text:r.text});});
+      }
+
+      // Build user content
       const userContent=[];
-      for(const doc of validDocs.filter(d=>d.type==="pdf"))userContent.push({type:"document",source:{type:"base64",media_type:"application/pdf",data:doc.base64},title:doc.name});
-      let prompt="Create a production brief. Return only JSON.\n\n";
-      if(transcript.trim())prompt+=`MEETING NOTES:\n${transcript.trim()}\n\n`;
-      for(const doc of validDocs.filter(d=>d.type==="text"))prompt+=`DOCUMENT (${doc.name}):\n${doc.content.slice(0,8000)}\n\n`;
-      userContent.push({type:"text",text:prompt});
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:8000,system:SYSTEM_PROMPT,messages:[{role:"user",content:userContent}]})});
+      for(const doc of validDocs.filter(d=>d.type==="pdf"))
+        userContent.push({type:"document",source:{type:"base64",media_type:"application/pdf",data:doc.base64},title:doc.name});
+
+      let prompt="";
+      if(intakeTitle.trim())prompt+=`PROJECT TITLE: ${intakeTitle.trim()}\n\n`;
+      if(intakeProjectType)prompt+=`PROJECT TYPE: ${intakeProjectType}\n\n`;
+      if(intakePackageCount)prompt+=`PACKAGES TO GENERATE: ${intakePackageCount}\n\n`;
+      if(intakeBudgetRange)prompt+=`BUDGET RANGE: ${intakeBudgetRange}\n\n`;
+      if(intakeRequirements.trim())prompt+=`SPECIAL REQUIREMENTS: ${intakeRequirements.trim()}\n\n`;
+      if(allText)prompt+=`NOTES & TRANSCRIPT:\n${allText}\n\n`;
+      for(const doc of validDocs.filter(d=>d.type==="text"))prompt+=`DOCUMENT — ${doc.name}:\n${doc.content.slice(0,8000)}\n\n`;
+      for(const ref of fetchedRefs)prompt+=`REFERENCE — ${ref.label}:\n${ref.text.slice(0,2000)}\n\n`;
+      userContent.push({type:"text",text:prompt.trim()});
+
+      const res=await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
+        body:JSON.stringify({model:MODEL,max_tokens:12000,system:INTAKE_SYSTEM_PROMPT,messages:[{role:"user",content:userContent}]}),
+      });
       const data=await res.json();
       if(!res.ok||data.error)throw new Error(data?.error?.message||`API error ${res.status}`);
       const raw=(data.content||[]).map(b=>b.text||"").join("").trim();
       if(!raw)throw new Error("Empty response");
+
+      // Parse — expect {pitchDeck, brief} but fall back to plain brief for backwards compat
       let jsonStr=raw;
       const fenced=raw.match(/```(?:json)?\s*([\s\S]*?)```/);
       if(fenced)jsonStr=fenced[1].trim();
       else{const s=raw.indexOf("{"),e=raw.lastIndexOf("}");if(s!==-1&&e!==-1)jsonStr=raw.slice(s,e+1);}
-      jsonStr=jsonStr.replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
-      // Strip unescaped control characters that break JSON.parse
-      jsonStr=jsonStr.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
+      jsonStr=jsonStr.replace(/,\s*}/g,"}").replace(/,\s*]/g,"]").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
       const parsed=JSON.parse(jsonStr);
-      if(!Array.isArray(parsed.concepts))parsed.concepts=[];
-      if(!parsed.clientActionItems)parsed.clientActionItems=[];
-      if(!parsed.internalTodos)parsed.internalTodos=[];
-      const mn=parsed.meetingNotes||{};
-      const discoveryMeeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:"discovery",summary:mn.summary||parsed.logline||"Initial brief created from meeting notes.",keyPoints:arr(mn.keyPoints),topics:arr(mn.topics),actionItems:[],suggestedChanges:[],transcriptText:transcript.trim()||null,transcriptExcerpt:transcript.trim().slice(0,500),status:"reviewed"};
-      const newProject={id:crypto.randomUUID(),user_id:user.id,title:parsed.projectTitle||"Untitled",client_name:parsed.clientName||"",status:"Draft",brief:parsed,doc_count:validDocs.length,client_id:resolvedClientId||null,meeting_stage:"discovery",meeting_history:[discoveryMeeting],created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+
+      // Separate pitchDeck from brief (support both {pitchDeck,brief} and flat brief response)
+      const pitchDeck=parsed.pitchDeck||null;
+      const briefData=parsed.brief||parsed;
+      if(!Array.isArray(briefData.concepts))briefData.concepts=[];
+      if(!briefData.clientActionItems)briefData.clientActionItems=[];
+      if(!briefData.internalTodos)briefData.internalTodos=[];
+      if(pitchDeck)briefData.pitchDeck=pitchDeck;
+
+      const mn=briefData.meetingNotes||{};
+      const combinedText=allText||"";
+      const discoveryMeeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:"discovery",summary:mn.summary||briefData.logline||"Initial brief created from intake workspace.",keyPoints:arr(mn.keyPoints),topics:arr(mn.topics),actionItems:[],suggestedChanges:[],transcriptText:combinedText||null,transcriptExcerpt:combinedText.slice(0,500),status:"reviewed"};
+      const newProject={id:crypto.randomUUID(),user_id:user.id,title:briefData.projectTitle||intakeTitle||"Untitled",client_name:briefData.clientName||"",status:"Draft",brief:briefData,doc_count:validDocs.length,client_id:resolvedClientId||null,meeting_stage:"discovery",meeting_history:[discoveryMeeting],created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
       const saved=await saveProject(newProject);
       setActiveProject(saved||newProject);
-      setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setDocs([]);setTranscript("");setInputClientId(null);setNewClientNameInput("");setScreen("doc");
-    }catch(err){console.error(err);setErrMsg(err.message||"Something went wrong.");setScreen("input");}
+      setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);
+      setDocs([]);setTranscript("");setInputClientId(null);setNewClientNameInput("");
+      setIntakeTitle("");setIntakeProjectType("");setIntakeRefLinks([]);setIntakeBudgetRange("");setIntakePackageCount(2);setIntakeRequirements("");setIntakeRawTranscript("");
+      setShowMeetingBot(false);setInputGenerating(false);
+      setScreen("doc");
+    }catch(err){console.error(err);setErrMsg(err.message||"Something went wrong.");setInputGenerating(false);}
   }
 
   async function sendChat(msg){
@@ -4024,63 +4317,32 @@ ${JSON.stringify(brief)}`;
 
   if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")}/></div>);
 
-  if(screen==="input")return(
-    <div style={{minHeight:"100vh",background:"#fff"}}><style>{CSS}</style>
-      <div style={{maxWidth:660,margin:"0 auto",padding:"36px 20px 80px"}}>
-        <button onClick={()=>setScreen("dashboard")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",marginBottom:36,display:"flex",alignItems:"center",gap:6}}>← All Projects</button>
-        <div style={{textAlign:"center",marginBottom:36}}><div style={{fontSize:44,marginBottom:10}}>🎬</div><h1 style={{fontSize:32,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em",marginBottom:10}}>New Brief</h1><p style={{color:"#9b9a97",fontSize:14,fontStyle:"italic",lineHeight:1.6}}>Paste your meeting notes or send a bot to your live meeting.</p></div>
-        <MeetingBotPanel projectId={null} onBotStarted={async (botId)=>{
-          // Create project with bot ID already included
-          const projectId = crypto.randomUUID();
-          const newProject={id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,client_id:(inputClientId&&inputClientId!=="__new__"?inputClientId:null),recall_bot_id:botId,recall_status:"bot_joined",created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
-          // Save to Supabase directly with upsert to ensure bot ID is stored
-          const{data}=await supabase.from("projects").insert({
-            id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",
-            status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},
-            doc_count:0,client_id:(inputClientId&&inputClientId!=="__new__"?inputClientId:null),recall_bot_id:botId,recall_status:"bot_joined",
-            created_at:new Date().toISOString(),updated_at:new Date().toISOString()
-          }).select().single();
-          const project = data || newProject;
-          setProjects(ps=>[project,...ps]);
-          setActiveProject(project);
-          setPage("overview");
-          setScreen("doc");
-        }} recallStatus={null}/>
-        <div style={{display:"flex",alignItems:"center",gap:12,margin:"20px 0"}}><div style={{flex:1,height:1,background:"#f1f0ef"}}/><span style={{fontSize:12,color:"#c4c3bf"}}>or paste notes manually</span><div style={{flex:1,height:1,background:"#f1f0ef"}}/></div>
-        {clients.length>0&&(
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8}}>Link to Client (Optional)</div>
-            <select value={inputClientId||""} onChange={e=>setInputClientId(e.target.value||null)} style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",background:"#fafaf9",outline:"none",cursor:"pointer"}}>
-              <option value="">No client</option>
-              {clients.map(c=><option key={c.id} value={c.id}>{c.name}{c.company?` (${c.company})`:""}</option>)}
-              <option value="__new__">+ Create new client…</option>
-            </select>
-            {inputClientId==="__new__"&&(
-              <input value={newClientNameInput} onChange={e=>setNewClientNameInput(e.target.value)} placeholder="New client name" style={{width:"100%",marginTop:8,border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box",background:"#fafaf9"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-            )}
-          </div>
-        )}
-        {errMsg&&<div style={{background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:8,padding:"12px 16px",marginBottom:16,fontSize:13,color:"#c0392b",lineHeight:1.65}}><strong>Error:</strong> {errMsg}</div>}
-        <div style={{border:`1px solid ${transcript.length>=HARD_LIMIT?"#ffc9c9":transcript.length>STANDARD_LIMIT?"#fde8c8":"#e8e4dc"}`,borderRadius:10,padding:"20px",marginBottom:14,background:"#fafaf9"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",letterSpacing:"0.08em",textTransform:"uppercase"}}>Meeting Notes or Transcript</div>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>{transcript.length>STANDARD_LIMIT&&transcript.length<HARD_LIMIT&&<span style={{fontSize:11,background:"#fef3e2",color:"#b45309",borderRadius:20,padding:"2px 8px",fontWeight:600}}>Extended · Pro</span>}{transcript.length>=HARD_LIMIT&&<span style={{fontSize:11,background:"#fff2f2",color:"#c0392b",borderRadius:20,padding:"2px 8px",fontWeight:600}}>Limit reached</span>}<span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:transcript.length>=HARD_LIMIT?"#c0392b":transcript.length>STANDARD_LIMIT?"#b45309":"#c4c3bf"}}>{transcript.length.toLocaleString()} / {STANDARD_LIMIT.toLocaleString()}</span></div>
-          </div>
-          <textarea rows={10} value={transcript} onChange={e=>{if(e.target.value.length<=HARD_LIMIT)setTranscript(e.target.value);}} placeholder={"Paste your client meeting notes or transcript here…\n\nDescribe every deliverable — each one becomes its own concept page."} style={{width:"100%",border:"none",outline:"none",resize:"none",background:"transparent",fontSize:14,lineHeight:1.8,color:"#37352f"}}/>
-          <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
-            <VoiceMicBtn onTranscript={(final, interim)=>{const combined=(final+(interim?" "+interim:"")).trim();if(combined.length<=HARD_LIMIT)setTranscript(combined);}}/>
-          </div>
-          {transcript.length>STANDARD_LIMIT&&transcript.length<HARD_LIMIT&&<div style={{marginTop:10,padding:"10px 14px",background:"#fef3e2",borderRadius:6,fontSize:12,color:"#92400e",lineHeight:1.65}}>⚡ <strong>Extended transcript</strong> — over standard limit (~30-min meeting). Pro plan required in full product.</div>}
-          {transcript.length>=HARD_LIMIT&&<div style={{marginTop:10,padding:"10px 14px",background:"#fff2f2",borderRadius:6,fontSize:12,color:"#991b1b",lineHeight:1.65}}>🚫 <strong>Limit reached</strong> — max {HARD_LIMIT.toLocaleString()} characters (~60-min meeting).</div>}
-        </div>
-        <div style={{border:"1px solid #e8e4dc",borderRadius:10,padding:"20px",marginBottom:18,background:"#fafaf9"}}><DocUpload docs={docs} onAdd={r=>setDocs(prev=>[...prev,...r])} onRemove={i=>setDocs(prev=>prev.filter((_,j)=>j!==i))}/></div>
-        <div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-          <button onClick={generate} disabled={!canGenerate} style={{background:"#37352f",color:"#fff",border:"none",padding:"12px 28px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:14,cursor:canGenerate?"pointer":"not-allowed",opacity:canGenerate?1:0.45}}>Generate Brief →</button>
-          <button onClick={()=>{setTranscript(SAMPLE);setErrMsg("");}} style={{background:"transparent",color:"#9b9a97",border:"1px solid #e8e4dc",padding:"11px 18px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#37352f";e.currentTarget.style.color="#37352f";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e8e4dc";e.currentTarget.style.color="#9b9a97";}}>Load Sample</button>
-        </div>
-      </div>
-    </div>
-  );
+  if(screen==="input")return(<div><style>{CSS}</style><IntakeScreen
+    transcript={transcript} setTranscript={setTranscript}
+    docs={docs} setDocs={setDocs}
+    clients={clients}
+    inputClientId={inputClientId} setInputClientId={setInputClientId}
+    newClientNameInput={newClientNameInput} setNewClientNameInput={setNewClientNameInput}
+    errMsg={errMsg}
+    intakeProjectType={intakeProjectType} setIntakeProjectType={setIntakeProjectType}
+    intakeRawTranscript={intakeRawTranscript} setIntakeRawTranscript={setIntakeRawTranscript}
+    showMeetingBot={showMeetingBot} setShowMeetingBot={setShowMeetingBot}
+    inputGenerating={inputGenerating}
+    onGenerate={generate}
+    onBack={()=>setScreen("dashboard")}
+    onLoadSample={()=>{setTranscript(SAMPLE);setErrMsg("");}}
+    onBotStarted={async (botId)=>{
+      const projectId=crypto.randomUUID();
+      const{data}=await supabase.from("projects").insert({
+        id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",
+        status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},
+        doc_count:0,client_id:(inputClientId&&inputClientId!=="__new__"?inputClientId:null),recall_bot_id:botId,recall_status:"bot_joined",
+        created_at:new Date().toISOString(),updated_at:new Date().toISOString()
+      }).select().single();
+      const project=data||{id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,recall_bot_id:botId,recall_status:"bot_joined"};
+      setProjects(ps=>[project,...ps]);setActiveProject(project);setPage("overview");setScreen("doc");
+    }}
+  /></div>);
 
   if(screen==="loading")return(<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:18}}><style>{CSS}</style><div className="spin" style={{width:28,height:28,border:"2px solid #f1f0ef",borderTop:"2px solid #37352f",borderRadius:"50%"}}/><p style={{color:"#9b9a97",fontStyle:"italic",fontSize:15}}>{loadMsg}</p></div>);
 
