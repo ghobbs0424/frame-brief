@@ -39,7 +39,7 @@ const CONCEPT_SCHEMA_INLINE=`{"id":"concept-1","emoji":"🎥","title":"","type":
 const INTAKE_SYSTEM_PROMPT=`You are a creative director AI for a video and photography production company. Analyze ALL provided context (notes, documents, references, transcript, budget range, project type) and return ONLY a valid JSON object with exactly two top-level keys — "pitchDeck" and "brief". No markdown, no backticks, no explanation, just raw JSON. All string values must stay on a single line.
 
 PITCH DECK STRUCTURE — premium client-facing proposal:
-{"coverEmoji":"🎬","creativeCompany":"GH Productions","clientName":"","projectType":"","month":"May","year":"2026","tagline":"","approach":"","lineItems":[{"id":"li-1","service":"","description":"","price":0,"note":""}],"packages":[{"id":"pkg-1","number":"01","name":"","tagline":"","description":"","included":[],"notIncluded":[],"bestFor":"","selected":false}],"addOns":[{"name":"","price":""}],"paymentTerms":{"depositPercent":60,"depositTrigger":"to secure production date and team","balanceTiming":"day of production","expeditedDelivery":"","revisionPolicy":""},"whyUs":"","coverImageUrl":"","moodBoardUrls":[],"status":"draft","sentAt":null,"viewedAt":null,"selectedPackageId":null}
+{"coverEmoji":"🎬","creativeCompany":"GH Productions","clientName":"","projectType":"","month":"May","year":"2026","tagline":"","approach":"","lineItems":[{"id":"li-1","service":"","description":"","price":0,"rateType":"project","note":""}],"packages":[{"id":"pkg-1","number":"01","name":"","tagline":"","description":"","included":[],"notIncluded":[],"bestFor":"","selected":false}],"addOns":[{"name":"","price":""}],"paymentTerms":{"depositPercent":60,"depositTrigger":"to secure production date and team","balanceTiming":"day of production","expeditedDelivery":"","revisionPolicy":""},"whyUs":"","coverImageUrl":"","moodBoardUrls":[],"status":"draft","sentAt":null,"viewedAt":null,"selectedPackageId":null}
 
 BRIEF STRUCTURE — internal production document:
 {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[{"name":"","address":"","description":""}],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"","keyPoints":[],"topics":[{"title":"","points":[]}]},"concepts":[${CONCEPT_SCHEMA_INLINE}]}
@@ -47,6 +47,7 @@ BRIEF STRUCTURE — internal production document:
 PITCH DECK RULES:
 - lineItems = itemized scope of work with INDIVIDUAL prices per deliverable. Prices must SUM EXACTLY to the total budget if one is provided. If no budget given, price each deliverable at realistic market rates for videography/photography (music video $3k-$8k, documentary $2k-$5k, stills $500-$1500, social reels $300-$800, drone $400-$800).
 - lineItems.price is a NUMBER (no $ sign). lineItems.description = one-line deliverable spec (e.g. "4-minute music video, 16:9 4K, color graded").
+- lineItems.rateType must be one of: "project" (flat rate per project), "day" (day rate), "half_day" (half-day rate), "hourly" (per hour), "deliverable" (per deliverable). Choose the most appropriate rate type based on context — e.g. videography is typically "project" or "day", photography sessions "half_day" or "day", editing "hourly", individual photos "deliverable".
 - packages correspond 1:1 with each deliverable/concept — one package per deliverable. Package name = deliverable name. Do NOT put a price on packages (price lives on lineItems). Use packages only for scope description, what's included, and what's excluded.
 - NEVER assign the full project budget to each individual package — that is wrong. Each package/deliverable gets its own proportional price via lineItems.
 - addOns: 2-4 optional extras with prices (e.g. {"name":"Drone footage","price":"$350"}).
@@ -3227,7 +3228,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
       <button onClick={onNew} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 10px",border:"none",background:"#37352f",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}>🎬 <span>New Project</span></button>
       <button onClick={onIdeas} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💡</span><span>Idea Capture</span></button>
       <button onClick={onClients} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>👥</span><span>Clients</span></button>
-      <button onClick={onPackageLibrary} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>📦</span><span>Package Library</span></button>
+      <button onClick={onPackageLibrary} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💰</span><span>Pricing</span></button>
       <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Calendar</div>
       <button onClick={onMeetings} className="nb" style={{marginBottom:4,position:"relative"}}>
         <span style={{fontSize:15}}>📅</span>
@@ -3686,6 +3687,14 @@ function fmtPrice(n){
   if(!n&&n!==0)return"";
   return"$"+Number(n).toLocaleString("en-US");
 }
+const RATE_TYPES=[
+  {id:"project",label:"Flat Rate",unit:"/ project"},
+  {id:"day",label:"Day Rate",unit:"/ day"},
+  {id:"half_day",label:"Half-Day",unit:"/ half day"},
+  {id:"hourly",label:"Hourly",unit:"/ hr"},
+  {id:"deliverable",label:"Per Deliverable",unit:"/ deliverable"},
+];
+function rateUnitLabel(rateType){return(RATE_TYPES.find(r=>r.id===rateType)||RATE_TYPES[0]).unit;}
 
 // ─── PITCH DECK PAGE ──────────────────────────────────────────────────────────
 function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompany,brief}){
@@ -3705,6 +3714,7 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
       service:c.title||`Deliverable ${i+1}`,
       description:c.deliverableFormat||c.type||"",
       price:prices[i]||0,
+      rateType:"project",
       note:"",
     }));
   }
@@ -3847,45 +3857,58 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
           )}
         </div>
 
-        {/* Itemized table */}
+        {/* Itemized invoice table — inline style */}
         <div style={{border:"1px solid #e8e4dc",borderRadius:10,overflow:"hidden",marginBottom:20}}>
-          {/* Header row */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 2fr auto",gap:0,background:"#fafaf9",borderBottom:"1px solid #e8e4dc",padding:"10px 24px"}}>
-            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.14em"}}>Service</div>
-            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.14em"}}>Description</div>
-            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.14em",textAlign:"right",minWidth:90}}>Price</div>
-          </div>
-          {/* Line item rows */}
-          {lineItems.map((li,i)=>(
-            <div key={li.id||i} style={{display:"grid",gridTemplateColumns:"1fr 2fr auto",gap:0,padding:"16px 24px",borderBottom:i<lineItems.length-1?"1px solid #f1f0ef":"none",alignItems:"flex-start",background:"#fff"}}>
-              <div style={{fontSize:14,fontWeight:600,color:"#37352f",lineHeight:1.5,paddingRight:16}}>
-                {!readonly
-                  ?<Editable value={li.service||""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],service:v};setPitchDeck({...pd,lineItems:a});}} placeholder="Service name"/>
-                  :<span>{li.service}</span>}
-              </div>
-              <div style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,paddingRight:16}}>
-                {!readonly
-                  ?<Editable value={li.description||""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],description:v};setPitchDeck({...pd,lineItems:a});}} placeholder="Spec / deliverable details…"/>
-                  :<span>{li.description}</span>}
-              </div>
-              <div style={{textAlign:"right",minWidth:90,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8}}>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,fontWeight:700,color:"#37352f"}}>
-                  {!readonly
-                    ?<Editable value={li.price?String(li.price):""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],price:parseBudgetNum(v)||0};setPitchDeck({...pd,lineItems:a});}} placeholder="0" style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:700,textAlign:"right"}}/>
-                    :<span>{fmtPrice(li.price)}</span>}
-                  {readonly&&!li.price&&null}
-                  {!readonly&&li.price?null:<span style={{color:"#c4c3bf"}}>{readonly?"":""}</span>}
+          {lineItems.map((li,i)=>{
+            const unit=rateUnitLabel(li.rateType||"project");
+            return(
+              <div key={li.id||i} style={{borderBottom:i<lineItems.length-1?"1px solid #f1f0ef":"none",background:"#fff"}}>
+                {/* Main row */}
+                <div style={{display:"flex",alignItems:"center",gap:0,padding:"0 0 0 0"}}>
+                  {/* Service name cell */}
+                  <div style={{flex:"0 0 44%",padding:"15px 20px",borderRight:"1px solid #f1f0ef"}}>
+                    <div style={{fontSize:14,fontWeight:600,color:"#37352f",lineHeight:1.4}}>
+                      {!readonly
+                        ?<Editable value={li.service||""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],service:v};setPitchDeck({...pd,lineItems:a});}} placeholder="Service name"/>
+                        :<span>{li.service}</span>}
+                    </div>
+                    {(li.description||!readonly)&&(
+                      <div style={{fontSize:12,color:"#9b9a97",marginTop:3,lineHeight:1.5}}>
+                        {!readonly
+                          ?<Editable value={li.description||""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],description:v};setPitchDeck({...pd,lineItems:a});}} placeholder="Spec / deliverable details…"/>
+                          :<span>{li.description}</span>}
+                      </div>
+                    )}
+                  </div>
+                  {/* Rate type cell — editable pill dropdown */}
+                  <div style={{flex:"0 0 22%",padding:"15px 16px",borderRight:"1px solid #f1f0ef",display:"flex",alignItems:"center"}}>
+                    {!readonly?(
+                      <select value={li.rateType||"project"} onChange={e=>{const a=[...lineItems];a[i]={...a[i],rateType:e.target.value};setPitchDeck({...pd,lineItems:a});}}
+                        style={{border:"1px solid #e8e4dc",borderRadius:5,padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",background:"#fafaf9",cursor:"pointer",outline:"none",width:"100%"}}>
+                        {RATE_TYPES.map(rt=><option key={rt.id} value={rt.id}>{rt.unit}</option>)}
+                      </select>
+                    ):(
+                      <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97"}}>{unit}</span>
+                    )}
+                  </div>
+                  {/* Price cell */}
+                  <div style={{flex:1,padding:"15px 20px",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:15,fontWeight:700,color:"#37352f"}}>
+                      {!readonly
+                        ?<Editable value={li.price?fmtPrice(li.price):""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],price:parseBudgetNum(v)||0};setPitchDeck({...pd,lineItems:a});}} placeholder="$0" style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:700}}/>
+                        :<span>{fmtPrice(li.price)}</span>}
+                    </div>
+                    {!readonly&&<button onClick={()=>setPitchDeck({...pd,lineItems:lineItems.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+                  </div>
                 </div>
-                {!readonly&&<button onClick={()=>setPitchDeck({...pd,lineItems:lineItems.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
               </div>
-            </div>
-          ))}
+            );
+          })}
           {/* Total row */}
           {investmentTotal>0&&(
-            <div style={{display:"grid",gridTemplateColumns:"1fr 2fr auto",gap:0,padding:"14px 24px",background:"#0f0f0f",borderTop:"none",alignItems:"center"}}>
-              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"rgba(245,237,224,0.4)",textTransform:"uppercase",letterSpacing:"0.14em"}}>Total</div>
-              <div/>
-              <div style={{textAlign:"right",minWidth:90,fontFamily:"'IBM Plex Mono',monospace",fontSize:16,fontWeight:700,color:"#f5ede0",letterSpacing:"-0.01em"}}>{fmtPrice(investmentTotal)}</div>
+            <div style={{display:"flex",alignItems:"center",padding:"14px 20px",background:"#0f0f0f"}}>
+              <div style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"rgba(245,237,224,0.4)",textTransform:"uppercase",letterSpacing:"0.18em"}}>Total Investment</div>
+              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:17,fontWeight:700,color:"#f5ede0",letterSpacing:"-0.01em"}}>{fmtPrice(investmentTotal)}</div>
             </div>
           )}
         </div>
@@ -4156,7 +4179,7 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
   );
 }
 
-// ─── PACKAGE LIBRARY ──────────────────────────────────────────────────────────
+// ─── PRICING (formerly Package Library) ──────────────────────────────────────
 const PKG_PROJECT_TYPES=["Video","Photography","Real Estate","Music Video","Brand","Event","Commercial","Documentary"];
 
 function PackageLibrary({user,packages,onPackagesChange,onBack}){
@@ -4167,8 +4190,9 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
   async function createPackage(){
     const{data}=await supabase.from("packages").insert({
       user_id:user.id,
-      name:"New Package",
+      name:"New Service",
       number:String(packages.length+1).padStart(2,"0"),
+      rate_type:"project",
       sort_order:packages.length,
     }).select().single();
     if(data){onPackagesChange([...packages,data]);setExpanded(data.id);}
@@ -4194,6 +4218,8 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
     const[notIncluded,setNotIncluded]=useState(arr(pkg.notIncluded));
     const[projectTypes,setProjectTypes]=useState(arr(pkg.project_types));
     const isOpen=expanded===pkg.id;
+    const rateType=local.rate_type||"project";
+    const unit=rateUnitLabel(rateType);
 
     function flush(){
       savePkg(pkg.id,{...local,included,notIncluded,project_types:projectTypes});
@@ -4201,74 +4227,125 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
 
     return(
       <div style={{border:"1px solid #f1f0ef",borderRadius:10,marginBottom:10,overflow:"hidden",background:isOpen?"#fff":"#fafaf9"}}>
+        {/* Collapsed header */}
         <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",cursor:"pointer"}} onClick={()=>setExpanded(isOpen?null:pkg.id)}>
-          <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",flexShrink:0}}>{local.number||"01"}</span>
+          <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",flexShrink:0,minWidth:20}}>{local.number||"01"}</span>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:14,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{local.name||"Unnamed Package"}</div>
-            <div style={{fontSize:12,color:"#9b9a97"}}>{local.price||"No price set"}{arr(local.project_types).length>0&&` · ${arr(local.project_types).slice(0,2).join(", ")}`}</div>
+            <div style={{fontWeight:700,fontSize:14,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{local.name||"Unnamed Service"}</div>
+            <div style={{fontSize:12,color:"#9b9a97",marginTop:1}}>
+              {local.price?<span style={{fontFamily:"'IBM Plex Mono',monospace",color:"#37352f",fontWeight:600}}>{local.price}</span>:<span>No price set</span>}
+              <span style={{color:"#c4c3bf",marginLeft:4}}>{unit}</span>
+              {arr(local.project_types).length>0&&<span style={{marginLeft:8,color:"#c4c3bf"}}>· {arr(local.project_types).slice(0,2).join(", ")}</span>}
+            </div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}} onClick={e=>e.stopPropagation()}>
-            <div onClick={async()=>{const v=!local.is_active;setLocal(p=>({...p,is_active:v}));await supabase.from("packages").update({is_active:v}).eq("id",pkg.id);onPackagesChange(packages.map(p=>p.id===pkg.id?{...p,is_active:v}:p));}} style={{width:32,height:18,borderRadius:9,background:local.is_active?"#37352f":"#d4d0c8",cursor:"pointer",position:"relative",transition:"background .2s"}}>
+            <div onClick={async()=>{const v=!local.is_active;setLocal(p=>({...p,is_active:v}));await supabase.from("packages").update({is_active:v}).eq("id",pkg.id);onPackagesChange(packages.map(p=>p.id===pkg.id?{...p,is_active:v}:p));}} style={{width:32,height:18,borderRadius:9,background:local.is_active?"#37352f":"#d4d0c8",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
               <div style={{position:"absolute",top:2,left:local.is_active?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",transition:"left .2s"}}/>
             </div>
-            <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>{local.is_active?"Active":"Off"}</span>
+            <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace",minWidth:32}}>{local.is_active?"Active":"Off"}</span>
             <span style={{fontSize:12,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
           </div>
         </div>
+
         {isOpen&&(
-          <div style={{padding:"0 16px 20px",borderTop:"1px solid #f1f0ef"}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:16,marginBottom:12}}>
-              {[["Name","name"],["Price","price"],["Price Unit","priceUnit"],["Number","number"]].map(([label,field])=>(
-                <div key={field}>
-                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>{label}</div>
-                  <input value={local[field]||""} onChange={e=>setLocal(p=>({...p,[field]:e.target.value}))} onBlur={flush}
-                    style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor="#37352f"} onBlur2={e=>{e.target.style.borderColor="#e8e4dc";flush();}}/>
+          <div style={{padding:"16px 16px 20px",borderTop:"1px solid #f1f0ef"}}>
+
+            {/* Name + Number row */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,marginBottom:12}}>
+              <div>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Service Name</div>
+                <input value={local.name||""} onChange={e=>setLocal(p=>({...p,name:e.target.value}))} onBlur={flush}
+                  style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:14,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box",fontWeight:600}}
+                  onFocus={e=>e.target.style.borderColor="#37352f"} onBlur2={e=>e.target.style.borderColor="#e8e4dc"}/>
+              </div>
+              <div style={{minWidth:72}}>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>#</div>
+                <input value={local.number||""} onChange={e=>setLocal(p=>({...p,number:e.target.value}))} onBlur={flush}
+                  style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",outline:"none",color:"#37352f",boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor="#37352f"}/>
+              </div>
+            </div>
+
+            {/* Rate type pills */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Rate Type</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {RATE_TYPES.map(rt=>{
+                  const active=rateType===rt.id;
+                  return(
+                    <button key={rt.id} onClick={()=>{setLocal(p=>({...p,rate_type:rt.id}));savePkg(pkg.id,{...local,rate_type:rt.id,included,notIncluded,project_types:projectTypes});}}
+                      style={{padding:"5px 13px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
+                      {rt.label}<span style={{fontSize:10,opacity:0.65,fontFamily:"'IBM Plex Mono',monospace"}}>{rt.unit}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Price + Tagline row */}
+            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:12,marginBottom:12,alignItems:"end"}}>
+              <div>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Price</div>
+                <div style={{display:"flex",alignItems:"center",gap:0}}>
+                  <input value={local.price||""} onChange={e=>setLocal(p=>({...p,price:e.target.value}))} onBlur={flush} placeholder="$0"
+                    style={{width:120,border:"1px solid #e8e4dc",borderRadius:"6px 0 0 6px",padding:"8px 10px",fontSize:14,fontFamily:"'IBM Plex Mono',monospace",outline:"none",color:"#37352f",fontWeight:700,boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor="#37352f"} onBlur2={e=>e.target.style.borderColor="#e8e4dc"}/>
+                  <div style={{padding:"8px 10px",background:"#fafaf9",border:"1px solid #e8e4dc",borderLeft:"none",borderRadius:"0 6px 6px 0",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",whiteSpace:"nowrap"}}>{unit}</div>
                 </div>
-              ))}
+              </div>
+              <div>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Tagline</div>
+                <input value={local.tagline||""} onChange={e=>setLocal(p=>({...p,tagline:e.target.value}))} onBlur={flush} placeholder="Short positioning line…"
+                  style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box",fontStyle:"italic"}}
+                  onFocus={e=>e.target.style.borderColor="#37352f"}/>
+              </div>
             </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Tagline</div>
-              <input value={local.tagline||""} onChange={e=>setLocal(p=>({...p,tagline:e.target.value}))} onBlur={flush}
-                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
-                onFocus={e=>e.target.style.borderColor="#37352f"}/>
-            </div>
+
+            {/* Description */}
             <div style={{marginBottom:12}}>
               <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Description</div>
-              <textarea value={local.description||""} onChange={e=>setLocal(p=>({...p,description:e.target.value}))} onBlur={flush} rows={3}
-                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",resize:"vertical",boxSizing:"border-box"}}
+              <textarea value={local.description||""} onChange={e=>setLocal(p=>({...p,description:e.target.value}))} onBlur={flush} rows={3} placeholder="What's included in this service, how it works…"
+                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",resize:"vertical",boxSizing:"border-box",lineHeight:1.7}}
                 onFocus={e=>e.target.style.borderColor="#37352f"}/>
             </div>
+
+            {/* Included / Not Included */}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
               <div>
-                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Included</div>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>What's Included</div>
                 {included.map((item,i)=>(
-                  <div key={i} style={{display:"flex",gap:6,marginBottom:5}}>
+                  <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
+                    <span style={{color:"#1e7e34",fontSize:11,flexShrink:0}}>✓</span>
                     <input value={item} onChange={e=>{const a=[...included];a[i]=e.target.value;setIncluded(a);}} onBlur={flush}
                       style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
-                    <button onClick={()=>{const a=included.filter((_,j)=>j!==i);setIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:12}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+                    <button onClick={()=>{const a=included.filter((_,j)=>j!==i);setIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
                   </div>
                 ))}
-                <button onClick={()=>setIncluded([...included,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>
+                <button onClick={()=>setIncluded([...included,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
               </div>
               <div>
                 <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Not Included</div>
                 {notIncluded.map((item,i)=>(
-                  <div key={i} style={{display:"flex",gap:6,marginBottom:5}}>
+                  <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
+                    <span style={{color:"#c4c3bf",fontSize:11,flexShrink:0}}>×</span>
                     <input value={item} onChange={e=>{const a=[...notIncluded];a[i]=e.target.value;setNotIncluded(a);}} onBlur={flush}
                       style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
-                    <button onClick={()=>{const a=notIncluded.filter((_,j)=>j!==i);setNotIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:12}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+                    <button onClick={()=>{const a=notIncluded.filter((_,j)=>j!==i);setNotIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
                   </div>
                 ))}
-                <button onClick={()=>setNotIncluded([...notIncluded,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>
+                <button onClick={()=>setNotIncluded([...notIncluded,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
               </div>
             </div>
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Best For</div>
-              <input value={local.bestFor||""} onChange={e=>setLocal(p=>({...p,bestFor:e.target.value}))} onBlur={flush}
-                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
+
+            {/* Best For */}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Best For</div>
+              <input value={local.bestFor||""} onChange={e=>setLocal(p=>({...p,bestFor:e.target.value}))} onBlur={flush} placeholder="Ideal client or project type…"
+                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
                 onFocus={e=>e.target.style.borderColor="#37352f"}/>
             </div>
+
+            {/* Project Types */}
             <div style={{marginBottom:16}}>
               <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Project Types</div>
               <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
@@ -4283,8 +4360,9 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
                 })}
               </div>
             </div>
+
             <div style={{display:"flex",gap:8,paddingTop:12,borderTop:"1px solid #f1f0ef"}}>
-              <button onClick={flush} style={{background:"#37352f",color:"#fff",border:"none",padding:"7px 16px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:6}}>
+              <button onClick={flush} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 18px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:6}}>
                 {saving===pkg.id?<><div style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,0.4)",borderTop:"1.5px solid #fff",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>Saving…</>:"Save"}
               </button>
               <button onClick={()=>setDeleteConfirm(pkg.id)} style={{background:"none",border:"1px solid #f1f0ef",padding:"7px 14px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",color:"#9b9a97"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#c0392b";e.currentTarget.style.color="#c0392b";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#f1f0ef";e.currentTarget.style.color="#9b9a97";}}>Delete</button>
@@ -4301,19 +4379,21 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
         <div style={{display:"flex",alignItems:"center",gap:12}}>
           <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4}}>← Back</button>
           <span style={{color:"#e8e4dc"}}>·</span>
-          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:"0.08em",color:"#37352f",fontWeight:500}}>PACKAGE LIBRARY</span>
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:"0.08em",color:"#37352f",fontWeight:500}}>PRICING</span>
         </div>
-        <button onClick={createPackage} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ New Package</button>
+        <button onClick={createPackage} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ New Service</button>
       </div>
       <div style={{maxWidth:760,margin:"0 auto",padding:"32px 24px 80px"}}>
-        <h1 style={{fontSize:24,fontWeight:700,color:"#37352f",marginBottom:6,letterSpacing:"-0.02em"}}>Package Library</h1>
-        <p style={{fontSize:13,color:"#9b9a97",marginBottom:24,lineHeight:1.6}}>Create reusable packages that auto-populate your pitch decks. Mark them Active to include in AI generation.</p>
+        <div style={{marginBottom:28}}>
+          <h1 style={{fontSize:24,fontWeight:700,color:"#37352f",marginBottom:6,letterSpacing:"-0.02em"}}>💰 Pricing</h1>
+          <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,margin:0}}>Build your rate card — flat rates, day rates, half-days, or hourly. Frame Brief uses these when generating pitch decks. Mark services Active to include them in AI generation.</p>
+        </div>
         {packages.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",border:"1px dashed #e8e4dc",borderRadius:10}}>
-            <div style={{fontSize:40,marginBottom:14}}>📦</div>
-            <p style={{fontSize:16,fontWeight:600,color:"#37352f",marginBottom:8}}>No packages yet</p>
-            <p style={{fontSize:14,color:"#9b9a97",marginBottom:20}}>Create your first reusable package template.</p>
-            <button onClick={createPackage} style={{background:"#37352f",color:"#fff",border:"none",padding:"10px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ Create First Package</button>
+            <div style={{fontSize:40,marginBottom:14}}>💰</div>
+            <p style={{fontSize:16,fontWeight:600,color:"#37352f",marginBottom:8}}>Your rate card is empty</p>
+            <p style={{fontSize:14,color:"#9b9a97",marginBottom:20,lineHeight:1.6}}>Add your services — flat project rates, day rates,<br/>half-day rates, or hourly. Frame Brief will use these<br/>to build pitch decks automatically.</p>
+            <button onClick={createPackage} style={{background:"#37352f",color:"#fff",border:"none",padding:"10px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ Add First Service</button>
           </div>
         ):(
           packages.map(pkg=><PkgCard key={pkg.id} pkg={pkg}/>)
