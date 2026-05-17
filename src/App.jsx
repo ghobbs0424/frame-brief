@@ -3143,7 +3143,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
     <button onClick={()=>setSidebarOpen(false)} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"10px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,color:"#9b9a97",fontFamily:"'Lora',serif",borderBottom:"1px solid #f1f0ef",marginBottom:16}}>← Close Menu</button>
     <div style={{padding:"0 10px"}}>
       <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:12}}>Navigation</div>
-      <button onClick={onNew} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 10px",border:"none",background:"#37352f",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}>🎬 <span>New Brief</span></button>
+      <button onClick={onNew} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 10px",border:"none",background:"#37352f",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}>🎬 <span>New Project</span></button>
       <button onClick={onIdeas} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💡</span><span>Idea Capture</span></button>
       <button onClick={onClients} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>👥</span><span>Clients</span></button>
       <button onClick={onPackageLibrary} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>📦</span><span>Package Library</span></button>
@@ -3173,7 +3173,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
           <span style={{fontSize:18}}>🎬</span>
           <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#37352f",fontWeight:500,letterSpacing:"0.08em"}}>FRAME BRIEF</span>
         </div>
-        <button onClick={onNew} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ New Brief</button>
+        <button onClick={onNew} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ New Project</button>
       </div>
 
       <div style={{display:"flex",flex:1,overflow:"hidden",minHeight:"calc(100vh - 53px)"}}>
