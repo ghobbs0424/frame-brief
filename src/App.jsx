@@ -3790,6 +3790,32 @@ function rateUnitLabel(rateType){return(RATE_TYPES.find(r=>r.id===rateType)||RAT
 
 // ─── PITCH DECK PAGE ──────────────────────────────────────────────────────────
 function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompany,brief}){
+  const coverInputRef=useRef(null);
+
+  async function handleCoverFile(e){
+    const file=e.target.files?.[0];
+    if(!file)return;
+    const url=await new Promise(resolve=>{
+      const img=new Image();
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        img.onload=()=>{
+          const MAX=1400;
+          const scale=Math.min(1,MAX/Math.max(img.width,img.height));
+          const canvas=document.createElement("canvas");
+          canvas.width=Math.round(img.width*scale);
+          canvas.height=Math.round(img.height*scale);
+          canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+          resolve(canvas.toDataURL("image/jpeg",0.82));
+        };
+        img.src=ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+    setPitchDeck({...(pitchDeck||{}),coverImageUrl:url});
+    e.target.value="";
+  }
+
   const pd={...(pitchDeck||{})};
   // Auto-derive from brief when fields are missing
   if(!pd.clientName&&brief?.clientName) pd.clientName=brief.clientName;
@@ -3877,11 +3903,14 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
               {pd.clientName&&<span style={{color:"rgba(245,237,224,0.7)"}}>{pd.clientName}</span>}
             </div>
             {!readonly&&(
-              <button onClick={()=>{const url=window.prompt("Cover image URL (leave blank to use gradient):");if(url!==null)setPitchDeck({...pd,coverImageUrl:url||""});}}
-                style={{flexShrink:0,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.6)",borderRadius:6,padding:"5px 10px",fontSize:10,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}
-                onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.15)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}>
-                + Cover Image
-              </button>
+              <>
+                <input ref={coverInputRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleCoverFile}/>
+                <button onClick={()=>coverInputRef.current?.click()}
+                  style={{flexShrink:0,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.6)",borderRadius:6,padding:"5px 10px",fontSize:10,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.15)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}>
+                  {pd.coverImageUrl?"↺ Change":"+ Cover Image"}
+                </button>
+              </>
             )}
           </div>
           <div style={{fontSize:40,marginBottom:12,lineHeight:1}}>{pd.coverEmoji||"🎬"}</div>
