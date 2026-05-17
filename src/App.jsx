@@ -4274,10 +4274,189 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
 // ─── PRICING (formerly Package Library) ──────────────────────────────────────
 const PKG_PROJECT_TYPES=["Video","Photography","Real Estate","Music Video","Brand","Event","Commercial","Documentary"];
 
+function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesChange,setDeleteConfirm,userProjectTypes}){
+  const[local,setLocal]=useState(pkg);
+  const[included,setIncluded]=useState(arr(pkg.included));
+  const[notIncluded,setNotIncluded]=useState(arr(pkg.not_included));
+  const[projectTypes,setProjectTypes]=useState(arr(pkg.project_types));
+  const[saveOk,setSaveOk]=useState(false);
+  const isOpen=expanded===pkg.id;
+  const rateType=local.rate_type||"project";
+  const unit=rateUnitLabel(rateType);
+
+  async function flush(){
+    await savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:projectTypes});
+    setSaveOk(true);setTimeout(()=>setSaveOk(false),1800);
+  }
+
+  return(
+    <div style={{border:"1px solid #f1f0ef",borderRadius:10,marginBottom:10,overflow:"hidden",background:isOpen?"#fff":"#fafaf9"}}>
+      {/* Collapsed header */}
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",cursor:"pointer"}} onClick={()=>setExpanded(isOpen?null:pkg.id)}>
+        <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",flexShrink:0,minWidth:20}}>{local.number||"01"}</span>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontWeight:700,fontSize:14,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{local.name||"Unnamed Service"}</div>
+          <div style={{fontSize:12,color:"#9b9a97",marginTop:1}}>
+            {local.price?<span style={{fontFamily:"'IBM Plex Mono',monospace",color:"#37352f",fontWeight:600}}>{local.price}</span>:<span>No price set</span>}
+            <span style={{color:"#c4c3bf",marginLeft:4}}>{unit}</span>
+            {arr(local.project_types).length>0&&<span style={{marginLeft:8,color:"#c4c3bf"}}>· {arr(local.project_types).slice(0,2).join(", ")}</span>}
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+          <div onClick={async()=>{const v=!local.is_active;setLocal(p=>({...p,is_active:v}));await supabase.from("packages").update({is_active:v}).eq("id",pkg.id);onPackagesChange(packages.map(p=>p.id===pkg.id?{...p,is_active:v}:p));}} style={{width:32,height:18,borderRadius:9,background:local.is_active?"#37352f":"#d4d0c8",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
+            <div style={{position:"absolute",top:2,left:local.is_active?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",transition:"left .2s"}}/>
+          </div>
+          <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace",minWidth:32}}>{local.is_active?"Active":"Off"}</span>
+          <span style={{fontSize:12,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
+        </div>
+      </div>
+
+      {isOpen&&(
+        <div style={{padding:"16px 16px 20px",borderTop:"1px solid #f1f0ef"}}>
+
+          {/* Name + Number row */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,marginBottom:12}}>
+            <div>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Service Name</div>
+              <input value={local.name||""} onChange={e=>setLocal(p=>({...p,name:e.target.value}))} onBlur={flush}
+                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:14,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box",fontWeight:600}}
+                onFocus={e=>e.target.style.borderColor="#37352f"}/>
+            </div>
+            <div style={{minWidth:72}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>#</div>
+              <input value={local.number||""} onChange={e=>setLocal(p=>({...p,number:e.target.value}))} onBlur={flush}
+                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",outline:"none",color:"#37352f",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor="#37352f"}/>
+            </div>
+          </div>
+
+          {/* Rate type pills */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Rate Type</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {RATE_TYPES.map(rt=>{
+                const active=rateType===rt.id;
+                return(
+                  <button key={rt.id} onClick={()=>{setLocal(p=>({...p,rate_type:rt.id}));savePkg(pkg.id,{...local,rate_type:rt.id,included,not_included:notIncluded,project_types:projectTypes});}}
+                    style={{padding:"5px 13px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
+                    {rt.label}<span style={{fontSize:10,opacity:0.65,fontFamily:"'IBM Plex Mono',monospace"}}>{rt.unit}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Price + Tagline row */}
+          <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:12,marginBottom:12,alignItems:"end"}}>
+            <div>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Price</div>
+              <div style={{display:"flex",alignItems:"center",gap:0}}>
+                <input value={local.price||""} onChange={e=>setLocal(p=>({...p,price:e.target.value}))} onBlur={flush} placeholder="$0"
+                  style={{width:120,border:"1px solid #e8e4dc",borderRadius:"6px 0 0 6px",padding:"8px 10px",fontSize:14,fontFamily:"'IBM Plex Mono',monospace",outline:"none",color:"#37352f",fontWeight:700,boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor="#37352f"}/>
+                <div style={{padding:"8px 10px",background:"#fafaf9",border:"1px solid #e8e4dc",borderLeft:"none",borderRadius:"0 6px 6px 0",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",whiteSpace:"nowrap"}}>{unit}</div>
+              </div>
+            </div>
+            <div>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Tagline</div>
+              <input value={local.tagline||""} onChange={e=>setLocal(p=>({...p,tagline:e.target.value}))} onBlur={flush} placeholder="Short positioning line…"
+                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box",fontStyle:"italic"}}
+                onFocus={e=>e.target.style.borderColor="#37352f"}/>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Description</div>
+            <textarea value={local.description||""} onChange={e=>setLocal(p=>({...p,description:e.target.value}))} onBlur={flush} rows={3} placeholder="What's included in this service, how it works…"
+              style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",resize:"vertical",boxSizing:"border-box",lineHeight:1.7}}
+              onFocus={e=>e.target.style.borderColor="#37352f"}/>
+          </div>
+
+          {/* Included / Not Included */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+            <div>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>What's Included</div>
+              {included.map((item,i)=>(
+                <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
+                  <span style={{color:"#1e7e34",fontSize:11,flexShrink:0}}>✓</span>
+                  <input value={item} onChange={e=>{const a=[...included];a[i]=e.target.value;setIncluded(a);}} onBlur={flush}
+                    style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
+                  <button onClick={()=>{const a=included.filter((_,j)=>j!==i);setIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+                </div>
+              ))}
+              <button onClick={()=>setIncluded([...included,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
+            </div>
+            <div>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Not Included</div>
+              {notIncluded.map((item,i)=>(
+                <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
+                  <span style={{color:"#c4c3bf",fontSize:11,flexShrink:0}}>×</span>
+                  <input value={item} onChange={e=>{const a=[...notIncluded];a[i]=e.target.value;setNotIncluded(a);}} onBlur={flush}
+                    style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
+                  <button onClick={()=>{const a=notIncluded.filter((_,j)=>j!==i);setNotIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+                </div>
+              ))}
+              <button onClick={()=>setNotIncluded([...notIncluded,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
+            </div>
+          </div>
+
+          {/* Best For */}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Best For</div>
+            <input value={local.best_for||""} onChange={e=>setLocal(p=>({...p,best_for:e.target.value}))} onBlur={flush} placeholder="Ideal client or project type…"
+              style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
+              onFocus={e=>e.target.style.borderColor="#37352f"}/>
+          </div>
+
+          {/* Project Types */}
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Project Types</div>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+              {arr(userProjectTypes).map(type=>{
+                const active=projectTypes.includes(type);
+                return(
+                  <button key={type} onClick={()=>{const updated=active?projectTypes.filter(t=>t!==type):[...projectTypes,type];setProjectTypes(updated);savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:updated});}}
+                    style={{padding:"4px 12px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s"}}>
+                    {type}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {saveOk&&(
+            <div style={{marginBottom:8,padding:"8px 12px",background:"#f0faf4",border:"1px solid #b7ebc8",borderRadius:6,fontSize:12,color:"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.03em",display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:14}}>✓</span> Success
+            </div>
+          )}
+          <div style={{display:"flex",gap:8,paddingTop:12,borderTop:"1px solid #f1f0ef"}}>
+            <button onClick={flush} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 18px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:6,transition:"background .2s"}}>
+              {saving===pkg.id?<><div style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,0.4)",borderTop:"1.5px solid #fff",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>Saving…</>:"Save"}
+            </button>
+            <button onClick={()=>setDeleteConfirm(pkg.id)} style={{background:"none",border:"1px solid #f1f0ef",padding:"7px 14px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",color:"#9b9a97"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#c0392b";e.currentTarget.style.color="#c0392b";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#f1f0ef";e.currentTarget.style.color="#9b9a97";}}>Delete</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PackageLibrary({user,packages,onPackagesChange,onBack}){
   const[expanded,setExpanded]=useState(null);
   const[saving,setSaving]=useState(null);
   const[deleteConfirm,setDeleteConfirm]=useState(null);
+  const storageKey=user?.id?`framebrief_project_types_${user.id}`:null;
+  const[userProjectTypes,setUserProjectTypes]=useState(()=>{
+    if(!storageKey)return PKG_PROJECT_TYPES;
+    try{const s=localStorage.getItem(storageKey);return s?JSON.parse(s):PKG_PROJECT_TYPES;}catch{return PKG_PROJECT_TYPES;}
+  });
+  const[newTypeInput,setNewTypeInput]=useState("");
+
+  function saveUserProjectTypes(updated){
+    setUserProjectTypes(updated);
+    if(storageKey)localStorage.setItem(storageKey,JSON.stringify(updated));
+  }
 
   async function createPackage(){
     const{data}=await supabase.from("packages").insert({
@@ -4307,174 +4486,6 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
     if(expanded===id)setExpanded(null);
   }
 
-  function PkgCard({pkg}){
-    const[local,setLocal]=useState(pkg);
-    const[included,setIncluded]=useState(arr(pkg.included));
-    const[notIncluded,setNotIncluded]=useState(arr(pkg.not_included));
-    const[projectTypes,setProjectTypes]=useState(arr(pkg.project_types));
-    const[saveOk,setSaveOk]=useState(false);
-    const isOpen=expanded===pkg.id;
-    const rateType=local.rate_type||"project";
-    const unit=rateUnitLabel(rateType);
-
-    async function flush(){
-      await savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:projectTypes});
-      setSaveOk(true);setTimeout(()=>setSaveOk(false),1800);
-    }
-
-    return(
-      <div style={{border:"1px solid #f1f0ef",borderRadius:10,marginBottom:10,overflow:"hidden",background:isOpen?"#fff":"#fafaf9"}}>
-        {/* Collapsed header */}
-        <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",cursor:"pointer"}} onClick={()=>setExpanded(isOpen?null:pkg.id)}>
-          <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",flexShrink:0,minWidth:20}}>{local.number||"01"}</span>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{fontWeight:700,fontSize:14,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{local.name||"Unnamed Service"}</div>
-            <div style={{fontSize:12,color:"#9b9a97",marginTop:1}}>
-              {local.price?<span style={{fontFamily:"'IBM Plex Mono',monospace",color:"#37352f",fontWeight:600}}>{local.price}</span>:<span>No price set</span>}
-              <span style={{color:"#c4c3bf",marginLeft:4}}>{unit}</span>
-              {arr(local.project_types).length>0&&<span style={{marginLeft:8,color:"#c4c3bf"}}>· {arr(local.project_types).slice(0,2).join(", ")}</span>}
-            </div>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}} onClick={e=>e.stopPropagation()}>
-            <div onClick={async()=>{const v=!local.is_active;setLocal(p=>({...p,is_active:v}));await supabase.from("packages").update({is_active:v}).eq("id",pkg.id);onPackagesChange(packages.map(p=>p.id===pkg.id?{...p,is_active:v}:p));}} style={{width:32,height:18,borderRadius:9,background:local.is_active?"#37352f":"#d4d0c8",cursor:"pointer",position:"relative",transition:"background .2s",flexShrink:0}}>
-              <div style={{position:"absolute",top:2,left:local.is_active?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",transition:"left .2s"}}/>
-            </div>
-            <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace",minWidth:32}}>{local.is_active?"Active":"Off"}</span>
-            <span style={{fontSize:12,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
-          </div>
-        </div>
-
-        {isOpen&&(
-          <div style={{padding:"16px 16px 20px",borderTop:"1px solid #f1f0ef"}}>
-
-            {/* Name + Number row */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:12,marginBottom:12}}>
-              <div>
-                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Service Name</div>
-                <input value={local.name||""} onChange={e=>setLocal(p=>({...p,name:e.target.value}))} onBlur={flush}
-                  style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:14,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box",fontWeight:600}}
-                  onFocus={e=>e.target.style.borderColor="#37352f"} onBlur2={e=>e.target.style.borderColor="#e8e4dc"}/>
-              </div>
-              <div style={{minWidth:72}}>
-                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>#</div>
-                <input value={local.number||""} onChange={e=>setLocal(p=>({...p,number:e.target.value}))} onBlur={flush}
-                  style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",outline:"none",color:"#37352f",boxSizing:"border-box"}}
-                  onFocus={e=>e.target.style.borderColor="#37352f"}/>
-              </div>
-            </div>
-
-            {/* Rate type pills */}
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Rate Type</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {RATE_TYPES.map(rt=>{
-                  const active=rateType===rt.id;
-                  return(
-                    <button key={rt.id} onClick={()=>{setLocal(p=>({...p,rate_type:rt.id}));savePkg(pkg.id,{...local,rate_type:rt.id,included,not_included:notIncluded,project_types:projectTypes});}}
-                      style={{padding:"5px 13px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
-                      {rt.label}<span style={{fontSize:10,opacity:0.65,fontFamily:"'IBM Plex Mono',monospace"}}>{rt.unit}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Price + Tagline row */}
-            <div style={{display:"grid",gridTemplateColumns:"auto 1fr",gap:12,marginBottom:12,alignItems:"end"}}>
-              <div>
-                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Price</div>
-                <div style={{display:"flex",alignItems:"center",gap:0}}>
-                  <input value={local.price||""} onChange={e=>setLocal(p=>({...p,price:e.target.value}))} onBlur={flush} placeholder="$0"
-                    style={{width:120,border:"1px solid #e8e4dc",borderRadius:"6px 0 0 6px",padding:"8px 10px",fontSize:14,fontFamily:"'IBM Plex Mono',monospace",outline:"none",color:"#37352f",fontWeight:700,boxSizing:"border-box"}}
-                    onFocus={e=>e.target.style.borderColor="#37352f"} onBlur2={e=>e.target.style.borderColor="#e8e4dc"}/>
-                  <div style={{padding:"8px 10px",background:"#fafaf9",border:"1px solid #e8e4dc",borderLeft:"none",borderRadius:"0 6px 6px 0",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",whiteSpace:"nowrap"}}>{unit}</div>
-                </div>
-              </div>
-              <div>
-                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Tagline</div>
-                <input value={local.tagline||""} onChange={e=>setLocal(p=>({...p,tagline:e.target.value}))} onBlur={flush} placeholder="Short positioning line…"
-                  style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box",fontStyle:"italic"}}
-                  onFocus={e=>e.target.style.borderColor="#37352f"}/>
-              </div>
-            </div>
-
-            {/* Description */}
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Description</div>
-              <textarea value={local.description||""} onChange={e=>setLocal(p=>({...p,description:e.target.value}))} onBlur={flush} rows={3} placeholder="What's included in this service, how it works…"
-                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",resize:"vertical",boxSizing:"border-box",lineHeight:1.7}}
-                onFocus={e=>e.target.style.borderColor="#37352f"}/>
-            </div>
-
-            {/* Included / Not Included */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-              <div>
-                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>What's Included</div>
-                {included.map((item,i)=>(
-                  <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
-                    <span style={{color:"#1e7e34",fontSize:11,flexShrink:0}}>✓</span>
-                    <input value={item} onChange={e=>{const a=[...included];a[i]=e.target.value;setIncluded(a);}} onBlur={flush}
-                      style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
-                    <button onClick={()=>{const a=included.filter((_,j)=>j!==i);setIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
-                  </div>
-                ))}
-                <button onClick={()=>setIncluded([...included,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
-              </div>
-              <div>
-                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Not Included</div>
-                {notIncluded.map((item,i)=>(
-                  <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
-                    <span style={{color:"#c4c3bf",fontSize:11,flexShrink:0}}>×</span>
-                    <input value={item} onChange={e=>{const a=[...notIncluded];a[i]=e.target.value;setNotIncluded(a);}} onBlur={flush}
-                      style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
-                    <button onClick={()=>{const a=notIncluded.filter((_,j)=>j!==i);setNotIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
-                  </div>
-                ))}
-                <button onClick={()=>setNotIncluded([...notIncluded,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
-              </div>
-            </div>
-
-            {/* Best For */}
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Best For</div>
-              <input value={local.best_for||""} onChange={e=>setLocal(p=>({...p,best_for:e.target.value}))} onBlur={flush} placeholder="Ideal client or project type…"
-                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
-                onFocus={e=>e.target.style.borderColor="#37352f"}/>
-            </div>
-
-            {/* Project Types */}
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Project Types</div>
-              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
-                {PKG_PROJECT_TYPES.map(type=>{
-                  const active=projectTypes.includes(type);
-                  return(
-                    <button key={type} onClick={()=>{const updated=active?projectTypes.filter(t=>t!==type):[...projectTypes,type];setProjectTypes(updated);savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:updated});}}
-                      style={{padding:"4px 12px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s"}}>
-                      {type}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {saveOk&&(
-              <div style={{marginBottom:8,padding:"8px 12px",background:"#f0faf4",border:"1px solid #b7ebc8",borderRadius:6,fontSize:12,color:"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.03em",display:"flex",alignItems:"center",gap:6}}>
-                <span style={{fontSize:14}}>✓</span> Success
-              </div>
-            )}
-            <div style={{display:"flex",gap:8,paddingTop:12,borderTop:"1px solid #f1f0ef"}}>
-              <button onClick={flush} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 18px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:6,transition:"background .2s"}}>
-                {saving===pkg.id?<><div style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,0.4)",borderTop:"1.5px solid #fff",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>Saving…</>:"Save"}
-              </button>
-              <button onClick={()=>setDeleteConfirm(pkg.id)} style={{background:"none",border:"1px solid #f1f0ef",padding:"7px 14px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",color:"#9b9a97"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#c0392b";e.currentTarget.style.color="#c0392b";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#f1f0ef";e.currentTarget.style.color="#9b9a97";}}>Delete</button>
-            </div>
-          </div>
-        )}
-      </div>
-    );
-  }
-
   return(
     <div style={{minHeight:"100vh",background:"#fff"}}>
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -4488,7 +4499,39 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
       <div style={{maxWidth:760,margin:"0 auto",padding:"32px 24px 80px"}}>
         <div style={{marginBottom:28}}>
           <h1 style={{fontSize:24,fontWeight:700,color:"#37352f",marginBottom:6,letterSpacing:"-0.02em"}}>💰 Pricing</h1>
-          <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,margin:0}}>Build your rate card — flat rates, day rates, half-days, or hourly. Frame Brief uses these when generating pitch decks. Mark services Active to include them in AI generation.</p>
+          <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,margin:0}}>Build your rate card and custom packages for every niche you shoot — flat rates, day rates, half-days, or hourly. Frame Brief uses these when generating pitch decks. Mark services Active to include them in AI generation.</p>
+        </div>
+        {/* Project Types Manager */}
+        <div style={{marginTop:20,padding:"16px 20px",background:"#fafaf9",border:"1px solid #f1f0ef",borderRadius:10}}>
+          <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Your Project Types</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+            {userProjectTypes.map(type=>(
+              <div key={type} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px 4px 12px",borderRadius:20,background:"#37352f",border:"1px solid #37352f",fontSize:12,color:"#fff",fontFamily:"'Lora',serif"}}>
+                {type}
+                <button onClick={()=>saveUserProjectTypes(userProjectTypes.filter(t=>t!==type))}
+                  style={{background:"none",border:"none",color:"rgba(255,255,255,0.6)",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 2px",display:"flex",alignItems:"center"}}
+                  onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="rgba(255,255,255,0.6)"}>✕</button>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <input value={newTypeInput} onChange={e=>setNewTypeInput(e.target.value)}
+              onKeyDown={e=>{if(e.key==="Enter"&&newTypeInput.trim()&&!userProjectTypes.includes(newTypeInput.trim())){saveUserProjectTypes([...userProjectTypes,newTypeInput.trim()]);setNewTypeInput("");}}}
+              placeholder="Add a project type…"
+              style={{flex:1,border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 12px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",background:"#fff"}}
+              onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            <button onClick={()=>{if(newTypeInput.trim()&&!userProjectTypes.includes(newTypeInput.trim())){saveUserProjectTypes([...userProjectTypes,newTypeInput.trim()]);setNewTypeInput("");}}}
+              style={{padding:"7px 16px",borderRadius:6,border:"none",background:"#37352f",color:"#fff",fontSize:13,fontFamily:"'Lora',serif",cursor:"pointer"}}>
+              Add
+            </button>
+            {userProjectTypes.join(",")!==PKG_PROJECT_TYPES.join(",")&&(
+              <button onClick={()=>saveUserProjectTypes(PKG_PROJECT_TYPES)}
+                style={{padding:"7px 12px",borderRadius:6,border:"1px solid #e8e4dc",background:"transparent",color:"#9b9a97",fontSize:12,fontFamily:"'Lora',serif",cursor:"pointer"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor="#9b9a97";e.currentTarget.style.color="#37352f";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e8e4dc";e.currentTarget.style.color="#9b9a97";}}>
+                Reset
+              </button>
+            )}
+          </div>
         </div>
         {packages.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",border:"1px dashed #e8e4dc",borderRadius:10}}>
@@ -4498,7 +4541,7 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
             <button onClick={createPackage} style={{background:"#37352f",color:"#fff",border:"none",padding:"10px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ Add First Service</button>
           </div>
         ):(
-          packages.map(pkg=><PkgCard key={pkg.id} pkg={pkg}/>)
+          packages.map(pkg=><PkgCard key={pkg.id} pkg={pkg} expanded={expanded} setExpanded={setExpanded} savePkg={savePkg} saving={saving} packages={packages} onPackagesChange={onPackagesChange} setDeleteConfirm={setDeleteConfirm} userProjectTypes={userProjectTypes}/>)
         )}
       </div>
       {deleteConfirm&&(
