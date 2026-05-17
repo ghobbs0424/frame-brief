@@ -38,21 +38,28 @@ RULES: Create one concept per deliverable. Generate 3-5 clientActionItems and 3-
 const CONCEPT_SCHEMA_INLINE=`{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}`;
 const INTAKE_SYSTEM_PROMPT=`You are a creative director AI for a video and photography production company. Analyze ALL provided context (notes, documents, references, transcript, budget range, project type) and return ONLY a valid JSON object with exactly two top-level keys — "pitchDeck" and "brief". No markdown, no backticks, no explanation, just raw JSON. All string values must stay on a single line.
 
-PITCH DECK STRUCTURE — client-facing proposal with tiered packages:
-{"coverTitle":"","clientName":"","tagline":"one-sentence hook","coverEmoji":"🎬","packages":[{"id":"pkg-1","name":"Essential","price":"$X,XXX","highlight":"short positioning line","deliverables":["item1","item2","item3"],"timeline":"X weeks","idealFor":"type of client"}],"approach":"2-3 sentences on creative approach","whyUs":"2 sentences on why this team","nextSteps":["Schedule pre-production call","Sign contract + 50% deposit","Receive detailed shot list"],"investmentNote":"All packages are fully customizable."}
+PITCH DECK STRUCTURE — premium client-facing proposal with tiered packages:
+{"coverEmoji":"🎬","creativeCompany":"GH Productions","clientName":"","projectType":"","month":"May","year":"2026","tagline":"","approach":"","packages":[{"id":"pkg-1","number":"01","name":"The Foundation","tagline":"","price":"","priceUnit":"/ project","description":"","included":[],"notIncluded":[],"bestFor":"","selected":false}],"comparison":{"features":[],"packages":[{"name":"","values":[]}]},"addOns":[{"name":"","price":""}],"paymentTerms":{"depositPercent":60,"depositTrigger":"to secure production date and team","balanceTiming":"day of production","expeditedDelivery":"","revisionPolicy":""},"whyUs":"","coverImageUrl":"","moodBoardUrls":[],"status":"draft","sentAt":null,"viewedAt":null,"selectedPackageId":null}
 
 BRIEF STRUCTURE — internal production document:
 {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[{"name":"","address":"","description":""}],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"","keyPoints":[],"topics":[{"title":"","points":[]}]},"concepts":[${CONCEPT_SCHEMA_INLINE}]}
 
-RULES:
-- Generate exactly the number of packages specified (default 2). Name them tiers: Essential / Standard / Premium, or similar.
-- Package prices must align with the budget range if given — the lowest tier should start near the low end.
+PITCH DECK RULES:
+- Generate 2-3 packages unless intake says otherwise. Use creative tier names like "The Foundation", "Dual Shooter", "Full Build", "The Essentials", "Brand Story", "Full Production". Never use "Basic", "Standard", "Premium", "Package A".
+- Package prices must align with the budget range if given.
+- comparison.features = array of ALL feature strings across all packages (e.g. "4K Video", "Color Grading", "Same-Day Turnaround").
+- comparison.packages = array of {name, values} where values is array of true/false per feature (in same order as comparison.features).
+- addOns: 2-4 common add-ons with prices (e.g. {"name":"Drone footage","price":"$350"}).
+- paymentTerms: default 60% deposit. Fill expeditedDelivery and revisionPolicy based on context.
+- whyUs: 2 sentences referencing "GH Productions" specifically.
+- approach: 2-3 sentences on the creative direction for this specific project.
+
+BRIEF RULES:
 - For each concept generate 3-5 hooks[] (punchy single sentences varying style: emotional / curiosity / bold / question / cinematic).
 - Extract meetingNotes.summary (2-3 sentences), keyPoints (3-5 bullets), topics (2-4 subjects with bullet points each).
 - Use projectTitle and clientName from the provided PROJECT TITLE if given; otherwise extract from context.
 - If a project type is given, use it for brief.projectType.
-- brief.budget should reflect the mid-tier package price or the budget range given.
-- pitchDeck.packages and brief.concepts should be complementary — each concept maps to the scope of a package.`;
+- brief.budget should reflect the mid-tier package price or the budget range given.`;
 
 // ─── SAFETY HELPERS ──────────────────────────────────────────────────────────
 // arr() always returns an array — prevents "reading 'length' of undefined"
@@ -3067,7 +3074,7 @@ function ScheduleConsultationModal({user,project,onClose,onScheduled}){
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings}){
+function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings,onPackageLibrary}){
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
   const[sidebarOpen,setSidebarOpen]=useState(true);
@@ -3139,6 +3146,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
       <button onClick={onNew} style={{display:"flex",alignItems:"center",gap:8,width:"100%",padding:"9px 10px",border:"none",background:"#37352f",color:"#fff",borderRadius:6,cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",marginBottom:8}}>🎬 <span>New Brief</span></button>
       <button onClick={onIdeas} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💡</span><span>Idea Capture</span></button>
       <button onClick={onClients} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>👥</span><span>Clients</span></button>
+      <button onClick={onPackageLibrary} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>📦</span><span>Package Library</span></button>
       <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Calendar</div>
       <button onClick={onMeetings} className="nb" style={{marginBottom:4,position:"relative"}}>
         <span style={{fontSize:15}}>📅</span>
@@ -3555,6 +3563,491 @@ function IntakeScreen({
   );
 }
 
+// ─── PITCH DECK PAGE ──────────────────────────────────────────────────────────
+function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompany}){
+  const pd=pitchDeck||{};
+  const pkgs=arr(pd.packages);
+  const addOns=arr(pd.addOns);
+  const moodUrls=arr(pd.moodBoardUrls);
+  const pt=pd.paymentTerms||{};
+  const comp=pd.comparison||{};
+  const features=arr(comp.features);
+  const compPkgs=arr(comp.packages);
+
+  const secLabel={fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:12};
+  const sectionPad={padding:"48px 60px"};
+  const mobilePad="@media(max-width:768px){padding:32px 24px!important}";
+
+  function upPd(key,val){if(!readonly)setPitchDeck({...pd,[key]:val});}
+  function upPkg(i,key,val){
+    if(readonly)return;
+    const updated=[...pkgs];updated[i]={...updated[i],[key]:val};
+    setPitchDeck({...pd,packages:updated});
+  }
+  function upPkgArr(i,key,idx,val){
+    if(readonly)return;
+    const updated=[...pkgs];const a=[...arr(updated[i][key])];a[idx]=val;updated[i]={...updated[i],[key]:a};
+    setPitchDeck({...pd,packages:updated});
+  }
+  function addPkgArrItem(i,key,item){
+    if(readonly)return;
+    const updated=[...pkgs];updated[i]={...updated[i],[key]:[...arr(updated[i][key]),item]};
+    setPitchDeck({...pd,packages:updated});
+  }
+  function delPkgArrItem(i,key,idx){
+    if(readonly)return;
+    const updated=[...pkgs];updated[i]={...updated[i],[key]:arr(updated[i][key]).filter((_,j)=>j!==idx)};
+    setPitchDeck({...pd,packages:updated});
+  }
+
+  const coverBg=pd.coverImageUrl
+    ?{backgroundImage:`url(${pd.coverImageUrl})`,backgroundSize:"cover",backgroundPosition:"center"}
+    :{background:"linear-gradient(135deg, #1a1a1a 0%, #2d2b28 60%, #1a1a2e 100%)"};
+
+  return(
+    <div style={{maxWidth:"100%",overflowX:"hidden",fontFamily:"'Lora',Georgia,serif",color:"#37352f"}}>
+      {/* COVER */}
+      <div style={{...coverBg,minHeight:280,padding:"48px 60px",display:"flex",flexDirection:"column",justifyContent:"flex-end",position:"relative"}}>
+        <div style={{fontSize:48,marginBottom:10}}>{pd.coverEmoji||"🎬"}</div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#f5ede0",fontSize:13,marginBottom:4}}>
+          {!readonly?<Editable value={creativeCompany||pd.creativeCompany||"GH Productions"} onChange={v=>upPd("creativeCompany",v)} style={{color:"#f5ede0"}}/>:<span>{creativeCompany||pd.creativeCompany||"GH Productions"}</span>}
+          {pd.clientName?` × ${pd.clientName}`:""}
+        </div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a8f",fontSize:11,marginBottom:4}}>
+          {!readonly?<Editable value={pd.projectType||""} onChange={v=>upPd("projectType",v)} style={{color:"#9b9a8f"}}/>:<span>{pd.projectType}</span>}
+        </div>
+        <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a8f",fontSize:11,marginBottom:20}}>
+          Prepared by {creativeCompany||pd.creativeCompany||"GH Productions"} · {pd.month||"May"} {pd.year||"2026"}
+        </div>
+        <div style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:28,color:"#f5ede0",lineHeight:1.3,maxWidth:680}}>
+          {!readonly?<Editable value={pd.tagline||""} onChange={v=>upPd("tagline",v)} style={{color:"#f5ede0",fontStyle:"italic",fontSize:28}}/>:<span>{pd.tagline}</span>}
+        </div>
+        {!readonly&&<button onClick={()=>{const url=window.prompt("Cover image URL:");if(url)upPd("coverImageUrl",url);}} style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}}>+ Cover Image</button>}
+      </div>
+
+      {/* APPROACH */}
+      {(pd.approach||!readonly)&&(
+        <div style={{...sectionPad,padding:"48px 60px"}}>
+          <div style={secLabel}>The Approach</div>
+          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
+          <div style={{fontSize:16,lineHeight:1.9,color:"#37352f",maxWidth:680}}>
+            {!readonly?<Editable value={pd.approach||""} onChange={v=>upPd("approach",v)} multiline placeholder="Describe your creative approach for this project…"/>:<p style={{margin:0}}>{pd.approach}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* PACKAGES */}
+      <div style={{padding:"48px 60px",background:"#fafaf9"}}>
+        <div style={secLabel}>The Packages</div>
+        <div style={{height:1,background:"#f1f0ef",marginBottom:28}}/>
+        {pkgs.map((pkg,i)=>{
+          const isSelected=pd.selectedPackageId===pkg.id;
+          return(
+            <div key={pkg.id||i} style={{background:"#fff",border:isSelected?"1px solid #e8e4dc":"1px solid #e8e4dc",borderLeft:isSelected?"4px solid #37352f":"4px solid transparent",borderRadius:12,padding:36,marginBottom:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
+              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:6}}>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#9b9a97",marginBottom:4}}>{pkg.number||String(i+1).padStart(2,"0")}</div>
+                  <div style={{fontSize:26,fontWeight:700,color:"#37352f",lineHeight:1.2,marginBottom:4}}>
+                    {!readonly?<Editable value={pkg.name||""} onChange={v=>upPkg(i,"name",v)} placeholder="Package name"/>:<span>{pkg.name}</span>}
+                  </div>
+                  <div style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:15,color:"#9b9a97",marginBottom:8}}>
+                    {!readonly?<Editable value={pkg.tagline||""} onChange={v=>upPkg(i,"tagline",v)} placeholder="Short tagline…"/>:<span>{pkg.tagline}</span>}
+                  </div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:700,color:"#37352f"}}>
+                    {!readonly?<Editable value={pkg.price||""} onChange={v=>upPkg(i,"price",v)} placeholder="$X,XXX" style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:700}}/>:<span>{pkg.price}</span>}
+                  </span>
+                  <span style={{fontSize:13,color:"#9b9a97",marginLeft:4}}>{pkg.priceUnit||"/ project"}</span>
+                </div>
+              </div>
+              <div style={{fontSize:14,color:"#37352f",lineHeight:1.75,marginBottom:20}}>
+                {!readonly?<Editable value={pkg.description||""} onChange={v=>upPkg(i,"description",v)} multiline placeholder="Describe what's included in this package…"/>:<p style={{margin:0}}>{pkg.description}</p>}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:32,marginBottom:20}}>
+                <div>
+                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>What's Included</div>
+                  {arr(pkg.included).map((item,j)=>(
+                    <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:6,fontSize:13}}>
+                      <span style={{color:"#1e7e34",flexShrink:0,marginTop:1}}>✓</span>
+                      <div style={{flex:1}}>
+                        {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"included",j,v)} placeholder="Included item"/>:<span>{item}</span>}
+                      </div>
+                      {!readonly&&<button onClick={()=>delPkgArrItem(i,"included",j)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>}
+                    </div>
+                  ))}
+                  {!readonly&&<button onClick={()=>addPkgArrItem(i,"included","New deliverable")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>}
+                </div>
+                <div>
+                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Not Included</div>
+                  {arr(pkg.notIncluded).map((item,j)=>(
+                    <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:6,fontSize:13}}>
+                      <span style={{color:"#c4c3bf",flexShrink:0,marginTop:1}}>×</span>
+                      <div style={{flex:1,color:"#c4c3bf"}}>
+                        {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"notIncluded",j,v)} placeholder="Not included item"/>:<span>{item}</span>}
+                      </div>
+                      {!readonly&&<button onClick={()=>delPkgArrItem(i,"notIncluded",j)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>}
+                    </div>
+                  ))}
+                  {!readonly&&<button onClick={()=>addPkgArrItem(i,"notIncluded","Not included")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>}
+                </div>
+              </div>
+              {(pkg.bestFor||!readonly)&&(
+                <div style={{marginBottom:20}}>
+                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Best For</div>
+                  <div style={{background:"#fafaf9",border:"1px solid #f1f0ef",borderRadius:8,padding:"14px 18px",fontStyle:"italic",fontSize:14,color:"#37352f"}}>
+                    {!readonly?<Editable value={pkg.bestFor||""} onChange={v=>upPkg(i,"bestFor",v)} placeholder="Describe the ideal client for this package…"/>:<span>{pkg.bestFor}</span>}
+                  </div>
+                </div>
+              )}
+              {!readonly?(
+                <button
+                  onClick={()=>{
+                    const updated={...pd,selectedPackageId:isSelected?null:pkg.id,status:"package_selected"};
+                    setPitchDeck(updated);
+                    if(projectId)supabase.from("projects").update({pitch_deck:updated}).eq("id",projectId);
+                  }}
+                  style={{background:isSelected?"#e6f4ea":"#37352f",color:isSelected?"#1e7e34":"#fff",border:isSelected?"1px solid #a8d5b5":"none",borderRadius:8,padding:"10px 22px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600}}>
+                  {isSelected?"✓ Selected":"Select This Package →"}
+                </button>
+              ):(
+                <button
+                  onClick={()=>{
+                    const updated={...pd,selectedPackageId:pkg.id,status:"package_selected"};
+                    setPitchDeck(updated);
+                    if(projectId)supabase.from("projects").update({pitch_deck:updated}).eq("id",projectId);
+                  }}
+                  style={{background:isSelected?"#e6f4ea":"#37352f",color:isSelected?"#1e7e34":"#fff",border:isSelected?"1px solid #a8d5b5":"none",borderRadius:8,padding:"10px 22px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600}}>
+                  {isSelected?"✓ Selected — Thank You!":"Select This Package →"}
+                </button>
+              )}
+            </div>
+          );
+        })}
+        {!readonly&&<button onClick={()=>{const id=`pkg-${Date.now()}`;setPitchDeck({...pd,packages:[...pkgs,{id,number:String(pkgs.length+1).padStart(2,"0"),name:"New Package",tagline:"",price:"",priceUnit:"/ project",description:"",included:[],notIncluded:[],bestFor:"",selected:false}]});}} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"12px 20px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit",width:"100%",textAlign:"center",marginTop:8}} onMouseEnter={e=>{e.currentTarget.style.color="#37352f";e.currentTarget.style.borderColor="#c4c3bf";}} onMouseLeave={e=>{e.currentTarget.style.color="#9b9a97";e.currentTarget.style.borderColor="#e8e4dc";}}>+ Add Package</button>}
+      </div>
+
+      {/* COMPARISON TABLE */}
+      {features.length>0&&(
+        <div style={{padding:"48px 60px"}}>
+          <div style={secLabel}>Side-by-Side Comparison</div>
+          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
+          <div style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:400}}>
+              <thead>
+                <tr>
+                  <th style={{padding:"12px 16px",textAlign:"left",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#9b9a97",fontWeight:400,borderBottom:"2px solid #f1f0ef"}}>Feature</th>
+                  {compPkgs.map((cp,i)=>(
+                    <th key={i} style={{padding:"12px 16px",textAlign:"center",fontFamily:"'Lora',serif",fontSize:13,fontWeight:700,color:"#37352f",borderBottom:"2px solid #f1f0ef"}}>{cp.name}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {features.map((feat,fi)=>(
+                  <tr key={fi} style={{background:fi%2===0?"#fff":"#fafaf9"}}>
+                    <td style={{padding:"12px 16px",fontSize:13,color:"#37352f",borderBottom:"1px solid #f1f0ef"}}>{feat}</td>
+                    {compPkgs.map((cp,pi)=>(
+                      <td key={pi} style={{padding:"12px 16px",textAlign:"center",borderBottom:"1px solid #f1f0ef"}}>
+                        {arr(cp.values)[fi]
+                          ?<span style={{color:"#1e7e34",fontWeight:700,fontSize:16}}>✓</span>
+                          :<span style={{color:"#c4c3bf",fontSize:14}}>×</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ADD-ONS */}
+      {addOns.length>0&&(
+        <div style={{padding:"48px 60px",background:"#fafaf9"}}>
+          <div style={secLabel}>Add-Ons</div>
+          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
+          <table style={{width:"100%",maxWidth:500,borderCollapse:"collapse",fontSize:13}}>
+            <thead>
+              <tr>
+                <th style={{padding:"8px 0",textAlign:"left",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",fontWeight:400,textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"1px solid #e8e4dc"}}>Add-On</th>
+                <th style={{padding:"8px 0",textAlign:"right",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",fontWeight:400,textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"1px solid #e8e4dc"}}>Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {addOns.map((ao,i)=>(
+                <tr key={i}>
+                  <td style={{padding:"12px 0",borderBottom:"1px solid #f1f0ef",color:"#37352f"}}>
+                    {!readonly?<Editable value={ao.name||""} onChange={v=>{const a=[...addOns];a[i]={...a[i],name:v};upPd("addOns",a);}} placeholder="Add-on name"/>:<span>{ao.name}</span>}
+                  </td>
+                  <td style={{padding:"12px 0",borderBottom:"1px solid #f1f0ef",textAlign:"right",fontFamily:"'IBM Plex Mono',monospace",color:"#37352f"}}>
+                    {!readonly?<Editable value={ao.price||""} onChange={v=>{const a=[...addOns];a[i]={...a[i],price:v};upPd("addOns",a);}} placeholder="$XXX"/>:<span>{ao.price}</span>}
+                    {!readonly&&<button onClick={()=>{upPd("addOns",addOns.filter((_,j)=>j!==i));}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,marginLeft:8}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!readonly&&<button onClick={()=>upPd("addOns",[...addOns,{name:"",price:""}])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"8px 0",marginTop:4}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>}
+        </div>
+      )}
+      {!readonly&&addOns.length===0&&(
+        <div style={{padding:"0 60px 24px"}}>
+          <button onClick={()=>upPd("addOns",[{name:"",price:""}])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add Add-Ons Section</button>
+        </div>
+      )}
+
+      {/* PAYMENT TERMS */}
+      <div style={{padding:"48px 60px"}}>
+        <div style={secLabel}>Payment &amp; Scheduling</div>
+        <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
+        <ul style={{listStyle:"none",padding:0,margin:0}}>
+          <li style={{fontSize:14,lineHeight:1.8,color:"#37352f",marginBottom:6,display:"flex",alignItems:"flex-start",gap:8}}>
+            <span style={{color:"#e97942",flexShrink:0}}>→</span>
+            <span><strong>{pt.depositPercent||60}% deposit</strong> {pt.depositTrigger||"to secure production date and team"}</span>
+          </li>
+          <li style={{fontSize:14,lineHeight:1.8,color:"#37352f",marginBottom:6,display:"flex",alignItems:"flex-start",gap:8}}>
+            <span style={{color:"#e97942",flexShrink:0}}>→</span>
+            <span>Balance due <strong>{pt.balanceTiming||"day of production"}</strong></span>
+          </li>
+          {pt.expeditedDelivery&&<li style={{fontSize:14,lineHeight:1.8,color:"#37352f",marginBottom:6,display:"flex",alignItems:"flex-start",gap:8}}><span style={{color:"#e97942",flexShrink:0}}>→</span><span>Expedited delivery: {pt.expeditedDelivery}</span></li>}
+          {pt.revisionPolicy&&<li style={{fontSize:14,lineHeight:1.8,color:"#37352f",marginBottom:6,display:"flex",alignItems:"flex-start",gap:8}}><span style={{color:"#e97942",flexShrink:0}}>→</span><span>Revisions: {pt.revisionPolicy}</span></li>}
+        </ul>
+        {!readonly&&(
+          <div style={{marginTop:16,display:"flex",flexWrap:"wrap",gap:8}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>Deposit %:</span>
+              <input type="number" value={pt.depositPercent||60} onChange={e=>upPd("paymentTerms",{...pt,depositPercent:Number(e.target.value)})} style={{width:60,border:"1px solid #e8e4dc",borderRadius:4,padding:"3px 6px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",outline:"none"}}/>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* WHY US */}
+      {(pd.whyUs||!readonly)&&(
+        <div style={{padding:"48px 60px",background:"#fafaf9"}}>
+          <div style={secLabel}>Why {(creativeCompany||pd.creativeCompany||"GH Productions").toUpperCase()}</div>
+          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
+          <div style={{fontSize:15,lineHeight:1.85,color:"#37352f",maxWidth:680}}>
+            {!readonly?<Editable value={pd.whyUs||""} onChange={v=>upPd("whyUs",v)} multiline placeholder="Why should they choose GH Productions?"/>:<p style={{margin:0}}>{pd.whyUs}</p>}
+          </div>
+        </div>
+      )}
+
+      {/* MOOD BOARD */}
+      {(moodUrls.length>0||!readonly)&&(
+        <div style={{padding:"48px 60px"}}>
+          <div style={secLabel}>Mood &amp; Inspiration</div>
+          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
+          {moodUrls.length>0&&(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))",gap:12,marginBottom:16}}>
+              {moodUrls.map((url,i)=>(
+                <div key={i} style={{position:"relative"}}>
+                  <img src={url} alt="" style={{width:"100%",height:200,objectFit:"cover",borderRadius:8,display:"block"}}
+                    onError={e=>{e.currentTarget.style.display="none";}}/>
+                  {!readonly&&<button onClick={()=>upPd("moodBoardUrls",moodUrls.filter((_,j)=>j!==i))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.5)",border:"none",color:"#fff",borderRadius:"50%",width:22,height:22,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>}
+                </div>
+              ))}
+            </div>
+          )}
+          {!readonly&&(
+            <button onClick={()=>{const url=window.prompt("Paste image URL:");if(url)upPd("moodBoardUrls",[...moodUrls,url]);}} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"10px 20px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit"}} onMouseEnter={e=>{e.currentTarget.style.color="#37352f";e.currentTarget.style.borderColor="#c4c3bf";}} onMouseLeave={e=>{e.currentTarget.style.color="#9b9a97";e.currentTarget.style.borderColor="#e8e4dc";}}>+ Add Image URL</button>
+          )}
+        </div>
+      )}
+
+      {/* FOOTER */}
+      <div style={{borderTop:"1px solid #f1f0ef",padding:"40px 60px",background:"#fafaf9"}}>
+        <p style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:14,color:"#9b9a97",marginBottom:8}}>
+          Prepared exclusively for {pd.clientName||"[Client Name]"}
+        </p>
+        <p style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#c4c3bf"}}>
+          {creativeCompany||pd.creativeCompany||"GH Productions"}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── PACKAGE LIBRARY ──────────────────────────────────────────────────────────
+const PKG_PROJECT_TYPES=["Video","Photography","Real Estate","Music Video","Brand","Event","Commercial","Documentary"];
+
+function PackageLibrary({user,packages,onPackagesChange,onBack}){
+  const[expanded,setExpanded]=useState(null);
+  const[saving,setSaving]=useState(null);
+  const[deleteConfirm,setDeleteConfirm]=useState(null);
+
+  async function createPackage(){
+    const{data}=await supabase.from("packages").insert({
+      user_id:user.id,
+      name:"New Package",
+      number:String(packages.length+1).padStart(2,"0"),
+      sort_order:packages.length,
+    }).select().single();
+    if(data){onPackagesChange([...packages,data]);setExpanded(data.id);}
+  }
+
+  async function savePkg(id,fields){
+    setSaving(id);
+    await supabase.from("packages").update({...fields,updated_at:new Date().toISOString()}).eq("id",id);
+    onPackagesChange(packages.map(p=>p.id===id?{...p,...fields}:p));
+    setSaving(null);
+  }
+
+  async function deletePkg(id){
+    await supabase.from("packages").delete().eq("id",id);
+    onPackagesChange(packages.filter(p=>p.id!==id));
+    setDeleteConfirm(null);
+    if(expanded===id)setExpanded(null);
+  }
+
+  function PkgCard({pkg}){
+    const[local,setLocal]=useState(pkg);
+    const[included,setIncluded]=useState(arr(pkg.included));
+    const[notIncluded,setNotIncluded]=useState(arr(pkg.notIncluded));
+    const[projectTypes,setProjectTypes]=useState(arr(pkg.project_types));
+    const isOpen=expanded===pkg.id;
+
+    function flush(){
+      savePkg(pkg.id,{...local,included,notIncluded,project_types:projectTypes});
+    }
+
+    return(
+      <div style={{border:"1px solid #f1f0ef",borderRadius:10,marginBottom:10,overflow:"hidden",background:isOpen?"#fff":"#fafaf9"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",cursor:"pointer"}} onClick={()=>setExpanded(isOpen?null:pkg.id)}>
+          <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",flexShrink:0}}>{local.number||"01"}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontWeight:700,fontSize:14,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{local.name||"Unnamed Package"}</div>
+            <div style={{fontSize:12,color:"#9b9a97"}}>{local.price||"No price set"}{arr(local.project_types).length>0&&` · ${arr(local.project_types).slice(0,2).join(", ")}`}</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+            <div onClick={async()=>{const v=!local.is_active;setLocal(p=>({...p,is_active:v}));await supabase.from("packages").update({is_active:v}).eq("id",pkg.id);onPackagesChange(packages.map(p=>p.id===pkg.id?{...p,is_active:v}:p));}} style={{width:32,height:18,borderRadius:9,background:local.is_active?"#37352f":"#d4d0c8",cursor:"pointer",position:"relative",transition:"background .2s"}}>
+              <div style={{position:"absolute",top:2,left:local.is_active?14:2,width:14,height:14,borderRadius:"50%",background:"#fff",boxShadow:"0 1px 3px rgba(0,0,0,0.25)",transition:"left .2s"}}/>
+            </div>
+            <span style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>{local.is_active?"Active":"Off"}</span>
+            <span style={{fontSize:12,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}>▶</span>
+          </div>
+        </div>
+        {isOpen&&(
+          <div style={{padding:"0 16px 20px",borderTop:"1px solid #f1f0ef"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginTop:16,marginBottom:12}}>
+              {[["Name","name"],["Price","price"],["Price Unit","priceUnit"],["Number","number"]].map(([label,field])=>(
+                <div key={field}>
+                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>{label}</div>
+                  <input value={local[field]||""} onChange={e=>setLocal(p=>({...p,[field]:e.target.value}))} onBlur={flush}
+                    style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor="#37352f"} onBlur2={e=>{e.target.style.borderColor="#e8e4dc";flush();}}/>
+                </div>
+              ))}
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Tagline</div>
+              <input value={local.tagline||""} onChange={e=>setLocal(p=>({...p,tagline:e.target.value}))} onBlur={flush}
+                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor="#37352f"}/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Description</div>
+              <textarea value={local.description||""} onChange={e=>setLocal(p=>({...p,description:e.target.value}))} onBlur={flush} rows={3}
+                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",resize:"vertical",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor="#37352f"}/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+              <div>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Included</div>
+                {included.map((item,i)=>(
+                  <div key={i} style={{display:"flex",gap:6,marginBottom:5}}>
+                    <input value={item} onChange={e=>{const a=[...included];a[i]=e.target.value;setIncluded(a);}} onBlur={flush}
+                      style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
+                    <button onClick={()=>{const a=included.filter((_,j)=>j!==i);setIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:12}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+                  </div>
+                ))}
+                <button onClick={()=>setIncluded([...included,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Not Included</div>
+                {notIncluded.map((item,i)=>(
+                  <div key={i} style={{display:"flex",gap:6,marginBottom:5}}>
+                    <input value={item} onChange={e=>{const a=[...notIncluded];a[i]=e.target.value;setNotIncluded(a);}} onBlur={flush}
+                      style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
+                    <button onClick={()=>{const a=notIncluded.filter((_,j)=>j!==i);setNotIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:12}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+                  </div>
+                ))}
+                <button onClick={()=>setNotIncluded([...notIncluded,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>
+              </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Best For</div>
+              <input value={local.bestFor||""} onChange={e=>setLocal(p=>({...p,bestFor:e.target.value}))} onBlur={flush}
+                style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
+                onFocus={e=>e.target.style.borderColor="#37352f"}/>
+            </div>
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Project Types</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+                {PKG_PROJECT_TYPES.map(type=>{
+                  const active=projectTypes.includes(type);
+                  return(
+                    <button key={type} onClick={()=>{const updated=active?projectTypes.filter(t=>t!==type):[...projectTypes,type];setProjectTypes(updated);savePkg(pkg.id,{...local,included,notIncluded,project_types:updated});}}
+                      style={{padding:"4px 12px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s"}}>
+                      {type}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8,paddingTop:12,borderTop:"1px solid #f1f0ef"}}>
+              <button onClick={flush} style={{background:"#37352f",color:"#fff",border:"none",padding:"7px 16px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:6}}>
+                {saving===pkg.id?<><div style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,0.4)",borderTop:"1.5px solid #fff",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>Saving…</>:"Save"}
+              </button>
+              <button onClick={()=>setDeleteConfirm(pkg.id)} style={{background:"none",border:"1px solid #f1f0ef",padding:"7px 14px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",color:"#9b9a97"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#c0392b";e.currentTarget.style.color="#c0392b";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#f1f0ef";e.currentTarget.style.color="#9b9a97";}}>Delete</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return(
+    <div style={{minHeight:"100vh",background:"#fff"}}>
+      <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4}}>← Back</button>
+          <span style={{color:"#e8e4dc"}}>·</span>
+          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:"0.08em",color:"#37352f",fontWeight:500}}>PACKAGE LIBRARY</span>
+        </div>
+        <button onClick={createPackage} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ New Package</button>
+      </div>
+      <div style={{maxWidth:760,margin:"0 auto",padding:"32px 24px 80px"}}>
+        <h1 style={{fontSize:24,fontWeight:700,color:"#37352f",marginBottom:6,letterSpacing:"-0.02em"}}>Package Library</h1>
+        <p style={{fontSize:13,color:"#9b9a97",marginBottom:24,lineHeight:1.6}}>Create reusable packages that auto-populate your pitch decks. Mark them Active to include in AI generation.</p>
+        {packages.length===0?(
+          <div style={{textAlign:"center",padding:"60px 20px",border:"1px dashed #e8e4dc",borderRadius:10}}>
+            <div style={{fontSize:40,marginBottom:14}}>📦</div>
+            <p style={{fontSize:16,fontWeight:600,color:"#37352f",marginBottom:8}}>No packages yet</p>
+            <p style={{fontSize:14,color:"#9b9a97",marginBottom:20}}>Create your first reusable package template.</p>
+            <button onClick={createPackage} style={{background:"#37352f",color:"#fff",border:"none",padding:"10px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ Create First Package</button>
+          </div>
+        ):(
+          packages.map(pkg=><PkgCard key={pkg.id} pkg={pkg}/>)
+        )}
+      </div>
+      {deleteConfirm&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500}}>
+          <div style={{background:"#fff",borderRadius:12,padding:"28px 32px",maxWidth:360,width:"90%",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+            <div style={{fontSize:22,marginBottom:10}}>⚠️</div>
+            <div style={{fontWeight:700,fontSize:16,color:"#37352f",marginBottom:8}}>Delete this package?</div>
+            <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.65,marginBottom:20}}>This removes the package template. Existing pitch decks won't be affected.</p>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>deletePkg(deleteConfirm)} style={{flex:1,background:"#c0392b",color:"#fff",border:"none",padding:"10px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>Delete</button>
+              <button onClick={()=>setDeleteConfirm(null)} style={{flex:1,background:"transparent",border:"1px solid #e8e4dc",padding:"9px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer",color:"#37352f"}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── MAIN APP ─────────────────────────────────────────────────────────────────
 function FrameBriefApp(){
   const[user,setUser]=useState(null);
@@ -3613,6 +4106,12 @@ function FrameBriefApp(){
   const[showConsultationModal,setShowConsultationModal]=useState(false);
   const[showScheduleConsultation,setShowScheduleConsultation]=useState(false);
   const[moreMenuOpen,setMoreMenuOpen]=useState(false);
+  const[packages,setPackages]=useState([]);
+  const[pitchPreviewMode,setPitchPreviewMode]=useState(false);
+  const[pitchCopied,setPitchCopied]=useState(false);
+  const[pitchSharedId,setPitchSharedId]=useState(null);
+  const[pitchSharedData,setPitchSharedData]=useState(null);
+  const[pitchSharedLoading,setPitchSharedLoading]=useState(false);
   const brief=activeProject?.brief||null;
 
   useEffect(()=>{
@@ -3624,7 +4123,7 @@ function FrameBriefApp(){
     return()=>{ subscription.unsubscribe(); window.removeEventListener('resize', handleResize); };
   },[]);
 
-  // Detect /share/{id} and /idea/{id} URLs on mount
+  // Detect /share/{id}, /idea/{id}, and /pitch/{id} URLs on mount
   useEffect(()=>{
     const m=window.location.pathname.match(/^\/share\/([^/?]+)/);
     if(m)setShareProjectId(m[1]);
@@ -3637,9 +4136,20 @@ function FrameBriefApp(){
         else setScreen("dashboard");
       });
     }
+    const mp=window.location.pathname.match(/^\/pitch\/([^/?]+)/);
+    if(mp){
+      setPitchSharedId(mp[1]);
+      setPitchSharedLoading(true);
+      supabase.from("projects").select("pitch_deck,brief,title").eq("id",mp[1]).single()
+        .then(({data,error})=>{
+          setPitchSharedLoading(false);
+          if(!error&&data){setPitchSharedData(data);setScreen("pitchPublic");}
+          else setScreen("dashboard");
+        });
+    }
   },[]);
 
-  useEffect(()=>{if(user){loadProjects();loadSharedProjects();loadClients();}},[user]);
+  useEffect(()=>{if(user){loadProjects();loadSharedProjects();loadClients();loadPackages();}},[user]);
 
   // Load shared project once auth resolves
   useEffect(()=>{
@@ -3701,6 +4211,28 @@ function FrameBriefApp(){
   async function loadClients(){
     const{data,error}=await supabase.from("clients").select("*").order("name",{ascending:true});
     if(!error&&data)setClients(data);
+  }
+
+  async function loadPackages(){
+    if(!user)return;
+    const{data,error}=await supabase.from("packages").select("*").eq("user_id",user.id).order("sort_order",{ascending:true});
+    if(!error&&data)setPackages(data);
+  }
+
+  function savePitchDeck(updatedPitchDeck){
+    if(!activeProject?.id)return;
+    setActiveProject(prev=>({...prev,pitch_deck:updatedPitchDeck}));
+    setProjects(ps=>ps.map(p=>p.id===activeProject.id?{...p,pitch_deck:updatedPitchDeck}:p));
+    clearTimeout(window._pitchSaveTimer);
+    window._pitchSaveTimer=setTimeout(()=>{
+      supabase.from("projects").update({pitch_deck:updatedPitchDeck,updated_at:new Date().toISOString()}).eq("id",activeProject.id);
+    },1500);
+  }
+
+  async function copyPitchLink(){
+    await navigator.clipboard.writeText(`https://framebriefai.com/pitch/${activeProject.id}`);
+    setPitchCopied(true);
+    setTimeout(()=>setPitchCopied(false),2000);
   }
 
   async function loadShareRoute(pid){
@@ -4132,7 +4664,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       const mn=briefData.meetingNotes||{};
       const combinedText=allText||"";
       const discoveryMeeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:"discovery",summary:mn.summary||briefData.logline||"Initial brief created from intake workspace.",keyPoints:arr(mn.keyPoints),topics:arr(mn.topics),actionItems:[],suggestedChanges:[],transcriptText:combinedText||null,transcriptExcerpt:combinedText.slice(0,500),status:"reviewed"};
-      const newProject={id:crypto.randomUUID(),user_id:user.id,title:briefData.projectTitle||intakeTitle||"Untitled",client_name:briefData.clientName||"",status:"Draft",brief:briefData,doc_count:validDocs.length,client_id:resolvedClientId||null,meeting_stage:"discovery",meeting_history:[discoveryMeeting],created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+      const newProject={id:crypto.randomUUID(),user_id:user.id,title:briefData.projectTitle||intakeTitle||"Untitled",client_name:briefData.clientName||"",status:"Draft",brief:briefData,pitch_deck:pitchDeck||{},doc_count:validDocs.length,client_id:resolvedClientId||null,meeting_stage:"discovery",meeting_history:[discoveryMeeting],created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
       const saved=await saveProject(newProject);
       setActiveProject(saved||newProject);
       setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);
@@ -4223,6 +4755,14 @@ ${JSON.stringify(brief)}`;
       <button onClick={()=>setSidebarOpen(false)} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"10px 14px",border:"none",background:"none",cursor:"pointer",fontSize:13,color:"#9b9a97",fontFamily:"'Lora',serif",borderBottom:"1px solid #f1f0ef",marginBottom:8}}>← Close Menu</button>
       <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",padding:"0 10px",marginBottom:4}}>Project</div>
       <button className={`nb ${page==="overview"?"on":""}`} onClick={()=>{setPage("overview");setSidebarOpen(false);}}><span style={{fontSize:15,flexShrink:0}}>📁</span><span>Overview</span></button>
+      <button className={`nb ${page==="pitch-deck"?"on":""}`} onClick={()=>{setPage("pitch-deck");setSidebarOpen(false);}}>
+        <span style={{fontSize:15,flexShrink:0}}>🎯</span><span>Pitch Deck</span>
+        {activeProject?.pitch_deck?.status&&activeProject.pitch_deck.status!=="draft"&&(
+          <span style={{fontSize:9,fontFamily:"'IBM Plex Mono',monospace",background:activeProject.pitch_deck.status==="package_selected"?"#e6f4ea":"#fef3e2",color:activeProject.pitch_deck.status==="package_selected"?"#1e7e34":"#b45309",borderRadius:3,padding:"1px 5px",flexShrink:0,fontWeight:600,marginLeft:"auto"}}>
+            {activeProject.pitch_deck.status==="package_selected"?"SELECTED":activeProject.pitch_deck.status==="viewed"?"VIEWED":"SENT"}
+          </span>
+        )}
+      </button>
       <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",padding:"14px 10px 4px"}}>Concepts</div>
       {arr(brief?.concepts).map((c,i)=>(<button key={i} className={`nb ${page===`concept-${i}`?"on":""}`} onClick={()=>{setPage(`concept-${i}`);setSidebarOpen(false);}}><span style={{fontSize:15,flexShrink:0}}>{c.emoji||"🎬"}</span><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{c.title||`Concept ${i+1}`}</span></button>))}
       <button onClick={addConcept} style={{display:"flex",alignItems:"center",gap:6,width:"100%",padding:"6px 10px",border:"none",background:"none",cursor:"pointer",fontSize:12,color:"#9b9a97",fontFamily:"'Lora',serif",marginTop:6,borderRadius:6}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add Concept</button>
@@ -4317,7 +4857,54 @@ ${JSON.stringify(brief)}`;
 
   if(screen==="clientProfile")return(<div><style>{CSS}</style><ClientProfile clientId={activeClientId} clients={clients} setClients={setClients} projects={projects} onBack={()=>setScreen("clients")} onOpenProject={p=>{setMyRole("owner");setActiveProject(p);setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNewProject={()=>{setInputClientId(activeClientId);setNewClientNameInput("");setTranscript("");setDocs([]);setErrMsg("");setScreen("input");}} onLinkProject={(projectId,clientId)=>setProjects(ps=>ps.map(p=>p.id===projectId?{...p,client_id:clientId}:p))}/></div>);
 
-  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")}/></div>);
+  if(screen==="pitchPublic")return(
+    <div style={{minHeight:"100vh",background:"#fff"}}>
+      <style>{CSS}</style>
+      {pitchSharedLoading?(
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh"}}>
+          <div className="spin" style={{width:28,height:28,border:"2px solid #f1f0ef",borderTop:"2px solid #37352f",borderRadius:"50%"}}/>
+        </div>
+      ):pitchSharedData?(
+        <>
+          {pitchSharedId&&(()=>{
+            const pd=pitchSharedData.pitch_deck||{};
+            if(!pd.viewedAt){
+              const updated={...pd,viewedAt:new Date().toISOString(),status:pd.status==="draft"?"sent":pd.status||"sent"};
+              supabase.from("projects").update({pitch_deck:updated}).eq("id",pitchSharedId);
+            }
+            return null;
+          })()}
+          <PitchDeckPage
+            pitchDeck={pitchSharedData.pitch_deck||{}}
+            setPitchDeck={async(pd)=>{
+              setPitchSharedData(prev=>({...prev,pitch_deck:pd}));
+              await supabase.from("projects").update({pitch_deck:pd}).eq("id",pitchSharedId);
+            }}
+            readonly={false}
+            projectId={pitchSharedId}
+            creativeCompany={pitchSharedData.pitch_deck?.creativeCompany||"GH Productions"}
+          />
+          {pitchSharedData?.pitch_deck?.status==="package_selected"&&(
+            <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#37352f",color:"#fff",padding:"14px 24px",borderRadius:10,fontSize:14,fontFamily:"'Lora',serif",boxShadow:"0 4px 20px rgba(0,0,0,0.2)",zIndex:100,textAlign:"center",maxWidth:400}}>
+              ✓ Package selected! We'll be in touch within 24 hours to confirm your booking.
+            </div>
+          )}
+        </>
+      ):(
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"100vh",fontSize:14,color:"#9b9a97",fontFamily:"'Lora',serif"}}>
+          Pitch deck not found.
+        </div>
+      )}
+    </div>
+  );
+
+  if(screen==="packageLibrary")return(
+    <div><style>{CSS}</style>
+      <PackageLibrary user={user} packages={packages} onPackagesChange={setPackages} onBack={()=>setScreen("dashboard")}/>
+    </div>
+  );
+
+  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")} onPackageLibrary={()=>setScreen("packageLibrary")}/></div>);
 
   if(screen==="input")return(<div><style>{CSS}</style><IntakeScreen
     transcript={transcript} setTranscript={setTranscript}
@@ -4362,10 +4949,16 @@ ${JSON.stringify(brief)}`;
           {!aiEditing&&dbSaving&&<span style={{fontSize:11,color:"#c4c3bf",fontStyle:"italic",flexShrink:0}}>Saving…</span>}
         </div>
         <div style={{display:"flex",gap:6,flexShrink:0,alignItems:"center",position:"relative"}}>
-          {/* Desktop buttons */}
-          {myRole==="owner"&&<button className="tbtn hide-on-mobile" onClick={()=>setShowShareModal(true)}>🔗 Share{activeProject?.share_enabled&&<span style={{marginLeft:4,width:6,height:6,borderRadius:"50%",background:"#e97942",display:"inline-block",verticalAlign:"middle"}}/>}</button>}
-          <button className="tbtn hide-on-mobile" onClick={()=>setShareMode(true)}>👁 Client</button>
-          {(myRole==="owner"||myRole==="editor")&&<button className={`tbtn hide-on-mobile ${chatOpen?"on":""}`} onClick={()=>setChatOpen(o=>!o)}>{chatOpen?"✕ AI":"✦ AI"}</button>}
+          {/* Pitch deck toolbar — shown when on pitch-deck page */}
+          {page==="pitch-deck"&&<>
+            <button className="tbtn hide-on-mobile" onClick={copyPitchLink}>{pitchCopied?"✓ Copied!":"🔗 Share Pitch Deck"}</button>
+            <button className={`tbtn hide-on-mobile ${pitchPreviewMode?"on":""}`} onClick={()=>setPitchPreviewMode(o=>!o)}>👁 Preview</button>
+            {activeProject?.pitch_deck?.status&&<span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:activeProject.pitch_deck.status==="package_selected"?"#e6f4ea":activeProject.pitch_deck.status==="viewed"?"#e8f0fe":"#f1f0ef",color:activeProject.pitch_deck.status==="package_selected"?"#1e7e34":activeProject.pitch_deck.status==="viewed"?"#1a56c4":"#9b9a97",borderRadius:20,padding:"3px 10px",fontWeight:600,flexShrink:0}}>{activeProject.pitch_deck.status==="package_selected"?"SELECTED":activeProject.pitch_deck.status==="viewed"?"VIEWED":activeProject.pitch_deck.status==="sent"?"SENT":"DRAFT"}</span>}
+          </>}
+          {/* Desktop buttons — hidden on pitch-deck page */}
+          {page!=="pitch-deck"&&myRole==="owner"&&<button className="tbtn hide-on-mobile" onClick={()=>setShowShareModal(true)}>🔗 Share{activeProject?.share_enabled&&<span style={{marginLeft:4,width:6,height:6,borderRadius:"50%",background:"#e97942",display:"inline-block",verticalAlign:"middle"}}/>}</button>}
+          {page!=="pitch-deck"&&<button className="tbtn hide-on-mobile" onClick={()=>setShareMode(true)}>👁 Client</button>}
+          {page!=="pitch-deck"&&(myRole==="owner"||myRole==="editor")&&<button className={`tbtn hide-on-mobile ${chatOpen?"on":""}`} onClick={()=>setChatOpen(o=>!o)}>{chatOpen?"✕ AI":"✦ AI"}</button>}
           {/* Mobile: ⋯ more menu containing Share, Client, AI */}
           <div className="mobile-only" style={{position:"relative"}}>
             <button onClick={()=>setMoreMenuOpen(o=>!o)} style={{background:moreMenuOpen?"#37352f":"none",color:moreMenuOpen?"#fff":"#37352f",border:"1px solid #e8e4dc",borderRadius:6,padding:"6px 11px",fontSize:14,cursor:"pointer",fontFamily:"'Lora',serif",lineHeight:1}}>⋯</button>
@@ -4464,6 +5057,7 @@ ${JSON.stringify(brief)}`;
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
           {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} onGenerateBrief={generateBriefFromSavedTranscript} briefGenError={briefGenError} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}} clients={clients} onClientLink={linkClientToProject} onClientUnlink={unlinkClientFromProject} onClientCreateAndLink={createAndLinkClient} meetingStage={activeProject?.meeting_stage||"discovery"} onStageChange={stage=>{setActiveProject(prev=>{const updated={...prev,meeting_stage:stage};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_stage:stage}:p));}}/>}
+          {page==="pitch-deck"&&<PitchDeckPage pitchDeck={activeProject?.pitch_deck||{}} setPitchDeck={savePitchDeck} readonly={pitchPreviewMode||myRole==="viewer"} projectId={activeProject?.id} creativeCompany="GH Productions"/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
           {page==="shootday"&&<CallSheetPanel brief={brief} callSheet={activeProject?.call_sheet||{}} onUpdate={cs=>{setActiveProject(prev=>{const updated={...prev,call_sheet:cs};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
           {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>{const updated={...prev,post_production:pp};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"} projectId={activeProject?.id} meetingHistory={arr(activeProject?.meeting_history)} fullTranscript={activeProject?.recall_transcript||""} concepts={arr(activeProject?.brief?.concepts)}/>}
