@@ -4063,30 +4063,7 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
                       ))}
                       {!readonly&&<button onClick={()=>addPkgArrItem(i,"included","New deliverable")} style={{background:"none",border:"none",color:"#c4c3bf",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"5px 0",display:"flex",alignItems:"center",gap:4}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>+ Add item</button>}
                     </div>
-                    {(arr(pkg.notIncluded).length>0||!readonly)&&(
-                      <div>
-                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:10}}>Not Included</div>
-                        {arr(pkg.notIncluded).map((item,j)=>(
-                          <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:6,fontSize:13}}>
-                            <span style={{color:"#c4c3bf",flexShrink:0,marginTop:1}}>×</span>
-                            <div style={{flex:1,color:"#c4c3bf",lineHeight:1.5}}>
-                              {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"notIncluded",j,v)}/>:<span>{item}</span>}
-                            </div>
-                            {!readonly&&<button onClick={()=>delPkgArrItem(i,"notIncluded",j)} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
-                          </div>
-                        ))}
-                        {!readonly&&<button onClick={()=>addPkgArrItem(i,"notIncluded","Not included")} style={{background:"none",border:"none",color:"#c4c3bf",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"5px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>+ Add item</button>}
-                      </div>
-                    )}
                   </div>
-                  {(pkg.bestFor||!readonly)&&(
-                    <div style={{background:"#fafaf9",border:"1px solid #f1f0ef",borderLeft:"3px solid #e97942",borderRadius:"0 6px 6px 0",padding:"12px 18px",marginTop:16}}>
-                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#e97942",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:3}}>Best For</div>
-                      <div style={{fontStyle:"italic",fontSize:13,color:"#37352f",lineHeight:1.6}}>
-                        {!readonly?<Editable value={pkg.bestFor||""} onChange={v=>upPkg(i,"bestFor",v)} placeholder="Ideal use case for this deliverable…"/>:<span>{pkg.bestFor}</span>}
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             ))}
@@ -4400,7 +4377,6 @@ const PKG_PROJECT_TYPES=["Video","Photography","Real Estate","Music Video","Bran
 function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesChange,setDeleteConfirm,userProjectTypes,saveUserProjectTypes}){
   const[local,setLocal]=useState(pkg);
   const[included,setIncluded]=useState(arr(pkg.included));
-  const[notIncluded,setNotIncluded]=useState(arr(pkg.not_included));
   const[projectTypes,setProjectTypes]=useState(arr(pkg.project_types));
   const[saveOk,setSaveOk]=useState(false);
   const[addingType,setAddingType]=useState(false);
@@ -4410,7 +4386,7 @@ function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesCha
   const unit=rateUnitLabel(rateType);
 
   async function flush(){
-    await savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:projectTypes});
+    await savePkg(pkg.id,{...local,included,project_types:projectTypes});
     setSaveOk(true);setTimeout(()=>setSaveOk(false),1800);
   }
 
@@ -4462,7 +4438,7 @@ function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesCha
               {RATE_TYPES.map(rt=>{
                 const active=rateType===rt.id;
                 return(
-                  <button key={rt.id} onClick={()=>{setLocal(p=>({...p,rate_type:rt.id}));savePkg(pkg.id,{...local,rate_type:rt.id,included,not_included:notIncluded,project_types:projectTypes});}}
+                  <button key={rt.id} onClick={()=>{setLocal(p=>({...p,rate_type:rt.id}));savePkg(pkg.id,{...local,rate_type:rt.id,included,project_types:projectTypes});}}
                     style={{padding:"5px 13px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
                     {rt.label}<span style={{fontSize:10,opacity:0.65,fontFamily:"'IBM Plex Mono',monospace"}}>{rt.unit}</span>
                   </button>
@@ -4498,40 +4474,18 @@ function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesCha
               onFocus={e=>e.target.style.borderColor="#37352f"}/>
           </div>
 
-          {/* Included / Not Included */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-            <div>
-              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>What's Included</div>
-              {included.map((item,i)=>(
-                <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
-                  <span style={{color:"#1e7e34",fontSize:11,flexShrink:0}}>✓</span>
-                  <input value={item} onChange={e=>{const a=[...included];a[i]=e.target.value;setIncluded(a);}} onBlur={flush}
-                    style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
-                  <button onClick={()=>{const a=included.filter((_,j)=>j!==i);setIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
-                </div>
-              ))}
-              <button onClick={()=>setIncluded([...included,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
-            </div>
-            <div>
-              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Not Included</div>
-              {notIncluded.map((item,i)=>(
-                <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
-                  <span style={{color:"#c4c3bf",fontSize:11,flexShrink:0}}>×</span>
-                  <input value={item} onChange={e=>{const a=[...notIncluded];a[i]=e.target.value;setNotIncluded(a);}} onBlur={flush}
-                    style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
-                  <button onClick={()=>{const a=notIncluded.filter((_,j)=>j!==i);setNotIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
-                </div>
-              ))}
-              <button onClick={()=>setNotIncluded([...notIncluded,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
-            </div>
-          </div>
-
-          {/* Best For */}
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Best For</div>
-            <input value={local.best_for||""} onChange={e=>setLocal(p=>({...p,best_for:e.target.value}))} onBlur={flush} placeholder="Ideal client or project type…"
-              style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
-              onFocus={e=>e.target.style.borderColor="#37352f"}/>
+          {/* What's Included */}
+          <div style={{marginBottom:12}}>
+            <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>What's Included</div>
+            {included.map((item,i)=>(
+              <div key={i} style={{display:"flex",gap:6,marginBottom:5,alignItems:"center"}}>
+                <span style={{color:"#1e7e34",fontSize:11,flexShrink:0}}>✓</span>
+                <input value={item} onChange={e=>{const a=[...included];a[i]=e.target.value;setIncluded(a);}} onBlur={flush}
+                  style={{flex:1,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:12,fontFamily:"'Lora',serif",outline:"none",color:"#37352f"}}/>
+                <button onClick={()=>{const a=included.filter((_,j)=>j!==i);setIncluded(a);setTimeout(flush,0);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>
+              </div>
+            ))}
+            <button onClick={()=>setIncluded([...included,""])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add item</button>
           </div>
 
           {/* Project Types */}
@@ -4541,7 +4495,7 @@ function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesCha
               {arr(userProjectTypes).map(type=>{
                 const active=projectTypes.includes(type);
                 return(
-                  <button key={type} onClick={()=>{const updated=active?projectTypes.filter(t=>t!==type):[...projectTypes,type];setProjectTypes(updated);savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:updated});}}
+                  <button key={type} onClick={()=>{const updated=active?projectTypes.filter(t=>t!==type):[...projectTypes,type];setProjectTypes(updated);savePkg(pkg.id,{...local,included,project_types:updated});}}
                     style={{padding:"4px 12px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s"}}>
                     {type}
                   </button>
@@ -4554,7 +4508,7 @@ function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesCha
                       if(e.key==="Enter"&&newTypeVal.trim()){
                         const t=newTypeVal.trim();
                         if(!userProjectTypes.includes(t))saveUserProjectTypes([...userProjectTypes,t]);
-                        if(!projectTypes.includes(t)){const updated=[...projectTypes,t];setProjectTypes(updated);savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:updated});}
+                        if(!projectTypes.includes(t)){const updated=[...projectTypes,t];setProjectTypes(updated);savePkg(pkg.id,{...local,included,project_types:updated});}
                         setNewTypeVal("");setAddingType(false);
                       }
                       if(e.key==="Escape"){setNewTypeVal("");setAddingType(false);}
@@ -4562,7 +4516,7 @@ function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesCha
                     onBlur={()=>{if(!newTypeVal.trim()){setAddingType(false);}}}
                     placeholder="Type name…"
                     style={{border:"none",outline:"none",padding:"4px 10px",fontSize:12,fontFamily:"'Lora',serif",color:"#37352f",width:110,background:"transparent"}}/>
-                  <button onMouseDown={e=>{e.preventDefault();const t=newTypeVal.trim();if(t){if(!userProjectTypes.includes(t))saveUserProjectTypes([...userProjectTypes,t]);if(!projectTypes.includes(t)){const updated=[...projectTypes,t];setProjectTypes(updated);savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:updated});}}setNewTypeVal("");setAddingType(false);}}
+                  <button onMouseDown={e=>{e.preventDefault();const t=newTypeVal.trim();if(t){if(!userProjectTypes.includes(t))saveUserProjectTypes([...userProjectTypes,t]);if(!projectTypes.includes(t)){const updated=[...projectTypes,t];setProjectTypes(updated);savePkg(pkg.id,{...local,included,project_types:updated});}}setNewTypeVal("");setAddingType(false);}}
                     style={{background:"#37352f",border:"none",color:"#fff",padding:"4px 10px",cursor:"pointer",fontSize:12,lineHeight:1}}>✓</button>
                 </div>
               ):(
