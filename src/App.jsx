@@ -3868,11 +3868,21 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
       }}>
         <div style={{position:"absolute",inset:0,background:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E\")",opacity:0.4,pointerEvents:"none"}}/>
         <div style={{height:3,background:"linear-gradient(90deg, #e97942, #c8854a, transparent)",flexShrink:0}}/>
-        <div style={{padding:"28px 24px 32px",display:"flex",flexDirection:"column",justifyContent:"flex-end",position:"relative",zIndex:1}}>
-          <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"rgba(245,237,224,0.5)",fontSize:10,letterSpacing:"0.18em",textTransform:"uppercase",marginBottom:18}}>
-            {creativeCompany||pd.creativeCompany||"GH Productions"}
-            {pd.clientName?<span style={{color:"rgba(245,237,224,0.3)"}}>&nbsp;×&nbsp;</span>:""}
-            {pd.clientName&&<span style={{color:"rgba(245,237,224,0.7)"}}>{pd.clientName}</span>}
+        <div style={{padding:"24px 24px 32px",display:"flex",flexDirection:"column",position:"relative",zIndex:1}}>
+          {/* Top row: company name + cover image button */}
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12,marginBottom:18}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"rgba(245,237,224,0.5)",fontSize:10,letterSpacing:"0.18em",textTransform:"uppercase",lineHeight:1.5,flex:1,minWidth:0}}>
+              {creativeCompany||pd.creativeCompany||"GH Productions"}
+              {pd.clientName?<span style={{color:"rgba(245,237,224,0.3)"}}>&nbsp;×&nbsp;</span>:""}
+              {pd.clientName&&<span style={{color:"rgba(245,237,224,0.7)"}}>{pd.clientName}</span>}
+            </div>
+            {!readonly&&(
+              <button onClick={()=>{const url=window.prompt("Cover image URL (leave blank to use gradient):");if(url!==null)setPitchDeck({...pd,coverImageUrl:url||""});}}
+                style={{flexShrink:0,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.6)",borderRadius:6,padding:"5px 10px",fontSize:10,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",whiteSpace:"nowrap"}}
+                onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.15)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}>
+                + Cover Image
+              </button>
+            )}
           </div>
           <div style={{fontSize:40,marginBottom:12,lineHeight:1}}>{pd.coverEmoji||"🎬"}</div>
           {pd.projectType&&<div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#e97942",fontSize:10,letterSpacing:"0.15em",textTransform:"uppercase",marginBottom:10}}>{pd.projectType}</div>}
@@ -3885,13 +3895,6 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
             PREPARED FOR {pd.clientName?.toUpperCase()||"[CLIENT]"}&nbsp;·&nbsp;{pd.month||new Date().toLocaleString("default",{month:"long"}).toUpperCase()} {pd.year||new Date().getFullYear()}
           </div>
         </div>
-        {!readonly&&(
-          <button onClick={()=>{const url=window.prompt("Cover image URL (leave blank to use gradient):");if(url!==null)setPitchDeck({...pd,coverImageUrl:url||""});}}
-            style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.6)",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}
-            onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.15)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}>
-            + Cover Image
-          </button>
-        )}
       </div>
 
       {/* ── ABOUT THIS PROJECT ─────────────────────────────── */}
