@@ -4215,14 +4215,14 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
   function PkgCard({pkg}){
     const[local,setLocal]=useState(pkg);
     const[included,setIncluded]=useState(arr(pkg.included));
-    const[notIncluded,setNotIncluded]=useState(arr(pkg.notIncluded));
+    const[notIncluded,setNotIncluded]=useState(arr(pkg.not_included));
     const[projectTypes,setProjectTypes]=useState(arr(pkg.project_types));
     const isOpen=expanded===pkg.id;
     const rateType=local.rate_type||"project";
     const unit=rateUnitLabel(rateType);
 
     function flush(){
-      savePkg(pkg.id,{...local,included,notIncluded,project_types:projectTypes});
+      savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:projectTypes});
     }
 
     return(
@@ -4273,7 +4273,7 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
                 {RATE_TYPES.map(rt=>{
                   const active=rateType===rt.id;
                   return(
-                    <button key={rt.id} onClick={()=>{setLocal(p=>({...p,rate_type:rt.id}));savePkg(pkg.id,{...local,rate_type:rt.id,included,notIncluded,project_types:projectTypes});}}
+                    <button key={rt.id} onClick={()=>{setLocal(p=>({...p,rate_type:rt.id}));savePkg(pkg.id,{...local,rate_type:rt.id,included,not_included:notIncluded,project_types:projectTypes});}}
                       style={{padding:"5px 13px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
                       {rt.label}<span style={{fontSize:10,opacity:0.65,fontFamily:"'IBM Plex Mono',monospace"}}>{rt.unit}</span>
                     </button>
@@ -4340,7 +4340,7 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
             {/* Best For */}
             <div style={{marginBottom:14}}>
               <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:4}}>Best For</div>
-              <input value={local.bestFor||""} onChange={e=>setLocal(p=>({...p,bestFor:e.target.value}))} onBlur={flush} placeholder="Ideal client or project type…"
+              <input value={local.best_for||""} onChange={e=>setLocal(p=>({...p,best_for:e.target.value}))} onBlur={flush} placeholder="Ideal client or project type…"
                 style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"8px 10px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",boxSizing:"border-box"}}
                 onFocus={e=>e.target.style.borderColor="#37352f"}/>
             </div>
@@ -4352,7 +4352,7 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
                 {PKG_PROJECT_TYPES.map(type=>{
                   const active=projectTypes.includes(type);
                   return(
-                    <button key={type} onClick={()=>{const updated=active?projectTypes.filter(t=>t!==type):[...projectTypes,type];setProjectTypes(updated);savePkg(pkg.id,{...local,included,notIncluded,project_types:updated});}}
+                    <button key={type} onClick={()=>{const updated=active?projectTypes.filter(t=>t!==type):[...projectTypes,type];setProjectTypes(updated);savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:updated});}}
                       style={{padding:"4px 12px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s"}}>
                       {type}
                     </button>
@@ -4403,8 +4403,8 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:500}}>
           <div style={{background:"#fff",borderRadius:12,padding:"28px 32px",maxWidth:360,width:"90%",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
             <div style={{fontSize:22,marginBottom:10}}>⚠️</div>
-            <div style={{fontWeight:700,fontSize:16,color:"#37352f",marginBottom:8}}>Delete this package?</div>
-            <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.65,marginBottom:20}}>This removes the package template. Existing pitch decks won't be affected.</p>
+            <div style={{fontWeight:700,fontSize:16,color:"#37352f",marginBottom:8}}>Delete this service?</div>
+            <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.65,marginBottom:20}}>This removes the service from your rate card. Existing pitch decks won't be affected.</p>
             <div style={{display:"flex",gap:8}}>
               <button onClick={()=>deletePkg(deleteConfirm)} style={{flex:1,background:"#c0392b",color:"#fff",border:"none",padding:"10px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>Delete</button>
               <button onClick={()=>setDeleteConfirm(null)} style={{flex:1,background:"transparent",border:"1px solid #e8e4dc",padding:"9px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer",color:"#37352f"}}>Cancel</button>
