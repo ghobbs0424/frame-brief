@@ -2683,6 +2683,13 @@ function MeetingsScreen({user,projects,onBack}){
   const[connecting,setConnecting]=useState(false);
   const[reconnecting,setReconnecting]=useState(false);
   const[reconnectError,setReconnectError]=useState("");
+  const[showJoinModal,setShowJoinModal]=useState(false);
+  const[joinUrl,setJoinUrl]=useState("");
+  const[joinType,setJoinType]=useState("discovery");
+  const[joinProjectId,setJoinProjectId]=useState(null);
+  const[joinLoading,setJoinLoading]=useState(false);
+  const[joinError,setJoinError]=useState("");
+  const[joinSuccess,setJoinSuccess]=useState(false);
 
   useEffect(()=>{
     loadData();
@@ -2734,12 +2741,33 @@ function MeetingsScreen({user,projects,onBack}){
     setLinking(null);
   }
 
+  async function handleJoinMeeting(){
+    if(!joinUrl.trim())return;
+    setJoinLoading(true);setJoinError("");
+    try{
+      const res=await fetch("/api/recall-webhook?action=create-bot",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({meetingUrl:joinUrl.trim(),userId:user.id,projectId:joinProjectId||null,meetingType:joinType})
+      });
+      const data=await res.json();
+      if(!res.ok)throw new Error(data.error||"Failed to send bot");
+      setJoinSuccess(true);
+      setTimeout(()=>{setShowJoinModal(false);setJoinUrl("");setJoinType("discovery");setJoinProjectId(null);setJoinSuccess(false);},2500);
+    }catch(err){setJoinError(err.message||"Something went wrong");}
+    setJoinLoading(false);
+  }
+
   return(
     <div style={{minHeight:"100vh",background:"#fff",display:"flex",flexDirection:"column"}}>
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
         <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif"}}>← Dashboard</button>
         <span style={{color:"#e8e4dc"}}>|</span>
-        <span style={{fontSize:14,fontWeight:700,color:"#37352f"}}>📅 Meetings</span>
+        <span style={{fontSize:14,fontWeight:700,color:"#37352f",flex:1}}>📅 Meetings</span>
+        <button onClick={()=>setShowJoinModal(true)}
+          style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 16px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+          📞 Join a Meeting
+        </button>
       </div>
       <div style={{flex:1,padding:"32px 24px",maxWidth:760,margin:"0 auto",width:"100%",boxSizing:"border-box"}}>
         {!calendarConnected?(
@@ -2817,6 +2845,59 @@ function MeetingsScreen({user,projects,onBack}){
           </div>
         )}
       </div>
+      {showJoinModal&&(
+        <div style={{position:"fixed",inset:0,zIndex:400,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>setShowJoinModal(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:"#fff",borderRadius:12,padding:"28px",width:"min(520px,100%)",boxShadow:"0 8px 32px rgba(0,0,0,0.2)"}}>
+            {joinSuccess?(
+              <div style={{textAlign:"center",padding:"20px 0"}}>
+                <div style={{fontSize:40,marginBottom:12}}>✅</div>
+                <div style={{fontWeight:700,fontSize:16,color:"#37352f",marginBottom:6}}>Bot is joining the meeting!</div>
+                <div style={{fontSize:13,color:"#9b9a97",lineHeight:1.6}}>Frame Brief will automatically generate notes and update your project when the call ends.</div>
+              </div>
+            ):(
+              <>
+                <div style={{fontSize:18,fontWeight:700,color:"#37352f",marginBottom:6,fontFamily:"'Lora',serif"}}>📞 Join a Meeting</div>
+                <div style={{fontSize:13,color:"#9b9a97",marginBottom:24,lineHeight:1.6}}>Paste a meeting link and Frame Brief will join, record, and auto-generate notes.</div>
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Meeting Link</div>
+                  <input autoFocus value={joinUrl} onChange={e=>{setJoinUrl(e.target.value);setJoinError("");}} placeholder="https://meet.google.com/abc-defg-hij"
+                    style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"11px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box"}}
+                    onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}
+                    onKeyDown={e=>e.key==="Enter"&&handleJoinMeeting()}/>
+                </div>
+                <div style={{marginBottom:16}}>
+                  <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Meeting Type</div>
+                  <div style={{display:"flex",gap:8}}>
+                    {[["discovery","🔍 Discovery Call"],["consultation","📋 Consultation"]].map(([val,label])=>(
+                      <button key={val} onClick={()=>setJoinType(val)}
+                        style={{flex:1,padding:"9px 0",border:`1px solid ${joinType===val?"#37352f":"#e8e4dc"}`,borderRadius:8,background:joinType===val?"#37352f":"transparent",color:joinType===val?"#fff":"#9b9a97",cursor:"pointer",fontFamily:"'Lora',serif",fontSize:13,transition:"all .15s"}}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{marginBottom:20}}>
+                  <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Link to Project (optional)</div>
+                  <select value={joinProjectId||""} onChange={e=>setJoinProjectId(e.target.value||null)}
+                    style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",boxSizing:"border-box",cursor:"pointer",background:"#fafaf9"}}>
+                    <option value="">Create new project automatically</option>
+                    {arr(projects).map(p=><option key={p.id} value={p.id}>{p.title||"Untitled"}</option>)}
+                  </select>
+                </div>
+                {joinError&&<div style={{background:"#fff2f2",border:"1px solid #ffc9c9",borderRadius:6,padding:"8px 12px",fontSize:13,color:"#c0392b",marginBottom:14}}>{joinError}</div>}
+                <div style={{display:"flex",gap:10}}>
+                  <button onClick={handleJoinMeeting} disabled={!joinUrl.trim()||joinLoading}
+                    style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 22px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:joinUrl.trim()&&!joinLoading?"pointer":"not-allowed",opacity:joinUrl.trim()&&!joinLoading?1:0.5,display:"flex",alignItems:"center",gap:8}}>
+                    {joinLoading&&<span className="spin" style={{width:13,height:13,border:"2px solid rgba(255,255,255,0.3)",borderTop:"2px solid #fff",borderRadius:"50%",display:"inline-block"}}/>}
+                    {joinLoading?"Sending bot…":"Send Bot →"}
+                  </button>
+                  <button onClick={()=>setShowJoinModal(false)} style={{background:"transparent",border:"1px solid #e8e4dc",padding:"11px 18px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer",color:"#9b9a97"}}>Cancel</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3564,21 +3645,37 @@ function IntakeScreen({
 }
 
 // ─── PITCH DECK PAGE ──────────────────────────────────────────────────────────
-function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompany}){
-  const pd=pitchDeck||{};
+function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompany,brief}){
+  const pd={...(pitchDeck||{})};
+  // Auto-derive from brief when fields are missing
+  if(!pd.clientName&&brief?.clientName) pd.clientName=brief.clientName;
+  if(!pd.projectType&&brief?.projectType) pd.projectType=brief.projectType;
+  if(!pd.tagline&&brief?.logline) pd.tagline=brief.logline;
+  if(!pd.approach&&brief?.overview) pd.approach=brief.overview;
+  if(!pd.coverEmoji&&brief?.coverEmoji) pd.coverEmoji=brief.coverEmoji||"🎬";
+  if(!arr(pd.packages).length&&arr(brief?.concepts).length){
+    pd.packages=arr(brief.concepts).map((c,i)=>({
+      id:`pkg-${i+1}`,
+      number:String(i+1).padStart(2,"0"),
+      name:c.title||`Package ${i+1}`,
+      tagline:c.logline||"",
+      price:brief.budget||"",
+      priceUnit:"/ project",
+      description:c.description||"",
+      included:[c.deliverableFormat,...arr(c.shotList).slice(0,5).map(s=>s.description)].filter(Boolean),
+      notIncluded:[],
+      bestFor:c.type||"",
+      selected:false,
+    }));
+  }
+  if(!pd.paymentTerms) pd.paymentTerms={depositPercent:60,depositTrigger:"to secure production date and team",balanceTiming:"day of production"};
+
   const pkgs=arr(pd.packages);
   const addOns=arr(pd.addOns);
   const moodUrls=arr(pd.moodBoardUrls);
   const pt=pd.paymentTerms||{};
   const comp=pd.comparison||{};
-  const features=arr(comp.features);
-  const compPkgs=arr(comp.packages);
 
-  const secLabel={fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:12};
-  const sectionPad={padding:"48px 60px"};
-  const mobilePad="@media(max-width:768px){padding:32px 24px!important}";
-
-  function upPd(key,val){if(!readonly)setPitchDeck({...pd,[key]:val});}
   function upPkg(i,key,val){
     if(readonly)return;
     const updated=[...pkgs];updated[i]={...updated[i],[key]:val};
@@ -3600,157 +3697,236 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
     setPitchDeck({...pd,packages:updated});
   }
 
-  const coverBg=pd.coverImageUrl
-    ?{backgroundImage:`url(${pd.coverImageUrl})`,backgroundSize:"cover",backgroundPosition:"center"}
-    :{background:"linear-gradient(135deg, #1a1a1a 0%, #2d2b28 60%, #1a1a2e 100%)"};
-
   return(
-    <div style={{maxWidth:"100%",overflowX:"hidden",fontFamily:"'Lora',Georgia,serif",color:"#37352f"}}>
-      {/* COVER */}
-      <div style={{...coverBg,minHeight:280,padding:"48px 60px",display:"flex",flexDirection:"column",justifyContent:"flex-end",position:"relative"}}>
-        <div style={{fontSize:48,marginBottom:10}}>{pd.coverEmoji||"🎬"}</div>
-        <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#f5ede0",fontSize:13,marginBottom:4}}>
-          {!readonly?<Editable value={creativeCompany||pd.creativeCompany||"GH Productions"} onChange={v=>upPd("creativeCompany",v)} style={{color:"#f5ede0"}}/>:<span>{creativeCompany||pd.creativeCompany||"GH Productions"}</span>}
-          {pd.clientName?` × ${pd.clientName}`:""}
+    <div style={{maxWidth:"100%",overflowX:"hidden",fontFamily:"'Lora',Georgia,serif",color:"#37352f",background:"#fff"}}>
+
+      {/* ── COVER ─────────────────────────────────────────── */}
+      <div style={{
+        ...(pd.coverImageUrl
+          ?{backgroundImage:`url(${pd.coverImageUrl})`,backgroundSize:"cover",backgroundPosition:"center"}
+          :{background:"linear-gradient(160deg, #0f0f0f 0%, #1c1a17 40%, #2a2520 70%, #1a1a2e 100%)"}),
+        minHeight:420,padding:"0",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden"
+      }}>
+        <div style={{position:"absolute",inset:0,background:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E\")",opacity:0.4,pointerEvents:"none"}}/>
+        <div style={{height:3,background:"linear-gradient(90deg, #e97942, #c8854a, transparent)",flexShrink:0}}/>
+        <div style={{flex:1,padding:"48px 64px 56px",display:"flex",flexDirection:"column",justifyContent:"flex-end",position:"relative",zIndex:1}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"rgba(245,237,224,0.5)",fontSize:11,letterSpacing:"0.2em",textTransform:"uppercase",marginBottom:28}}>
+            {creativeCompany||pd.creativeCompany||"GH Productions"}
+            {pd.clientName?<span style={{color:"rgba(245,237,224,0.3)"}}>&nbsp;×&nbsp;</span>:""}
+            {pd.clientName&&<span style={{color:"rgba(245,237,224,0.7)"}}>{pd.clientName}</span>}
+          </div>
+          <div style={{fontSize:56,marginBottom:16,lineHeight:1}}>{pd.coverEmoji||"🎬"}</div>
+          {pd.projectType&&<div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#e97942",fontSize:11,letterSpacing:"0.16em",textTransform:"uppercase",marginBottom:14}}>{pd.projectType}</div>}
+          <div style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:32,color:"#f5ede0",lineHeight:1.35,maxWidth:720,marginBottom:32}}>
+            {!readonly
+              ?<Editable value={pd.tagline||""} onChange={v=>setPitchDeck({...pd,tagline:v})} placeholder="Add a tagline…" style={{color:"#f5ede0",fontStyle:"italic",fontSize:32,lineHeight:1.35}}/>
+              :<span>{pd.tagline}</span>}
+          </div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"rgba(245,237,224,0.35)",fontSize:11,letterSpacing:"0.12em"}}>
+            PREPARED FOR {pd.clientName?.toUpperCase()||"[CLIENT]"}&nbsp;·&nbsp;{pd.month||new Date().toLocaleString("default",{month:"long"}).toUpperCase()} {pd.year||new Date().getFullYear()}
+          </div>
         </div>
-        <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a8f",fontSize:11,marginBottom:4}}>
-          {!readonly?<Editable value={pd.projectType||""} onChange={v=>upPd("projectType",v)} style={{color:"#9b9a8f"}}/>:<span>{pd.projectType}</span>}
-        </div>
-        <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a8f",fontSize:11,marginBottom:20}}>
-          Prepared by {creativeCompany||pd.creativeCompany||"GH Productions"} · {pd.month||"May"} {pd.year||"2026"}
-        </div>
-        <div style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:28,color:"#f5ede0",lineHeight:1.3,maxWidth:680}}>
-          {!readonly?<Editable value={pd.tagline||""} onChange={v=>upPd("tagline",v)} style={{color:"#f5ede0",fontStyle:"italic",fontSize:28}}/>:<span>{pd.tagline}</span>}
-        </div>
-        {!readonly&&<button onClick={()=>{const url=window.prompt("Cover image URL:");if(url)upPd("coverImageUrl",url);}} style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.3)",color:"#fff",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace"}}>+ Cover Image</button>}
+        {!readonly&&(
+          <button onClick={()=>{const url=window.prompt("Cover image URL (leave blank to use gradient):");if(url!==null)setPitchDeck({...pd,coverImageUrl:url||""});}}
+            style={{position:"absolute",top:20,right:20,background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",color:"rgba(255,255,255,0.6)",borderRadius:6,padding:"5px 12px",fontSize:11,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",zIndex:2}}
+            onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.15)"} onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}>
+            + Cover Image
+          </button>
+        )}
       </div>
 
-      {/* APPROACH */}
-      {(pd.approach||!readonly)&&(
-        <div style={{...sectionPad,padding:"48px 60px"}}>
-          <div style={secLabel}>The Approach</div>
-          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
-          <div style={{fontSize:16,lineHeight:1.9,color:"#37352f",maxWidth:680}}>
-            {!readonly?<Editable value={pd.approach||""} onChange={v=>upPd("approach",v)} multiline placeholder="Describe your creative approach for this project…"/>:<p style={{margin:0}}>{pd.approach}</p>}
+      {/* ── ABOUT THIS PROJECT ─────────────────────────────── */}
+      {(pd.approach||brief?.overview||!readonly)&&(
+        <div style={{padding:"56px 64px",borderBottom:"1px solid #f1f0ef"}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>About This Project</div>
+            <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
+          </div>
+          <div style={{fontSize:17,lineHeight:2,color:"#37352f",maxWidth:720}}>
+            {!readonly
+              ?<Editable value={pd.approach||""} onChange={v=>setPitchDeck({...pd,approach:v})} multiline placeholder="Describe the creative vision and approach for this project…"/>
+              :<p style={{margin:0}}>{pd.approach}</p>}
           </div>
         </div>
       )}
 
-      {/* PACKAGES */}
-      <div style={{padding:"48px 60px",background:"#fafaf9"}}>
-        <div style={secLabel}>The Packages</div>
-        <div style={{height:1,background:"#f1f0ef",marginBottom:28}}/>
+      {/* ── DELIVERABLES / CONCEPTS ────────────────────────── */}
+      {arr(brief?.concepts).length>0&&(
+        <div style={{padding:"56px 64px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:32}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>What We're Creating</div>
+            <div style={{flex:1,height:1,background:"#e8e4dc"}}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:20}}>
+            {arr(brief.concepts).map((c,i)=>(
+              <div key={i} style={{background:"#fff",border:"1px solid #e8e4dc",borderRadius:10,padding:"24px 28px",boxShadow:"0 1px 6px rgba(0,0,0,0.04)"}}>
+                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                  <span style={{fontSize:26}}>{c.emoji||"🎥"}</span>
+                  <div>
+                    <div style={{fontWeight:700,fontSize:15,color:"#37352f",lineHeight:1.3}}>{c.title}</div>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#e97942",textTransform:"uppercase",letterSpacing:"0.1em",marginTop:2}}>{c.type}</div>
+                  </div>
+                </div>
+                {c.logline&&<p style={{fontSize:13,color:"#9b9a97",lineHeight:1.65,margin:"0 0 12px",fontStyle:"italic"}}>{c.logline}</p>}
+                {c.deliverableFormat&&(
+                  <div style={{fontSize:12,color:"#37352f",background:"#f1f0ef",borderRadius:6,padding:"6px 10px",fontFamily:"'IBM Plex Mono',monospace"}}>
+                    📦 {c.deliverableFormat}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── INVESTMENT / PACKAGES ──────────────────────────── */}
+      <div style={{padding:"56px 64px",borderBottom:"1px solid #f1f0ef"}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:36}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Investment</div>
+          <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
+          {pkgs.length>1&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#c4c3bf",whiteSpace:"nowrap"}}>{pkgs.length} options</div>}
+        </div>
         {pkgs.map((pkg,i)=>{
           const isSelected=pd.selectedPackageId===pkg.id;
           return(
-            <div key={pkg.id||i} style={{background:"#fff",border:isSelected?"1px solid #e8e4dc":"1px solid #e8e4dc",borderLeft:isSelected?"4px solid #37352f":"4px solid transparent",borderRadius:12,padding:36,marginBottom:24,boxShadow:"0 2px 12px rgba(0,0,0,0.06)"}}>
-              <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:12,marginBottom:6}}>
-                <div style={{flex:1}}>
-                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#9b9a97",marginBottom:4}}>{pkg.number||String(i+1).padStart(2,"0")}</div>
-                  <div style={{fontSize:26,fontWeight:700,color:"#37352f",lineHeight:1.2,marginBottom:4}}>
-                    {!readonly?<Editable value={pkg.name||""} onChange={v=>upPkg(i,"name",v)} placeholder="Package name"/>:<span>{pkg.name}</span>}
-                  </div>
-                  <div style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:15,color:"#9b9a97",marginBottom:8}}>
-                    {!readonly?<Editable value={pkg.tagline||""} onChange={v=>upPkg(i,"tagline",v)} placeholder="Short tagline…"/>:<span>{pkg.tagline}</span>}
-                  </div>
-                </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:700,color:"#37352f"}}>
-                    {!readonly?<Editable value={pkg.price||""} onChange={v=>upPkg(i,"price",v)} placeholder="$X,XXX" style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:700}}/>:<span>{pkg.price}</span>}
-                  </span>
-                  <span style={{fontSize:13,color:"#9b9a97",marginLeft:4}}>{pkg.priceUnit||"/ project"}</span>
-                </div>
+            <div key={pkg.id||i} style={{
+              background:"#fff",
+              border:"1px solid #e8e4dc",
+              borderLeft:isSelected?"4px solid #e97942":"4px solid transparent",
+              borderRadius:12,
+              padding:"36px 40px",
+              marginBottom:20,
+              boxShadow:isSelected?"0 4px 20px rgba(233,121,66,0.1)":"0 2px 12px rgba(0,0,0,0.04)",
+              position:"relative",
+              overflow:"hidden",
+              transition:"box-shadow .2s",
+            }}>
+              <div style={{position:"absolute",top:-10,right:20,fontFamily:"'IBM Plex Mono',monospace",fontSize:120,fontWeight:700,color:"#f1f0ef",lineHeight:1,pointerEvents:"none",userSelect:"none",zIndex:0}}>
+                {pkg.number||String(i+1).padStart(2,"0")}
               </div>
-              <div style={{fontSize:14,color:"#37352f",lineHeight:1.75,marginBottom:20}}>
-                {!readonly?<Editable value={pkg.description||""} onChange={v=>upPkg(i,"description",v)} multiline placeholder="Describe what's included in this package…"/>:<p style={{margin:0}}>{pkg.description}</p>}
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit, minmax(280px, 1fr))",gap:32,marginBottom:20}}>
-                <div>
-                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>What's Included</div>
-                  {arr(pkg.included).map((item,j)=>(
-                    <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:6,fontSize:13}}>
-                      <span style={{color:"#1e7e34",flexShrink:0,marginTop:1}}>✓</span>
-                      <div style={{flex:1}}>
-                        {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"included",j,v)} placeholder="Included item"/>:<span>{item}</span>}
-                      </div>
-                      {!readonly&&<button onClick={()=>delPkgArrItem(i,"included",j)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>}
+              <div style={{position:"relative",zIndex:1}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:16,marginBottom:4}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:8}}>Package {pkg.number||String(i+1).padStart(2,"0")}</div>
+                    <div style={{fontSize:28,fontWeight:700,color:"#37352f",lineHeight:1.2,letterSpacing:"-0.02em"}}>
+                      {!readonly?<Editable value={pkg.name||""} onChange={v=>upPkg(i,"name",v)} placeholder="Package name…"/>:<span>{pkg.name}</span>}
                     </div>
-                  ))}
-                  {!readonly&&<button onClick={()=>addPkgArrItem(i,"included","New deliverable")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>}
-                </div>
-                <div>
-                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Not Included</div>
-                  {arr(pkg.notIncluded).map((item,j)=>(
-                    <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:6,fontSize:13}}>
-                      <span style={{color:"#c4c3bf",flexShrink:0,marginTop:1}}>×</span>
-                      <div style={{flex:1,color:"#c4c3bf"}}>
-                        {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"notIncluded",j,v)} placeholder="Not included item"/>:<span>{item}</span>}
-                      </div>
-                      {!readonly&&<button onClick={()=>delPkgArrItem(i,"notIncluded",j)} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>}
+                    <div style={{fontStyle:"italic",fontSize:15,color:"#9b9a97",marginTop:6}}>
+                      {!readonly?<Editable value={pkg.tagline||""} onChange={v=>upPkg(i,"tagline",v)} placeholder="Short positioning line…"/>:<span>{pkg.tagline}</span>}
                     </div>
-                  ))}
-                  {!readonly&&<button onClick={()=>addPkgArrItem(i,"notIncluded","Not included")} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"4px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>}
-                </div>
-              </div>
-              {(pkg.bestFor||!readonly)&&(
-                <div style={{marginBottom:20}}>
-                  <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Best For</div>
-                  <div style={{background:"#fafaf9",border:"1px solid #f1f0ef",borderRadius:8,padding:"14px 18px",fontStyle:"italic",fontSize:14,color:"#37352f"}}>
-                    {!readonly?<Editable value={pkg.bestFor||""} onChange={v=>upPkg(i,"bestFor",v)} placeholder="Describe the ideal client for this package…"/>:<span>{pkg.bestFor}</span>}
+                  </div>
+                  <div style={{textAlign:"right",flexShrink:0}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:26,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em"}}>
+                      {!readonly?<Editable value={pkg.price||""} onChange={v=>upPkg(i,"price",v)} placeholder="$X,XXX" style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:26,fontWeight:700}}/>:<span>{pkg.price}</span>}
+                    </div>
+                    <div style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>{pkg.priceUnit||"/ project"}</div>
                   </div>
                 </div>
-              )}
-              {!readonly?(
-                <button
-                  onClick={()=>{
-                    const updated={...pd,selectedPackageId:isSelected?null:pkg.id,status:"package_selected"};
-                    setPitchDeck(updated);
-                    if(projectId)supabase.from("projects").update({pitch_deck:updated}).eq("id",projectId);
-                  }}
-                  style={{background:isSelected?"#e6f4ea":"#37352f",color:isSelected?"#1e7e34":"#fff",border:isSelected?"1px solid #a8d5b5":"none",borderRadius:8,padding:"10px 22px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600}}>
-                  {isSelected?"✓ Selected":"Select This Package →"}
-                </button>
-              ):(
-                <button
-                  onClick={()=>{
-                    const updated={...pd,selectedPackageId:pkg.id,status:"package_selected"};
-                    setPitchDeck(updated);
-                    if(projectId)supabase.from("projects").update({pitch_deck:updated}).eq("id",projectId);
-                  }}
-                  style={{background:isSelected?"#e6f4ea":"#37352f",color:isSelected?"#1e7e34":"#fff",border:isSelected?"1px solid #a8d5b5":"none",borderRadius:8,padding:"10px 22px",fontSize:13,cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600}}>
-                  {isSelected?"✓ Selected — Thank You!":"Select This Package →"}
-                </button>
-              )}
+                {(pkg.description||!readonly)&&(
+                  <div style={{fontSize:14,color:"#37352f",lineHeight:1.8,margin:"20px 0",paddingTop:16,borderTop:"1px solid #f1f0ef"}}>
+                    {!readonly?<Editable value={pkg.description||""} onChange={v=>upPkg(i,"description",v)} multiline placeholder="Describe this package…"/>:<p style={{margin:0}}>{pkg.description}</p>}
+                  </div>
+                )}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:28,margin:"20px 0"}}>
+                  <div>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:12}}>What's Included</div>
+                    {arr(pkg.included).map((item,j)=>(
+                      <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:7,fontSize:13}}>
+                        <span style={{color:"#1e7e34",flexShrink:0,marginTop:1,fontSize:14}}>✓</span>
+                        <div style={{flex:1,color:"#37352f",lineHeight:1.5}}>
+                          {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"included",j,v)}/>:<span>{item}</span>}
+                        </div>
+                        {!readonly&&<button onClick={()=>delPkgArrItem(i,"included",j)} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+                      </div>
+                    ))}
+                    {!readonly&&<button onClick={()=>addPkgArrItem(i,"included","New deliverable")} style={{background:"none",border:"none",color:"#c4c3bf",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"6px 0",display:"flex",alignItems:"center",gap:4}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>+ Add item</button>}
+                  </div>
+                  {(arr(pkg.notIncluded).length>0||!readonly)&&(
+                    <div>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:12}}>Not Included</div>
+                      {arr(pkg.notIncluded).map((item,j)=>(
+                        <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:7,fontSize:13}}>
+                          <span style={{color:"#c4c3bf",flexShrink:0,marginTop:1}}>×</span>
+                          <div style={{flex:1,color:"#c4c3bf",lineHeight:1.5}}>
+                            {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"notIncluded",j,v)}/>:<span>{item}</span>}
+                          </div>
+                          {!readonly&&<button onClick={()=>delPkgArrItem(i,"notIncluded",j)} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+                        </div>
+                      ))}
+                      {!readonly&&<button onClick={()=>addPkgArrItem(i,"notIncluded","Not included")} style={{background:"none",border:"none",color:"#c4c3bf",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"6px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>+ Add item</button>}
+                    </div>
+                  )}
+                </div>
+                {(pkg.bestFor||!readonly)&&(
+                  <div style={{background:"#fafaf9",border:"1px solid #f1f0ef",borderLeft:"3px solid #e97942",borderRadius:"0 8px 8px 0",padding:"14px 20px",marginBottom:24}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#e97942",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:4}}>Best For</div>
+                    <div style={{fontStyle:"italic",fontSize:13,color:"#37352f",lineHeight:1.6}}>
+                      {!readonly?<Editable value={pkg.bestFor||""} onChange={v=>upPkg(i,"bestFor",v)} placeholder="Describe the ideal client for this package…"/>:<span>{pkg.bestFor}</span>}
+                    </div>
+                  </div>
+                )}
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                  <button
+                    onClick={()=>{
+                      const updated={...pd,selectedPackageId:isSelected?null:pkg.id,status:isSelected?pd.status:"package_selected"};
+                      setPitchDeck(updated);
+                      if(projectId)supabase.from("projects").update({pitch_deck:updated}).eq("id",projectId);
+                    }}
+                    style={{
+                      background:isSelected?"#f0faf4":"#37352f",
+                      color:isSelected?"#1e7e34":"#fff",
+                      border:isSelected?"1px solid #a8d5b5":"none",
+                      borderRadius:8,padding:"11px 24px",fontSize:13,
+                      cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600,
+                      display:"flex",alignItems:"center",gap:8,transition:"all .2s",
+                    }}
+                    onMouseEnter={e=>{if(!isSelected)e.currentTarget.style.background="#1a1a1a";}}
+                    onMouseLeave={e=>{if(!isSelected)e.currentTarget.style.background="#37352f";}}>
+                    {isSelected?"✓ Selected":readonly?"Select This Package →":"Mark as Selected →"}
+                  </button>
+                  {isSelected&&<span style={{fontSize:12,color:"#1e7e34",fontStyle:"italic"}}>This package is highlighted in the client view</span>}
+                </div>
+              </div>
             </div>
           );
         })}
-        {!readonly&&<button onClick={()=>{const id=`pkg-${Date.now()}`;setPitchDeck({...pd,packages:[...pkgs,{id,number:String(pkgs.length+1).padStart(2,"0"),name:"New Package",tagline:"",price:"",priceUnit:"/ project",description:"",included:[],notIncluded:[],bestFor:"",selected:false}]});}} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"12px 20px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit",width:"100%",textAlign:"center",marginTop:8}} onMouseEnter={e=>{e.currentTarget.style.color="#37352f";e.currentTarget.style.borderColor="#c4c3bf";}} onMouseLeave={e=>{e.currentTarget.style.color="#9b9a97";e.currentTarget.style.borderColor="#e8e4dc";}}>+ Add Package</button>}
+        {!readonly&&(
+          <button onClick={()=>{
+            const id=`pkg-${Date.now()}`;
+            setPitchDeck({...pd,packages:[...pkgs,{id,number:String(pkgs.length+1).padStart(2,"0"),name:"New Package",tagline:"",price:"",priceUnit:"/ project",description:"",included:[],notIncluded:[],bestFor:"",selected:false}]});
+          }} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"14px 24px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit",width:"100%",textAlign:"center"}}
+            onMouseEnter={e=>{e.currentTarget.style.color="#37352f";e.currentTarget.style.borderColor="#c4c3bf";}} onMouseLeave={e=>{e.currentTarget.style.color="#9b9a97";e.currentTarget.style.borderColor="#e8e4dc";}}>
+            + Add Package
+          </button>
+        )}
       </div>
 
-      {/* COMPARISON TABLE */}
-      {features.length>0&&(
-        <div style={{padding:"48px 60px"}}>
-          <div style={secLabel}>Side-by-Side Comparison</div>
-          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
+      {/* ── COMPARISON TABLE ─────────────────────────────── */}
+      {arr(comp.features).length>0&&(
+        <div style={{padding:"56px 64px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Side-by-Side Comparison</div>
+            <div style={{flex:1,height:1,background:"#e8e4dc"}}/>
+          </div>
           <div style={{overflowX:"auto"}}>
             <table style={{width:"100%",borderCollapse:"collapse",fontSize:13,minWidth:400}}>
               <thead>
                 <tr>
-                  <th style={{padding:"12px 16px",textAlign:"left",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#9b9a97",fontWeight:400,borderBottom:"2px solid #f1f0ef"}}>Feature</th>
-                  {compPkgs.map((cp,i)=>(
-                    <th key={i} style={{padding:"12px 16px",textAlign:"center",fontFamily:"'Lora',serif",fontSize:13,fontWeight:700,color:"#37352f",borderBottom:"2px solid #f1f0ef"}}>{cp.name}</th>
+                  <th style={{padding:"12px 16px",textAlign:"left",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",fontWeight:400,borderBottom:"2px solid #e8e4dc",letterSpacing:"0.1em",textTransform:"uppercase"}}>Feature</th>
+                  {arr(comp.packages).map((cp,i)=>(
+                    <th key={i} style={{padding:"12px 16px",textAlign:"center",fontFamily:"'Lora',serif",fontSize:13,fontWeight:700,color:"#37352f",borderBottom:"2px solid #e8e4dc"}}>{cp.name}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {features.map((feat,fi)=>(
+                {arr(comp.features).map((feat,fi)=>(
                   <tr key={fi} style={{background:fi%2===0?"#fff":"#fafaf9"}}>
                     <td style={{padding:"12px 16px",fontSize:13,color:"#37352f",borderBottom:"1px solid #f1f0ef"}}>{feat}</td>
-                    {compPkgs.map((cp,pi)=>(
+                    {arr(comp.packages).map((cp,pi)=>(
                       <td key={pi} style={{padding:"12px 16px",textAlign:"center",borderBottom:"1px solid #f1f0ef"}}>
                         {arr(cp.values)[fi]
-                          ?<span style={{color:"#1e7e34",fontWeight:700,fontSize:16}}>✓</span>
-                          :<span style={{color:"#c4c3bf",fontSize:14}}>×</span>}
+                          ?<span style={{color:"#1e7e34",fontWeight:700,fontSize:15}}>✓</span>
+                          :<span style={{color:"#c4c3bf",fontSize:13}}>×</span>}
                       </td>
                     ))}
                   </tr>
@@ -3761,108 +3937,130 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
         </div>
       )}
 
-      {/* ADD-ONS */}
-      {addOns.length>0&&(
-        <div style={{padding:"48px 60px",background:"#fafaf9"}}>
-          <div style={secLabel}>Add-Ons</div>
-          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
-          <table style={{width:"100%",maxWidth:500,borderCollapse:"collapse",fontSize:13}}>
-            <thead>
-              <tr>
-                <th style={{padding:"8px 0",textAlign:"left",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",fontWeight:400,textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"1px solid #e8e4dc"}}>Add-On</th>
-                <th style={{padding:"8px 0",textAlign:"right",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",fontWeight:400,textTransform:"uppercase",letterSpacing:"0.1em",borderBottom:"1px solid #e8e4dc"}}>Price</th>
-              </tr>
-            </thead>
-            <tbody>
-              {addOns.map((ao,i)=>(
-                <tr key={i}>
-                  <td style={{padding:"12px 0",borderBottom:"1px solid #f1f0ef",color:"#37352f"}}>
-                    {!readonly?<Editable value={ao.name||""} onChange={v=>{const a=[...addOns];a[i]={...a[i],name:v};upPd("addOns",a);}} placeholder="Add-on name"/>:<span>{ao.name}</span>}
-                  </td>
-                  <td style={{padding:"12px 0",borderBottom:"1px solid #f1f0ef",textAlign:"right",fontFamily:"'IBM Plex Mono',monospace",color:"#37352f"}}>
-                    {!readonly?<Editable value={ao.price||""} onChange={v=>{const a=[...addOns];a[i]={...a[i],price:v};upPd("addOns",a);}} placeholder="$XXX"/>:<span>{ao.price}</span>}
-                    {!readonly&&<button onClick={()=>{upPd("addOns",addOns.filter((_,j)=>j!==i));}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:11,marginLeft:8}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>✕</button>}
-                  </td>
+      {/* ── ADD-ONS ──────────────────────────────────────── */}
+      {(addOns.length>0||!readonly)&&(
+        <div style={{padding:"56px 64px",borderBottom:"1px solid #f1f0ef"}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Add-Ons</div>
+            <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
+          </div>
+          {addOns.length>0&&(
+            <table style={{width:"100%",maxWidth:540,borderCollapse:"collapse",fontSize:14}}>
+              <thead>
+                <tr>
+                  <th style={{padding:"8px 0",textAlign:"left",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",fontWeight:400,textTransform:"uppercase",letterSpacing:"0.12em",borderBottom:"1px solid #e8e4dc"}}>Add-On</th>
+                  <th style={{padding:"8px 0",textAlign:"right",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",fontWeight:400,textTransform:"uppercase",letterSpacing:"0.12em",borderBottom:"1px solid #e8e4dc"}}>Price</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          {!readonly&&<button onClick={()=>upPd("addOns",[...addOns,{name:"",price:""}])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"8px 0",marginTop:4}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add</button>}
-        </div>
-      )}
-      {!readonly&&addOns.length===0&&(
-        <div style={{padding:"0 60px 24px"}}>
-          <button onClick={()=>upPd("addOns",[{name:"",price:""}])} style={{background:"none",border:"none",color:"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"inherit"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>+ Add Add-Ons Section</button>
+              </thead>
+              <tbody>
+                {addOns.map((ao,i)=>(
+                  <tr key={i}>
+                    <td style={{padding:"14px 0",borderBottom:"1px solid #f1f0ef",color:"#37352f"}}>
+                      {!readonly?<Editable value={ao.name||""} onChange={v=>{const a=[...addOns];a[i]={...a[i],name:v};setPitchDeck({...pd,addOns:a});}} placeholder="Add-on name"/>:<span>{ao.name}</span>}
+                    </td>
+                    <td style={{padding:"14px 0",borderBottom:"1px solid #f1f0ef",textAlign:"right",fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,color:"#37352f"}}>
+                      {!readonly?<Editable value={ao.price||""} onChange={v=>{const a=[...addOns];a[i]={...a[i],price:v};setPitchDeck({...pd,addOns:a});}} placeholder="$XXX"/>:<span>{ao.price}</span>}
+                      {!readonly&&<button onClick={()=>setPitchDeck({...pd,addOns:addOns.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,marginLeft:8}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+          {!readonly&&(
+            <button onClick={()=>setPitchDeck({...pd,addOns:[...addOns,{name:"",price:""}]})}
+              style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"12px 0",marginTop:addOns.length>0?8:0}}
+              onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>
+              + Add add-on
+            </button>
+          )}
         </div>
       )}
 
-      {/* PAYMENT TERMS */}
-      <div style={{padding:"48px 60px"}}>
-        <div style={secLabel}>Payment &amp; Scheduling</div>
-        <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
-        <ul style={{listStyle:"none",padding:0,margin:0}}>
-          <li style={{fontSize:14,lineHeight:1.8,color:"#37352f",marginBottom:6,display:"flex",alignItems:"flex-start",gap:8}}>
-            <span style={{color:"#e97942",flexShrink:0}}>→</span>
-            <span><strong>{pt.depositPercent||60}% deposit</strong> {pt.depositTrigger||"to secure production date and team"}</span>
-          </li>
-          <li style={{fontSize:14,lineHeight:1.8,color:"#37352f",marginBottom:6,display:"flex",alignItems:"flex-start",gap:8}}>
-            <span style={{color:"#e97942",flexShrink:0}}>→</span>
-            <span>Balance due <strong>{pt.balanceTiming||"day of production"}</strong></span>
-          </li>
-          {pt.expeditedDelivery&&<li style={{fontSize:14,lineHeight:1.8,color:"#37352f",marginBottom:6,display:"flex",alignItems:"flex-start",gap:8}}><span style={{color:"#e97942",flexShrink:0}}>→</span><span>Expedited delivery: {pt.expeditedDelivery}</span></li>}
-          {pt.revisionPolicy&&<li style={{fontSize:14,lineHeight:1.8,color:"#37352f",marginBottom:6,display:"flex",alignItems:"flex-start",gap:8}}><span style={{color:"#e97942",flexShrink:0}}>→</span><span>Revisions: {pt.revisionPolicy}</span></li>}
-        </ul>
-        {!readonly&&(
-          <div style={{marginTop:16,display:"flex",flexWrap:"wrap",gap:8}}>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <span style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>Deposit %:</span>
-              <input type="number" value={pt.depositPercent||60} onChange={e=>upPd("paymentTerms",{...pt,depositPercent:Number(e.target.value)})} style={{width:60,border:"1px solid #e8e4dc",borderRadius:4,padding:"3px 6px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",outline:"none"}}/>
+      {/* ── PAYMENT & SCHEDULING ─────────────────────────── */}
+      <div style={{padding:"56px 64px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Payment & Scheduling</div>
+          <div style={{flex:1,height:1,background:"#e8e4dc"}}/>
+        </div>
+        <div style={{maxWidth:600}}>
+          {[
+            [`${pt.depositPercent||60}% deposit`,pt.depositTrigger||"to secure production date and team"],
+            ["Balance due",pt.balanceTiming||"day of production"],
+            pt.expeditedDelivery?["Expedited delivery",pt.expeditedDelivery]:null,
+            pt.revisionPolicy?["Revisions",pt.revisionPolicy]:null,
+          ].filter(Boolean).map(([label,detail],i)=>(
+            <div key={i} style={{display:"flex",gap:20,padding:"14px 0",borderBottom:"1px solid #f1f0ef",alignItems:"flex-start"}}>
+              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#e97942",flexShrink:0,paddingTop:2,minWidth:140,fontWeight:600}}>{label}</div>
+              <div style={{fontSize:14,color:"#37352f",lineHeight:1.6}}>{detail}</div>
             </div>
-          </div>
-        )}
+          ))}
+          {!readonly&&(
+            <div style={{display:"flex",alignItems:"center",gap:10,marginTop:16}}>
+              <span style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>Deposit %:</span>
+              <input type="number" value={pt.depositPercent||60} onChange={e=>setPitchDeck({...pd,paymentTerms:{...pt,depositPercent:Number(e.target.value)}})} style={{width:64,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",outline:"none"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* WHY US */}
+      {/* ── WHY US ───────────────────────────────────────── */}
       {(pd.whyUs||!readonly)&&(
-        <div style={{padding:"48px 60px",background:"#fafaf9"}}>
-          <div style={secLabel}>Why {(creativeCompany||pd.creativeCompany||"GH Productions").toUpperCase()}</div>
-          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
-          <div style={{fontSize:15,lineHeight:1.85,color:"#37352f",maxWidth:680}}>
-            {!readonly?<Editable value={pd.whyUs||""} onChange={v=>upPd("whyUs",v)} multiline placeholder="Why should they choose GH Productions?"/>:<p style={{margin:0}}>{pd.whyUs}</p>}
+        <div style={{padding:"56px 64px",borderBottom:"1px solid #f1f0ef"}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Why {creativeCompany||pd.creativeCompany||"GH Productions"}</div>
+            <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
+          </div>
+          <div style={{fontSize:16,lineHeight:1.9,color:"#37352f",maxWidth:680}}>
+            {!readonly?<Editable value={pd.whyUs||""} onChange={v=>setPitchDeck({...pd,whyUs:v})} multiline placeholder="Why choose GH Productions…"/>:<p style={{margin:0}}>{pd.whyUs}</p>}
           </div>
         </div>
       )}
 
-      {/* MOOD BOARD */}
+      {/* ── MOOD BOARD ───────────────────────────────────── */}
       {(moodUrls.length>0||!readonly)&&(
-        <div style={{padding:"48px 60px"}}>
-          <div style={secLabel}>Mood &amp; Inspiration</div>
-          <div style={{height:1,background:"#f1f0ef",marginBottom:20}}/>
+        <div style={{padding:"56px 64px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Mood & Inspiration</div>
+            <div style={{flex:1,height:1,background:"#e8e4dc"}}/>
+          </div>
           {moodUrls.length>0&&(
-            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))",gap:12,marginBottom:16}}>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12,marginBottom:16}}>
               {moodUrls.map((url,i)=>(
-                <div key={i} style={{position:"relative"}}>
-                  <img src={url} alt="" style={{width:"100%",height:200,objectFit:"cover",borderRadius:8,display:"block"}}
-                    onError={e=>{e.currentTarget.style.display="none";}}/>
-                  {!readonly&&<button onClick={()=>upPd("moodBoardUrls",moodUrls.filter((_,j)=>j!==i))} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.5)",border:"none",color:"#fff",borderRadius:"50%",width:22,height:22,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",lineHeight:1}}>✕</button>}
+                <div key={i} style={{position:"relative",borderRadius:8,overflow:"hidden"}}>
+                  <img src={url} alt="" style={{width:"100%",height:200,objectFit:"cover",display:"block"}} onError={e=>e.currentTarget.style.display="none"}/>
+                  {!readonly&&<button onClick={()=>setPitchDeck({...pd,moodBoardUrls:moodUrls.filter((_,j)=>j!==i)})} style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.6)",border:"none",color:"#fff",borderRadius:"50%",width:22,height:22,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>}
                 </div>
               ))}
             </div>
           )}
           {!readonly&&(
-            <button onClick={()=>{const url=window.prompt("Paste image URL:");if(url)upPd("moodBoardUrls",[...moodUrls,url]);}} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"10px 20px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit"}} onMouseEnter={e=>{e.currentTarget.style.color="#37352f";e.currentTarget.style.borderColor="#c4c3bf";}} onMouseLeave={e=>{e.currentTarget.style.color="#9b9a97";e.currentTarget.style.borderColor="#e8e4dc";}}>+ Add Image URL</button>
+            <button onClick={()=>{const url=window.prompt("Paste image URL:");if(url)setPitchDeck({...pd,moodBoardUrls:[...moodUrls,url]});}}
+              style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"10px 20px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit"}}
+              onMouseEnter={e=>{e.currentTarget.style.borderColor="#c4c3bf";e.currentTarget.style.color="#37352f";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e8e4dc";e.currentTarget.style.color="#9b9a97";}}>
+              + Add Image URL
+            </button>
           )}
         </div>
       )}
 
-      {/* FOOTER */}
-      <div style={{borderTop:"1px solid #f1f0ef",padding:"40px 60px",background:"#fafaf9"}}>
-        <p style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:14,color:"#9b9a97",marginBottom:8}}>
-          Prepared exclusively for {pd.clientName||"[Client Name]"}
-        </p>
-        <p style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#c4c3bf"}}>
-          {creativeCompany||pd.creativeCompany||"GH Productions"}
-        </p>
+      {/* ── FOOTER ───────────────────────────────────────── */}
+      <div style={{padding:"48px 64px",background:"#0f0f0f"}}>
+        <div style={{height:1,background:"rgba(255,255,255,0.08)",marginBottom:32}}/>
+        <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",flexWrap:"wrap",gap:16}}>
+          <div>
+            <p style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:14,color:"rgba(245,237,224,0.5)",margin:"0 0 8px"}}>
+              Prepared exclusively for {pd.clientName||"[Client Name]"}
+            </p>
+            <p style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"rgba(245,237,224,0.25)",margin:0,letterSpacing:"0.1em"}}>
+              {(creativeCompany||pd.creativeCompany||"GH Productions").toUpperCase()} · {pd.month||""} {pd.year||""}
+            </p>
+          </div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"rgba(245,237,224,0.15)",textAlign:"right",lineHeight:1.8}}>
+            This proposal is intellectual property of {creativeCompany||"GH Productions"}.{"\n"}
+            Any use of the ideas herein without consent is prohibited.
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -4883,6 +5081,7 @@ ${JSON.stringify(brief)}`;
             readonly={false}
             projectId={pitchSharedId}
             creativeCompany={pitchSharedData.pitch_deck?.creativeCompany||"GH Productions"}
+            brief={pitchSharedData?.brief}
           />
           {pitchSharedData?.pitch_deck?.status==="package_selected"&&(
             <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#37352f",color:"#fff",padding:"14px 24px",borderRadius:10,fontSize:14,fontFamily:"'Lora',serif",boxShadow:"0 4px 20px rgba(0,0,0,0.2)",zIndex:100,textAlign:"center",maxWidth:400}}>
@@ -5057,7 +5256,7 @@ ${JSON.stringify(brief)}`;
         {sidebarOpen&&<div style={{width:220,borderRight:"1px solid #f1f0ef",padding:"16px 10px",overflowY:"auto",background:"#fafaf9",flexShrink:0,display:"flex",flexDirection:"column"}}>{SidebarContent()}</div>}
         <div style={{flex:1,overflowY:"auto"}}>
           {page==="overview"&&<OverviewPage brief={brief} setBrief={setBrief} goTo={p=>{setPage(p);setSidebarOpen(false);}} recallStatus={activeProject?.recall_status} recallBotId={activeProject?.recall_bot_id} projectId={activeProject?.id} onTranscriptReady={()=>{loadProjects().then(()=>{const p=projects.find(x=>x.id===activeProject?.id);if(p)setActiveProject(p);});}} onGenerateBrief={generateBriefFromSavedTranscript} briefGenError={briefGenError} clientId={activeProject?.client_id} onClientClick={()=>{setActiveClientId(activeProject.client_id);setScreen("clientProfile");}} clients={clients} onClientLink={linkClientToProject} onClientUnlink={unlinkClientFromProject} onClientCreateAndLink={createAndLinkClient} meetingStage={activeProject?.meeting_stage||"discovery"} onStageChange={stage=>{setActiveProject(prev=>{const updated={...prev,meeting_stage:stage};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});setProjects(ps=>ps.map(p=>p.id===activeProject?.id?{...p,meeting_stage:stage}:p));}}/>}
-          {page==="pitch-deck"&&<PitchDeckPage pitchDeck={activeProject?.pitch_deck||{}} setPitchDeck={savePitchDeck} readonly={pitchPreviewMode||myRole==="viewer"} projectId={activeProject?.id} creativeCompany="GH Productions"/>}
+          {page==="pitch-deck"&&<PitchDeckPage pitchDeck={activeProject?.pitch_deck||{}} setPitchDeck={savePitchDeck} readonly={pitchPreviewMode||myRole==="viewer"} projectId={activeProject?.id} creativeCompany="GH Productions" brief={brief}/>}
           {conceptIdx>=0&&brief.concepts?.[conceptIdx]&&<ConceptPage key={conceptIdx} concept={brief.concepts[conceptIdx]} onChange={val=>setBrief(b=>{const c=[...(b.concepts||[])];c[conceptIdx]=val;return{...b,concepts:c};})}/>}
           {page==="shootday"&&<CallSheetPanel brief={brief} callSheet={activeProject?.call_sheet||{}} onUpdate={cs=>{setActiveProject(prev=>{const updated={...prev,call_sheet:cs};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"}/>}
           {page==="postprod"&&<PostProductionPanel postProduction={activeProject?.post_production||{}} onUpdate={pp=>{setActiveProject(prev=>{const updated={...prev,post_production:pp};clearTimeout(window._briefSaveTimer);window._briefSaveTimer=setTimeout(()=>saveProject(updated),1500);return updated;});}} readonly={myRole==="viewer"} projectId={activeProject?.id} meetingHistory={arr(activeProject?.meeting_history)} fullTranscript={activeProject?.recall_transcript||""} concepts={arr(activeProject?.brief?.concepts)}/>}
