@@ -4528,38 +4528,6 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
           <h1 style={{fontSize:24,fontWeight:700,color:"#37352f",marginBottom:6,letterSpacing:"-0.02em"}}>💰 Pricing</h1>
           <p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,margin:0}}>Build your rate card and custom packages for every niche you shoot — flat rates, day rates, half-days, or hourly. Frame Brief uses these when generating pitch decks. Mark services Active to include them in AI generation.</p>
         </div>
-        {/* Project Types Manager */}
-        <div style={{marginTop:20,padding:"16px 20px",background:"#fafaf9",border:"1px solid #f1f0ef",borderRadius:10}}>
-          <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10}}>Your Project Types</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
-            {userProjectTypes.map(type=>(
-              <div key={type} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px 4px 12px",borderRadius:20,background:"#37352f",border:"1px solid #37352f",fontSize:12,color:"#fff",fontFamily:"'Lora',serif"}}>
-                {type}
-                <button onClick={()=>saveUserProjectTypes(userProjectTypes.filter(t=>t!==type))}
-                  style={{background:"none",border:"none",color:"rgba(255,255,255,0.6)",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 2px",display:"flex",alignItems:"center"}}
-                  onMouseEnter={e=>e.currentTarget.style.color="#fff"} onMouseLeave={e=>e.currentTarget.style.color="rgba(255,255,255,0.6)"}>✕</button>
-              </div>
-            ))}
-          </div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <input value={newTypeInput} onChange={e=>setNewTypeInput(e.target.value)}
-              onKeyDown={e=>{if(e.key==="Enter"&&newTypeInput.trim()&&!userProjectTypes.includes(newTypeInput.trim())){saveUserProjectTypes([...userProjectTypes,newTypeInput.trim()]);setNewTypeInput("");}}}
-              placeholder="Add a project type…"
-              style={{flex:1,border:"1px solid #e8e4dc",borderRadius:6,padding:"7px 12px",fontSize:13,fontFamily:"'Lora',serif",outline:"none",color:"#37352f",background:"#fff"}}
-              onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
-            <button onClick={()=>{if(newTypeInput.trim()&&!userProjectTypes.includes(newTypeInput.trim())){saveUserProjectTypes([...userProjectTypes,newTypeInput.trim()]);setNewTypeInput("");}}}
-              style={{padding:"7px 16px",borderRadius:6,border:"none",background:"#37352f",color:"#fff",fontSize:13,fontFamily:"'Lora',serif",cursor:"pointer"}}>
-              Add
-            </button>
-            {userProjectTypes.join(",")!==PKG_PROJECT_TYPES.join(",")&&(
-              <button onClick={()=>saveUserProjectTypes(PKG_PROJECT_TYPES)}
-                style={{padding:"7px 12px",borderRadius:6,border:"1px solid #e8e4dc",background:"transparent",color:"#9b9a97",fontSize:12,fontFamily:"'Lora',serif",cursor:"pointer"}}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor="#9b9a97";e.currentTarget.style.color="#37352f";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e8e4dc";e.currentTarget.style.color="#9b9a97";}}>
-                Reset
-              </button>
-            )}
-          </div>
-        </div>
         {packages.length===0?(
           <div style={{textAlign:"center",padding:"60px 20px",border:"1px dashed #e8e4dc",borderRadius:10}}>
             <div style={{fontSize:40,marginBottom:14}}>💰</div>
