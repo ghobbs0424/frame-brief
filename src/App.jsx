@@ -3864,24 +3864,24 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
         ...(pd.coverImageUrl
           ?{backgroundImage:`url(${pd.coverImageUrl})`,backgroundSize:"cover",backgroundPosition:"center"}
           :{background:"linear-gradient(160deg, #0f0f0f 0%, #1c1a17 40%, #2a2520 70%, #1a1a2e 100%)"}),
-        minHeight:340,padding:"0",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden",borderRadius:"12px 12px 0 0"
+        padding:"0",display:"flex",flexDirection:"column",position:"relative",overflow:"hidden",borderRadius:"12px 12px 0 0"
       }}>
         <div style={{position:"absolute",inset:0,background:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E\")",opacity:0.4,pointerEvents:"none"}}/>
         <div style={{height:3,background:"linear-gradient(90deg, #e97942, #c8854a, transparent)",flexShrink:0}}/>
-        <div style={{flex:1,padding:"40px 40px 48px",display:"flex",flexDirection:"column",justifyContent:"flex-end",position:"relative",zIndex:1}}>
-          <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"rgba(245,237,224,0.5)",fontSize:11,letterSpacing:"0.2em",textTransform:"uppercase",marginBottom:28}}>
+        <div style={{padding:"28px 24px 32px",display:"flex",flexDirection:"column",justifyContent:"flex-end",position:"relative",zIndex:1}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"rgba(245,237,224,0.5)",fontSize:10,letterSpacing:"0.18em",textTransform:"uppercase",marginBottom:18}}>
             {creativeCompany||pd.creativeCompany||"GH Productions"}
             {pd.clientName?<span style={{color:"rgba(245,237,224,0.3)"}}>&nbsp;×&nbsp;</span>:""}
             {pd.clientName&&<span style={{color:"rgba(245,237,224,0.7)"}}>{pd.clientName}</span>}
           </div>
-          <div style={{fontSize:56,marginBottom:16,lineHeight:1}}>{pd.coverEmoji||"🎬"}</div>
-          {pd.projectType&&<div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#e97942",fontSize:11,letterSpacing:"0.16em",textTransform:"uppercase",marginBottom:14}}>{pd.projectType}</div>}
-          <div style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:32,color:"#f5ede0",lineHeight:1.35,maxWidth:720,marginBottom:32}}>
+          <div style={{fontSize:40,marginBottom:12,lineHeight:1}}>{pd.coverEmoji||"🎬"}</div>
+          {pd.projectType&&<div style={{fontFamily:"'IBM Plex Mono',monospace",color:"#e97942",fontSize:10,letterSpacing:"0.15em",textTransform:"uppercase",marginBottom:10}}>{pd.projectType}</div>}
+          <div style={{fontFamily:"'Lora',Georgia,serif",fontStyle:"italic",fontSize:22,color:"#f5ede0",lineHeight:1.45,maxWidth:680,marginBottom:24}}>
             {!readonly
-              ?<Editable value={pd.tagline||""} onChange={v=>setPitchDeck({...pd,tagline:v})} placeholder="Add a tagline…" style={{color:"#f5ede0",fontStyle:"italic",fontSize:32,lineHeight:1.35}}/>
+              ?<Editable value={pd.tagline||""} onChange={v=>setPitchDeck({...pd,tagline:v})} placeholder="Add a tagline…" style={{color:"#f5ede0",fontStyle:"italic",fontSize:22,lineHeight:1.45}}/>
               :<span>{pd.tagline}</span>}
           </div>
-          <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"rgba(245,237,224,0.35)",fontSize:11,letterSpacing:"0.12em"}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",color:"rgba(245,237,224,0.35)",fontSize:10,letterSpacing:"0.12em"}}>
             PREPARED FOR {pd.clientName?.toUpperCase()||"[CLIENT]"}&nbsp;·&nbsp;{pd.month||new Date().toLocaleString("default",{month:"long"}).toUpperCase()} {pd.year||new Date().getFullYear()}
           </div>
         </div>
