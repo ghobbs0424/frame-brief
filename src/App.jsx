@@ -3940,8 +3940,8 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
 
       {/* ── INVESTMENT — itemized invoice ──────────────────── */}
       {(lineItems.length>0||!readonly)&&(
-      <div style={{padding:"40px 40px",borderBottom:"1px solid #f1f0ef"}}>
-        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:36}}>
+      <div style={{padding:"40px 24px",borderBottom:"1px solid #f1f0ef"}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Investment</div>
           <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
           {investmentTotal>0&&(
@@ -3949,48 +3949,46 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
           )}
         </div>
 
-        {/* Itemized invoice table — inline style */}
+        {/* Itemized invoice — stacked card layout, mobile-friendly */}
         <div style={{border:"1px solid #e8e4dc",borderRadius:10,overflow:"hidden",marginBottom:20}}>
           {lineItems.map((li,i)=>{
             const unit=rateUnitLabel(li.rateType||"project");
             return(
-              <div key={li.id||i} style={{borderBottom:i<lineItems.length-1?"1px solid #f1f0ef":"none",background:"#fff"}}>
-                {/* Main row */}
-                <div style={{display:"flex",alignItems:"center",gap:0,padding:"0 0 0 0"}}>
-                  {/* Service name cell */}
-                  <div style={{flex:"0 0 44%",padding:"15px 20px",borderRight:"1px solid #f1f0ef"}}>
+              <div key={li.id||i} style={{borderBottom:i<lineItems.length-1?"1px solid #f1f0ef":"none",background:"#fff",padding:"16px 18px"}}>
+                {/* Service name + description */}
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:10}}>
+                  <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:14,fontWeight:600,color:"#37352f",lineHeight:1.4}}>
                       {!readonly
                         ?<Editable value={li.service||""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],service:v};setPitchDeck({...pd,lineItems:a});}} placeholder="Service name"/>
                         :<span>{li.service}</span>}
                     </div>
                     {(li.description||!readonly)&&(
-                      <div style={{fontSize:12,color:"#9b9a97",marginTop:3,lineHeight:1.5}}>
+                      <div style={{fontSize:12,color:"#9b9a97",marginTop:4,lineHeight:1.55}}>
                         {!readonly
                           ?<Editable value={li.description||""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],description:v};setPitchDeck({...pd,lineItems:a});}} placeholder="Spec / deliverable details…"/>
                           :<span>{li.description}</span>}
                       </div>
                     )}
                   </div>
-                  {/* Rate type cell — editable pill dropdown */}
-                  <div style={{flex:"0 0 22%",padding:"15px 16px",borderRight:"1px solid #f1f0ef",display:"flex",alignItems:"center"}}>
+                  {!readonly&&<button onClick={()=>setPitchDeck({...pd,lineItems:lineItems.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:13,padding:0,flexShrink:0,marginTop:2}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+                </div>
+                {/* Rate type + price row */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}>
+                  <div>
                     {!readonly?(
                       <select value={li.rateType||"project"} onChange={e=>{const a=[...lineItems];a[i]={...a[i],rateType:e.target.value};setPitchDeck({...pd,lineItems:a});}}
-                        style={{border:"1px solid #e8e4dc",borderRadius:5,padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",background:"#fafaf9",cursor:"pointer",outline:"none",width:"100%"}}>
+                        style={{border:"1px solid #e8e4dc",borderRadius:5,padding:"4px 8px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",background:"#fafaf9",cursor:"pointer",outline:"none"}}>
                         {RATE_TYPES.map(rt=><option key={rt.id} value={rt.id}>{rt.unit}</option>)}
                       </select>
                     ):(
                       <span style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97"}}>{unit}</span>
                     )}
                   </div>
-                  {/* Price cell */}
-                  <div style={{flex:1,padding:"15px 20px",display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8}}>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:15,fontWeight:700,color:"#37352f"}}>
-                      {!readonly
-                        ?<Editable value={li.price?fmtPrice(li.price):""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],price:parseBudgetNum(v)||0};setPitchDeck({...pd,lineItems:a});}} placeholder="$0" style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:700}}/>
-                        :<span>{fmtPrice(li.price)}</span>}
-                    </div>
-                    {!readonly&&<button onClick={()=>setPitchDeck({...pd,lineItems:lineItems.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:16,fontWeight:700,color:"#37352f",whiteSpace:"nowrap"}}>
+                    {!readonly
+                      ?<Editable value={li.price?fmtPrice(li.price):""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],price:parseBudgetNum(v)||0};setPitchDeck({...pd,lineItems:a});}} placeholder="$0" style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:700}}/>
+                      :<span>{fmtPrice(li.price)}</span>}
                   </div>
                 </div>
               </div>
@@ -3998,7 +3996,7 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
           })}
           {/* Total row */}
           {investmentTotal>0&&(
-            <div style={{display:"flex",alignItems:"center",padding:"14px 20px",background:"#0f0f0f"}}>
+            <div style={{display:"flex",alignItems:"center",padding:"14px 18px",background:"#0f0f0f"}}>
               <div style={{flex:1,fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"rgba(245,237,224,0.4)",textTransform:"uppercase",letterSpacing:"0.18em"}}>Total Investment</div>
               <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:17,fontWeight:700,color:"#f5ede0",letterSpacing:"-0.01em"}}>{fmtPrice(investmentTotal)}</div>
             </div>
