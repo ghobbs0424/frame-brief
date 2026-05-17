@@ -3461,7 +3461,7 @@ function IntakeScreen({
       const data=await res.json();
       if(!res.ok)throw new Error(data.error||"Failed to send bot");
       setBotSuccess(true);
-      if(onBotStarted)onBotStarted(data.botId||data.id);
+      if(onBotStarted)onBotStarted(data.botId||data.id, botProjectId||null);
       setTimeout(()=>{setBotModalOpen(false);setBotUrl("");setBotType("discovery");setBotProjectId(null);setBotSuccess(false);},2200);
     }catch(err){setBotError(err.message||"Something went wrong");}
     setBotLoading(false);
@@ -4458,9 +4458,14 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
               </div>
             </div>
 
+            {saveOk&&(
+              <div style={{marginBottom:8,padding:"8px 12px",background:"#f0faf4",border:"1px solid #b7ebc8",borderRadius:6,fontSize:12,color:"#1e7e34",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.03em",display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:14}}>✓</span> Success
+              </div>
+            )}
             <div style={{display:"flex",gap:8,paddingTop:12,borderTop:"1px solid #f1f0ef"}}>
-              <button onClick={flush} style={{background:saveOk?"#1e7e34":"#37352f",color:"#fff",border:"none",padding:"8px 18px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:6,transition:"background .2s"}}>
-                {saving===pkg.id?<><div style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,0.4)",borderTop:"1.5px solid #fff",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>Saving…</>:saveOk?"✓ Saved":"Save"}
+              <button onClick={flush} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 18px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:6,transition:"background .2s"}}>
+                {saving===pkg.id?<><div style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,0.4)",borderTop:"1.5px solid #fff",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>Saving…</>:"Save"}
               </button>
               <button onClick={()=>setDeleteConfirm(pkg.id)} style={{background:"none",border:"1px solid #f1f0ef",padding:"7px 14px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",color:"#9b9a97"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#c0392b";e.currentTarget.style.color="#c0392b";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#f1f0ef";e.currentTarget.style.color="#9b9a97";}}>Delete</button>
             </div>
@@ -5389,16 +5394,27 @@ ${JSON.stringify(brief)}`;
     onLoadSample={()=>{setTranscript(SAMPLE);setErrMsg("");}}
     user={user}
     projects={projects}
-    onBotStarted={async (botId)=>{
-      const projectId=crypto.randomUUID();
-      const{data}=await supabase.from("projects").insert({
-        id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",
-        status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},
-        doc_count:0,client_id:(inputClientId&&inputClientId!=="__new__"?inputClientId:null),recall_bot_id:botId,recall_status:"bot_joined",
-        created_at:new Date().toISOString(),updated_at:new Date().toISOString()
-      }).select().single();
-      const project=data||{id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,recall_bot_id:botId,recall_status:"bot_joined"};
-      setProjects(ps=>[project,...ps]);setActiveProject(project);setPage("overview");setScreen("doc");
+    onBotStarted={async (botId, existingProjectId)=>{
+      if(existingProjectId){
+        // Link bot to existing project
+        await supabase.from("projects").update({recall_bot_id:botId,recall_status:"bot_joined",updated_at:new Date().toISOString()}).eq("id",existingProjectId);
+        const existing=projects.find(p=>p.id===existingProjectId);
+        if(existing){
+          const updated={...existing,recall_bot_id:botId,recall_status:"bot_joined"};
+          setProjects(ps=>ps.map(p=>p.id===existingProjectId?updated:p));
+          setActiveProject(updated);setPage("overview");setScreen("doc");
+        }
+      }else{
+        const projectId=crypto.randomUUID();
+        const{data}=await supabase.from("projects").insert({
+          id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",
+          status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},
+          doc_count:0,client_id:(inputClientId&&inputClientId!=="__new__"?inputClientId:null),recall_bot_id:botId,recall_status:"bot_joined",
+          created_at:new Date().toISOString(),updated_at:new Date().toISOString()
+        }).select().single();
+        const project=data||{id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,recall_bot_id:botId,recall_status:"bot_joined"};
+        setProjects(ps=>[project,...ps]);setActiveProject(project);setPage("overview");setScreen("doc");
+      }
     }}
   /></div>);
 
