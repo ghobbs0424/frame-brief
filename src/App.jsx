@@ -38,18 +38,18 @@ RULES: Create one concept per deliverable. Generate 3-5 clientActionItems and 3-
 const CONCEPT_SCHEMA_INLINE=`{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}`;
 const INTAKE_SYSTEM_PROMPT=`You are a creative director AI for a video and photography production company. Analyze ALL provided context (notes, documents, references, transcript, budget range, project type) and return ONLY a valid JSON object with exactly two top-level keys — "pitchDeck" and "brief". No markdown, no backticks, no explanation, just raw JSON. All string values must stay on a single line.
 
-PITCH DECK STRUCTURE — premium client-facing proposal with tiered packages:
-{"coverEmoji":"🎬","creativeCompany":"GH Productions","clientName":"","projectType":"","month":"May","year":"2026","tagline":"","approach":"","packages":[{"id":"pkg-1","number":"01","name":"The Foundation","tagline":"","price":"","priceUnit":"/ project","description":"","included":[],"notIncluded":[],"bestFor":"","selected":false}],"comparison":{"features":[],"packages":[{"name":"","values":[]}]},"addOns":[{"name":"","price":""}],"paymentTerms":{"depositPercent":60,"depositTrigger":"to secure production date and team","balanceTiming":"day of production","expeditedDelivery":"","revisionPolicy":""},"whyUs":"","coverImageUrl":"","moodBoardUrls":[],"status":"draft","sentAt":null,"viewedAt":null,"selectedPackageId":null}
+PITCH DECK STRUCTURE — premium client-facing proposal:
+{"coverEmoji":"🎬","creativeCompany":"GH Productions","clientName":"","projectType":"","month":"May","year":"2026","tagline":"","approach":"","lineItems":[{"id":"li-1","service":"","description":"","price":0,"note":""}],"packages":[{"id":"pkg-1","number":"01","name":"","tagline":"","description":"","included":[],"notIncluded":[],"bestFor":"","selected":false}],"addOns":[{"name":"","price":""}],"paymentTerms":{"depositPercent":60,"depositTrigger":"to secure production date and team","balanceTiming":"day of production","expeditedDelivery":"","revisionPolicy":""},"whyUs":"","coverImageUrl":"","moodBoardUrls":[],"status":"draft","sentAt":null,"viewedAt":null,"selectedPackageId":null}
 
 BRIEF STRUCTURE — internal production document:
 {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[{"name":"","address":"","description":""}],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"","keyPoints":[],"topics":[{"title":"","points":[]}]},"concepts":[${CONCEPT_SCHEMA_INLINE}]}
 
 PITCH DECK RULES:
-- Generate 2-3 packages unless intake says otherwise. Use creative tier names like "The Foundation", "Dual Shooter", "Full Build", "The Essentials", "Brand Story", "Full Production". Never use "Basic", "Standard", "Premium", "Package A".
-- Package prices must align with the budget range if given.
-- comparison.features = array of ALL feature strings across all packages (e.g. "4K Video", "Color Grading", "Same-Day Turnaround").
-- comparison.packages = array of {name, values} where values is array of true/false per feature (in same order as comparison.features).
-- addOns: 2-4 common add-ons with prices (e.g. {"name":"Drone footage","price":"$350"}).
+- lineItems = itemized scope of work with INDIVIDUAL prices per deliverable. Prices must SUM EXACTLY to the total budget if one is provided. If no budget given, price each deliverable at realistic market rates for videography/photography (music video $3k-$8k, documentary $2k-$5k, stills $500-$1500, social reels $300-$800, drone $400-$800).
+- lineItems.price is a NUMBER (no $ sign). lineItems.description = one-line deliverable spec (e.g. "4-minute music video, 16:9 4K, color graded").
+- packages correspond 1:1 with each deliverable/concept — one package per deliverable. Package name = deliverable name. Do NOT put a price on packages (price lives on lineItems). Use packages only for scope description, what's included, and what's excluded.
+- NEVER assign the full project budget to each individual package — that is wrong. Each package/deliverable gets its own proportional price via lineItems.
+- addOns: 2-4 optional extras with prices (e.g. {"name":"Drone footage","price":"$350"}).
 - paymentTerms: default 60% deposit. Fill expeditedDelivery and revisionPolicy based on context.
 - whyUs: 2 sentences referencing "GH Productions" specifically.
 - approach: 2-3 sentences on the creative direction for this specific project.
@@ -3644,6 +3644,49 @@ function IntakeScreen({
   );
 }
 
+// ─── BUDGET ALLOCATION HELPERS ───────────────────────────────────────────────
+function parseBudgetNum(str){
+  if(!str)return 0;
+  const s=String(str).toLowerCase().replace(/[^0-9.k]/g,"");
+  if(s.endsWith("k"))return parseFloat(s)*1000;
+  return parseFloat(s)||0;
+}
+function typeWeight(t){
+  t=(t||"").toLowerCase();
+  if(/music.video|narrative|film|cinematic/.test(t))return 4.0;
+  if(/commercial|brand.film|brand/.test(t))return 3.5;
+  if(/documentary|epk|long/.test(t))return 3.0;
+  if(/photo|stills|portrait|headshot/.test(t))return 2.0;
+  if(/reel|social|short/.test(t))return 1.0;
+  return 2.5;
+}
+// Market-rate fallback prices when no budget is given
+function marketRate(t){
+  t=(t||"").toLowerCase();
+  if(/music.video/.test(t))return 4500;
+  if(/commercial|brand.film/.test(t))return 5500;
+  if(/documentary|epk/.test(t))return 2500;
+  if(/photo|stills|portrait/.test(t))return 800;
+  if(/reel|social/.test(t))return 500;
+  return 2000;
+}
+function allocateBudget(concepts,budgetStr){
+  const total=parseBudgetNum(budgetStr);
+  if(!concepts.length)return[];
+  if(!total){return concepts.map(c=>marketRate(c.type));}
+  const weights=concepts.map(c=>typeWeight(c.type));
+  const sum=weights.reduce((a,b)=>a+b,0);
+  let alloc=weights.map(w=>Math.round((w/sum)*total/50)*50);
+  // Fix rounding drift so alloc sums exactly to total
+  const drift=total-alloc.reduce((a,b)=>a+b,0);
+  alloc[alloc.length-1]+=drift;
+  return alloc;
+}
+function fmtPrice(n){
+  if(!n&&n!==0)return"";
+  return"$"+Number(n).toLocaleString("en-US");
+}
+
 // ─── PITCH DECK PAGE ──────────────────────────────────────────────────────────
 function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompany,brief}){
   const pd={...(pitchDeck||{})};
@@ -3653,14 +3696,26 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
   if(!pd.tagline&&brief?.logline) pd.tagline=brief.logline;
   if(!pd.approach&&brief?.overview) pd.approach=brief.overview;
   if(!pd.coverEmoji&&brief?.coverEmoji) pd.coverEmoji=brief.coverEmoji||"🎬";
+
+  // Auto-derive lineItems from concepts with smart budget allocation
+  if(!arr(pd.lineItems).length&&arr(brief?.concepts).length){
+    const prices=allocateBudget(arr(brief.concepts),brief?.budget);
+    pd.lineItems=arr(brief.concepts).map((c,i)=>({
+      id:`li-${i+1}`,
+      service:c.title||`Deliverable ${i+1}`,
+      description:c.deliverableFormat||c.type||"",
+      price:prices[i]||0,
+      note:"",
+    }));
+  }
+
+  // Auto-derive packages from concepts (descriptions/scope only — no price on package)
   if(!arr(pd.packages).length&&arr(brief?.concepts).length){
     pd.packages=arr(brief.concepts).map((c,i)=>({
       id:`pkg-${i+1}`,
       number:String(i+1).padStart(2,"0"),
-      name:c.title||`Package ${i+1}`,
+      name:c.title||`Deliverable ${i+1}`,
       tagline:c.logline||"",
-      price:brief.budget||"",
-      priceUnit:"/ project",
       description:c.description||"",
       included:[c.deliverableFormat,...arr(c.shotList).slice(0,5).map(s=>s.description)].filter(Boolean),
       notIncluded:[],
@@ -3671,6 +3726,8 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
   if(!pd.paymentTerms) pd.paymentTerms={depositPercent:60,depositTrigger:"to secure production date and team",balanceTiming:"day of production"};
 
   const pkgs=arr(pd.packages);
+  const lineItems=arr(pd.lineItems);
+  const investmentTotal=lineItems.reduce((s,li)=>s+(Number(li.price)||0),0);
   const addOns=arr(pd.addOns);
   const moodUrls=arr(pd.moodBoardUrls);
   const pt=pd.paymentTerms||{};
@@ -3779,127 +3836,160 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
         </div>
       )}
 
-      {/* ── INVESTMENT / PACKAGES ──────────────────────────── */}
+      {/* ── INVESTMENT — itemized invoice ──────────────────── */}
+      {(lineItems.length>0||!readonly)&&(
       <div style={{padding:"56px 64px",borderBottom:"1px solid #f1f0ef"}}>
         <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:36}}>
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Investment</div>
           <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
-          {pkgs.length>1&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#c4c3bf",whiteSpace:"nowrap"}}>{pkgs.length} options</div>}
+          {investmentTotal>0&&(
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,fontWeight:700,color:"#37352f",whiteSpace:"nowrap"}}>{fmtPrice(investmentTotal)}</div>
+          )}
         </div>
-        {pkgs.map((pkg,i)=>{
-          const isSelected=pd.selectedPackageId===pkg.id;
-          return(
-            <div key={pkg.id||i} style={{
-              background:"#fff",
-              border:"1px solid #e8e4dc",
-              borderLeft:isSelected?"4px solid #e97942":"4px solid transparent",
-              borderRadius:12,
-              padding:"36px 40px",
-              marginBottom:20,
-              boxShadow:isSelected?"0 4px 20px rgba(233,121,66,0.1)":"0 2px 12px rgba(0,0,0,0.04)",
-              position:"relative",
-              overflow:"hidden",
-              transition:"box-shadow .2s",
-            }}>
-              <div style={{position:"absolute",top:-10,right:20,fontFamily:"'IBM Plex Mono',monospace",fontSize:120,fontWeight:700,color:"#f1f0ef",lineHeight:1,pointerEvents:"none",userSelect:"none",zIndex:0}}>
-                {pkg.number||String(i+1).padStart(2,"0")}
+
+        {/* Itemized table */}
+        <div style={{border:"1px solid #e8e4dc",borderRadius:10,overflow:"hidden",marginBottom:20}}>
+          {/* Header row */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 2fr auto",gap:0,background:"#fafaf9",borderBottom:"1px solid #e8e4dc",padding:"10px 24px"}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.14em"}}>Service</div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.14em"}}>Description</div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.14em",textAlign:"right",minWidth:90}}>Price</div>
+          </div>
+          {/* Line item rows */}
+          {lineItems.map((li,i)=>(
+            <div key={li.id||i} style={{display:"grid",gridTemplateColumns:"1fr 2fr auto",gap:0,padding:"16px 24px",borderBottom:i<lineItems.length-1?"1px solid #f1f0ef":"none",alignItems:"flex-start",background:"#fff"}}>
+              <div style={{fontSize:14,fontWeight:600,color:"#37352f",lineHeight:1.5,paddingRight:16}}>
+                {!readonly
+                  ?<Editable value={li.service||""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],service:v};setPitchDeck({...pd,lineItems:a});}} placeholder="Service name"/>
+                  :<span>{li.service}</span>}
               </div>
-              <div style={{position:"relative",zIndex:1}}>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",flexWrap:"wrap",gap:16,marginBottom:4}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:8}}>Package {pkg.number||String(i+1).padStart(2,"0")}</div>
-                    <div style={{fontSize:28,fontWeight:700,color:"#37352f",lineHeight:1.2,letterSpacing:"-0.02em"}}>
-                      {!readonly?<Editable value={pkg.name||""} onChange={v=>upPkg(i,"name",v)} placeholder="Package name…"/>:<span>{pkg.name}</span>}
-                    </div>
-                    <div style={{fontStyle:"italic",fontSize:15,color:"#9b9a97",marginTop:6}}>
-                      {!readonly?<Editable value={pkg.tagline||""} onChange={v=>upPkg(i,"tagline",v)} placeholder="Short positioning line…"/>:<span>{pkg.tagline}</span>}
-                    </div>
-                  </div>
-                  <div style={{textAlign:"right",flexShrink:0}}>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:26,fontWeight:700,color:"#37352f",letterSpacing:"-0.02em"}}>
-                      {!readonly?<Editable value={pkg.price||""} onChange={v=>upPkg(i,"price",v)} placeholder="$X,XXX" style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:26,fontWeight:700}}/>:<span>{pkg.price}</span>}
-                    </div>
-                    <div style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace",marginTop:2}}>{pkg.priceUnit||"/ project"}</div>
-                  </div>
+              <div style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,paddingRight:16}}>
+                {!readonly
+                  ?<Editable value={li.description||""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],description:v};setPitchDeck({...pd,lineItems:a});}} placeholder="Spec / deliverable details…"/>
+                  :<span>{li.description}</span>}
+              </div>
+              <div style={{textAlign:"right",minWidth:90,display:"flex",alignItems:"center",justifyContent:"flex-end",gap:8}}>
+                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,fontWeight:700,color:"#37352f"}}>
+                  {!readonly
+                    ?<Editable value={li.price?String(li.price):""} onChange={v=>{const a=[...lineItems];a[i]={...a[i],price:parseBudgetNum(v)||0};setPitchDeck({...pd,lineItems:a});}} placeholder="0" style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:700,textAlign:"right"}}/>
+                    :<span>{fmtPrice(li.price)}</span>}
+                  {readonly&&!li.price&&null}
+                  {!readonly&&li.price?null:<span style={{color:"#c4c3bf"}}>{readonly?"":""}</span>}
                 </div>
-                {(pkg.description||!readonly)&&(
-                  <div style={{fontSize:14,color:"#37352f",lineHeight:1.8,margin:"20px 0",paddingTop:16,borderTop:"1px solid #f1f0ef"}}>
-                    {!readonly?<Editable value={pkg.description||""} onChange={v=>upPkg(i,"description",v)} multiline placeholder="Describe this package…"/>:<p style={{margin:0}}>{pkg.description}</p>}
-                  </div>
-                )}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:28,margin:"20px 0"}}>
-                  <div>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:12}}>What's Included</div>
-                    {arr(pkg.included).map((item,j)=>(
-                      <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:7,fontSize:13}}>
-                        <span style={{color:"#1e7e34",flexShrink:0,marginTop:1,fontSize:14}}>✓</span>
-                        <div style={{flex:1,color:"#37352f",lineHeight:1.5}}>
-                          {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"included",j,v)}/>:<span>{item}</span>}
-                        </div>
-                        {!readonly&&<button onClick={()=>delPkgArrItem(i,"included",j)} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+                {!readonly&&<button onClick={()=>setPitchDeck({...pd,lineItems:lineItems.filter((_,j)=>j!==i)})} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+              </div>
+            </div>
+          ))}
+          {/* Total row */}
+          {investmentTotal>0&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 2fr auto",gap:0,padding:"14px 24px",background:"#0f0f0f",borderTop:"none",alignItems:"center"}}>
+              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"rgba(245,237,224,0.4)",textTransform:"uppercase",letterSpacing:"0.14em"}}>Total</div>
+              <div/>
+              <div style={{textAlign:"right",minWidth:90,fontFamily:"'IBM Plex Mono',monospace",fontSize:16,fontWeight:700,color:"#f5ede0",letterSpacing:"-0.01em"}}>{fmtPrice(investmentTotal)}</div>
+            </div>
+          )}
+        </div>
+
+        {!readonly&&(
+          <button onClick={()=>{
+            const id=`li-${Date.now()}`;
+            setPitchDeck({...pd,lineItems:[...lineItems,{id,service:"",description:"",price:0,note:""}]});
+          }} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"10px 20px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit",marginBottom:32}}
+            onMouseEnter={e=>{e.currentTarget.style.color="#37352f";e.currentTarget.style.borderColor="#c4c3bf";}} onMouseLeave={e=>{e.currentTarget.style.color="#9b9a97";e.currentTarget.style.borderColor="#e8e4dc";}}>
+            + Add line item
+          </button>
+        )}
+
+        {/* Scope of work — concept/deliverable detail cards */}
+        {pkgs.length>0&&(
+          <div style={{marginTop:8}}>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.2em",marginBottom:20}}>Scope of Work</div>
+            {pkgs.map((pkg,i)=>(
+              <div key={pkg.id||i} style={{
+                background:"#fff",border:"1px solid #e8e4dc",borderLeft:"3px solid #e8e4dc",
+                borderRadius:10,padding:"28px 32px",marginBottom:16,
+                boxShadow:"0 1px 6px rgba(0,0,0,0.04)",position:"relative",overflow:"hidden",
+              }}>
+                <div style={{position:"absolute",top:-10,right:16,fontFamily:"'IBM Plex Mono',monospace",fontSize:100,fontWeight:700,color:"#f7f6f5",lineHeight:1,pointerEvents:"none",userSelect:"none",zIndex:0}}>
+                  {pkg.number||String(i+1).padStart(2,"0")}
+                </div>
+                <div style={{position:"relative",zIndex:1}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:16,marginBottom:4,flexWrap:"wrap"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",letterSpacing:"0.14em",textTransform:"uppercase",marginBottom:6}}>Deliverable {pkg.number||String(i+1).padStart(2,"0")}</div>
+                      <div style={{fontSize:22,fontWeight:700,color:"#37352f",lineHeight:1.2,letterSpacing:"-0.01em"}}>
+                        {!readonly?<Editable value={pkg.name||""} onChange={v=>upPkg(i,"name",v)} placeholder="Deliverable name…"/>:<span>{pkg.name}</span>}
                       </div>
-                    ))}
-                    {!readonly&&<button onClick={()=>addPkgArrItem(i,"included","New deliverable")} style={{background:"none",border:"none",color:"#c4c3bf",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"6px 0",display:"flex",alignItems:"center",gap:4}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>+ Add item</button>}
+                      {(pkg.tagline||!readonly)&&<div style={{fontStyle:"italic",fontSize:14,color:"#9b9a97",marginTop:5}}>
+                        {!readonly?<Editable value={pkg.tagline||""} onChange={v=>upPkg(i,"tagline",v)} placeholder="Short creative line…"/>:<span>{pkg.tagline}</span>}
+                      </div>}
+                    </div>
+                    {/* Price badge from matching lineItem */}
+                    {lineItems[i]?.price>0&&(
+                      <div style={{flexShrink:0,background:"#0f0f0f",borderRadius:8,padding:"8px 16px",textAlign:"right"}}>
+                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:16,fontWeight:700,color:"#f5ede0"}}>{fmtPrice(lineItems[i].price)}</div>
+                      </div>
+                    )}
                   </div>
-                  {(arr(pkg.notIncluded).length>0||!readonly)&&(
+                  {(pkg.description||!readonly)&&(
+                    <div style={{fontSize:14,color:"#37352f",lineHeight:1.8,margin:"16px 0",paddingTop:14,borderTop:"1px solid #f1f0ef"}}>
+                      {!readonly?<Editable value={pkg.description||""} onChange={v=>upPkg(i,"description",v)} multiline placeholder="Describe this deliverable…"/>:<p style={{margin:0}}>{pkg.description}</p>}
+                    </div>
+                  )}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:24,marginTop:16}}>
                     <div>
-                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:12}}>Not Included</div>
-                      {arr(pkg.notIncluded).map((item,j)=>(
-                        <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:7,fontSize:13}}>
-                          <span style={{color:"#c4c3bf",flexShrink:0,marginTop:1}}>×</span>
-                          <div style={{flex:1,color:"#c4c3bf",lineHeight:1.5}}>
-                            {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"notIncluded",j,v)}/>:<span>{item}</span>}
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:10}}>What's Included</div>
+                      {arr(pkg.included).map((item,j)=>(
+                        <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:6,fontSize:13}}>
+                          <span style={{color:"#1e7e34",flexShrink:0,marginTop:1,fontSize:13}}>✓</span>
+                          <div style={{flex:1,color:"#37352f",lineHeight:1.5}}>
+                            {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"included",j,v)}/>:<span>{item}</span>}
                           </div>
-                          {!readonly&&<button onClick={()=>delPkgArrItem(i,"notIncluded",j)} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+                          {!readonly&&<button onClick={()=>delPkgArrItem(i,"included",j)} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
                         </div>
                       ))}
-                      {!readonly&&<button onClick={()=>addPkgArrItem(i,"notIncluded","Not included")} style={{background:"none",border:"none",color:"#c4c3bf",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"6px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>+ Add item</button>}
+                      {!readonly&&<button onClick={()=>addPkgArrItem(i,"included","New deliverable")} style={{background:"none",border:"none",color:"#c4c3bf",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"5px 0",display:"flex",alignItems:"center",gap:4}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>+ Add item</button>}
+                    </div>
+                    {(arr(pkg.notIncluded).length>0||!readonly)&&(
+                      <div>
+                        <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:10}}>Not Included</div>
+                        {arr(pkg.notIncluded).map((item,j)=>(
+                          <div key={j} style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:6,fontSize:13}}>
+                            <span style={{color:"#c4c3bf",flexShrink:0,marginTop:1}}>×</span>
+                            <div style={{flex:1,color:"#c4c3bf",lineHeight:1.5}}>
+                              {!readonly?<Editable value={item} onChange={v=>upPkgArr(i,"notIncluded",j,v)}/>:<span>{item}</span>}
+                            </div>
+                            {!readonly&&<button onClick={()=>delPkgArrItem(i,"notIncluded",j)} style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:11,padding:0,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>}
+                          </div>
+                        ))}
+                        {!readonly&&<button onClick={()=>addPkgArrItem(i,"notIncluded","Not included")} style={{background:"none",border:"none",color:"#c4c3bf",fontSize:12,cursor:"pointer",fontFamily:"inherit",padding:"5px 0"}} onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#c4c3bf"}>+ Add item</button>}
+                      </div>
+                    )}
+                  </div>
+                  {(pkg.bestFor||!readonly)&&(
+                    <div style={{background:"#fafaf9",border:"1px solid #f1f0ef",borderLeft:"3px solid #e97942",borderRadius:"0 6px 6px 0",padding:"12px 18px",marginTop:16}}>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#e97942",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:3}}>Best For</div>
+                      <div style={{fontStyle:"italic",fontSize:13,color:"#37352f",lineHeight:1.6}}>
+                        {!readonly?<Editable value={pkg.bestFor||""} onChange={v=>upPkg(i,"bestFor",v)} placeholder="Ideal use case for this deliverable…"/>:<span>{pkg.bestFor}</span>}
+                      </div>
                     </div>
                   )}
                 </div>
-                {(pkg.bestFor||!readonly)&&(
-                  <div style={{background:"#fafaf9",border:"1px solid #f1f0ef",borderLeft:"3px solid #e97942",borderRadius:"0 8px 8px 0",padding:"14px 20px",marginBottom:24}}>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:9,color:"#e97942",textTransform:"uppercase",letterSpacing:"0.14em",marginBottom:4}}>Best For</div>
-                    <div style={{fontStyle:"italic",fontSize:13,color:"#37352f",lineHeight:1.6}}>
-                      {!readonly?<Editable value={pkg.bestFor||""} onChange={v=>upPkg(i,"bestFor",v)} placeholder="Describe the ideal client for this package…"/>:<span>{pkg.bestFor}</span>}
-                    </div>
-                  </div>
-                )}
-                <div style={{display:"flex",alignItems:"center",gap:12}}>
-                  <button
-                    onClick={()=>{
-                      const updated={...pd,selectedPackageId:isSelected?null:pkg.id,status:isSelected?pd.status:"package_selected"};
-                      setPitchDeck(updated);
-                      if(projectId)supabase.from("projects").update({pitch_deck:updated}).eq("id",projectId);
-                    }}
-                    style={{
-                      background:isSelected?"#f0faf4":"#37352f",
-                      color:isSelected?"#1e7e34":"#fff",
-                      border:isSelected?"1px solid #a8d5b5":"none",
-                      borderRadius:8,padding:"11px 24px",fontSize:13,
-                      cursor:"pointer",fontFamily:"'Lora',serif",fontWeight:600,
-                      display:"flex",alignItems:"center",gap:8,transition:"all .2s",
-                    }}
-                    onMouseEnter={e=>{if(!isSelected)e.currentTarget.style.background="#1a1a1a";}}
-                    onMouseLeave={e=>{if(!isSelected)e.currentTarget.style.background="#37352f";}}>
-                    {isSelected?"✓ Selected":readonly?"Select This Package →":"Mark as Selected →"}
-                  </button>
-                  {isSelected&&<span style={{fontSize:12,color:"#1e7e34",fontStyle:"italic"}}>This package is highlighted in the client view</span>}
-                </div>
               </div>
-            </div>
-          );
-        })}
-        {!readonly&&(
-          <button onClick={()=>{
-            const id=`pkg-${Date.now()}`;
-            setPitchDeck({...pd,packages:[...pkgs,{id,number:String(pkgs.length+1).padStart(2,"0"),name:"New Package",tagline:"",price:"",priceUnit:"/ project",description:"",included:[],notIncluded:[],bestFor:"",selected:false}]});
-          }} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"14px 24px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit",width:"100%",textAlign:"center"}}
-            onMouseEnter={e=>{e.currentTarget.style.color="#37352f";e.currentTarget.style.borderColor="#c4c3bf";}} onMouseLeave={e=>{e.currentTarget.style.color="#9b9a97";e.currentTarget.style.borderColor="#e8e4dc";}}>
-            + Add Package
-          </button>
+            ))}
+            {!readonly&&(
+              <button onClick={()=>{
+                const id=`pkg-${Date.now()}`;const n=String(pkgs.length+1).padStart(2,"0");
+                setPitchDeck({...pd,packages:[...pkgs,{id,number:n,name:"New Deliverable",tagline:"",description:"",included:[],notIncluded:[],bestFor:"",selected:false}]});
+              }} style={{background:"none",border:"1px dashed #e8e4dc",borderRadius:8,padding:"12px 20px",fontSize:13,color:"#9b9a97",cursor:"pointer",fontFamily:"inherit",width:"100%",textAlign:"center",marginTop:4}}
+                onMouseEnter={e=>{e.currentTarget.style.color="#37352f";e.currentTarget.style.borderColor="#c4c3bf";}} onMouseLeave={e=>{e.currentTarget.style.color="#9b9a97";e.currentTarget.style.borderColor="#e8e4dc";}}>
+                + Add Deliverable
+              </button>
+            )}
+          </div>
         )}
       </div>
+      )}
 
       {/* ── COMPARISON TABLE ─────────────────────────────── */}
       {arr(comp.features).length>0&&(
