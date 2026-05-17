@@ -4274,12 +4274,14 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
 // ─── PRICING (formerly Package Library) ──────────────────────────────────────
 const PKG_PROJECT_TYPES=["Video","Photography","Real Estate","Music Video","Brand","Event","Commercial","Documentary"];
 
-function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesChange,setDeleteConfirm,userProjectTypes}){
+function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesChange,setDeleteConfirm,userProjectTypes,saveUserProjectTypes}){
   const[local,setLocal]=useState(pkg);
   const[included,setIncluded]=useState(arr(pkg.included));
   const[notIncluded,setNotIncluded]=useState(arr(pkg.not_included));
   const[projectTypes,setProjectTypes]=useState(arr(pkg.project_types));
   const[saveOk,setSaveOk]=useState(false);
+  const[addingType,setAddingType]=useState(false);
+  const[newTypeVal,setNewTypeVal]=useState("");
   const isOpen=expanded===pkg.id;
   const rateType=local.rate_type||"project";
   const unit=rateUnitLabel(rateType);
@@ -4412,7 +4414,7 @@ function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesCha
           {/* Project Types */}
           <div style={{marginBottom:16}}>
             <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Project Types</div>
-            <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+            <div style={{display:"flex",flexWrap:"wrap",gap:6,alignItems:"center"}}>
               {arr(userProjectTypes).map(type=>{
                 const active=projectTypes.includes(type);
                 return(
@@ -4422,6 +4424,31 @@ function PkgCard({pkg,expanded,setExpanded,savePkg,saving,packages,onPackagesCha
                   </button>
                 );
               })}
+              {addingType?(
+                <div style={{display:"inline-flex",alignItems:"center",gap:0,borderRadius:20,border:"1px solid #37352f",overflow:"hidden",background:"#fff"}}>
+                  <input autoFocus value={newTypeVal} onChange={e=>setNewTypeVal(e.target.value)}
+                    onKeyDown={e=>{
+                      if(e.key==="Enter"&&newTypeVal.trim()){
+                        const t=newTypeVal.trim();
+                        if(!userProjectTypes.includes(t))saveUserProjectTypes([...userProjectTypes,t]);
+                        if(!projectTypes.includes(t)){const updated=[...projectTypes,t];setProjectTypes(updated);savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:updated});}
+                        setNewTypeVal("");setAddingType(false);
+                      }
+                      if(e.key==="Escape"){setNewTypeVal("");setAddingType(false);}
+                    }}
+                    onBlur={()=>{if(!newTypeVal.trim()){setAddingType(false);}}}
+                    placeholder="Type name…"
+                    style={{border:"none",outline:"none",padding:"4px 10px",fontSize:12,fontFamily:"'Lora',serif",color:"#37352f",width:110,background:"transparent"}}/>
+                  <button onMouseDown={e=>{e.preventDefault();const t=newTypeVal.trim();if(t){if(!userProjectTypes.includes(t))saveUserProjectTypes([...userProjectTypes,t]);if(!projectTypes.includes(t)){const updated=[...projectTypes,t];setProjectTypes(updated);savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:updated});}}setNewTypeVal("");setAddingType(false);}}
+                    style={{background:"#37352f",border:"none",color:"#fff",padding:"4px 10px",cursor:"pointer",fontSize:12,lineHeight:1}}>✓</button>
+                </div>
+              ):(
+                <button onClick={()=>setAddingType(true)}
+                  style={{padding:"4px 12px",borderRadius:20,border:"1px dashed #d4d0c8",background:"transparent",color:"#c4c3bf",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor="#9b9a97";e.currentTarget.style.color="#9b9a97";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#d4d0c8";e.currentTarget.style.color="#c4c3bf";}}>
+                  + Project Type
+                </button>
+              )}
             </div>
           </div>
 
@@ -4541,7 +4568,7 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
             <button onClick={createPackage} style={{background:"#37352f",color:"#fff",border:"none",padding:"10px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>+ Add First Service</button>
           </div>
         ):(
-          packages.map(pkg=><PkgCard key={pkg.id} pkg={pkg} expanded={expanded} setExpanded={setExpanded} savePkg={savePkg} saving={saving} packages={packages} onPackagesChange={onPackagesChange} setDeleteConfirm={setDeleteConfirm} userProjectTypes={userProjectTypes}/>)
+          packages.map(pkg=><PkgCard key={pkg.id} pkg={pkg} expanded={expanded} setExpanded={setExpanded} savePkg={savePkg} saving={saving} packages={packages} onPackagesChange={onPackagesChange} setDeleteConfirm={setDeleteConfirm} userProjectTypes={userProjectTypes} saveUserProjectTypes={saveUserProjectTypes}/>)
         )}
       </div>
       {deleteConfirm&&(
