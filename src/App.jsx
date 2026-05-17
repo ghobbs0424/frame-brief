@@ -4181,27 +4181,152 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
       )}
 
       {/* ── PAYMENT & SCHEDULING ─────────────────────────── */}
-      <div style={{padding:"40px 40px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
-        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+      <div style={{padding:"40px 24px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24}}>
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Payment & Scheduling</div>
           <div style={{flex:1,height:1,background:"#e8e4dc"}}/>
         </div>
-        <div style={{maxWidth:600}}>
-          {[
-            [`${pt.depositPercent||60}% deposit`,pt.depositTrigger||"to secure production date and team"],
-            ["Balance due",pt.balanceTiming||"day of production"],
-            pt.expeditedDelivery?["Expedited delivery",pt.expeditedDelivery]:null,
-            pt.revisionPolicy?["Revisions",pt.revisionPolicy]:null,
-          ].filter(Boolean).map(([label,detail],i)=>(
-            <div key={i} style={{display:"flex",gap:20,padding:"14px 0",borderBottom:"1px solid #f1f0ef",alignItems:"flex-start"}}>
-              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#e97942",flexShrink:0,paddingTop:2,minWidth:140,fontWeight:600}}>{label}</div>
-              <div style={{fontSize:14,color:"#37352f",lineHeight:1.6}}>{detail}</div>
+
+        {/* Structure selector — edit mode only */}
+        {!readonly&&(
+          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:24}}>
+            {[{id:"deposit",label:"Deposit"},{id:"milestone",label:"Milestones"},{id:"upfront",label:"100% Upfront"},{id:"custom",label:"Custom"}].map(s=>{
+              const active=(pt.structure||"deposit")===s.id;
+              return(
+                <button key={s.id} onClick={()=>setPitchDeck({...pd,paymentTerms:{...pt,structure:s.id}})}
+                  style={{padding:"5px 14px",borderRadius:20,border:"1px solid",borderColor:active?"#37352f":"#e8e4dc",background:active?"#37352f":"transparent",color:active?"#fff":"#9b9a97",fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",transition:"all .15s"}}>
+                  {s.label}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── DEPOSIT structure ── */}
+        {(pt.structure||"deposit")==="deposit"&&(
+          <div>
+            {/* Deposit row */}
+            <div style={{display:"flex",gap:16,padding:"14px 0",borderBottom:"1px solid #f1f0ef",alignItems:"center",flexWrap:"wrap"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                {!readonly?(
+                  <div style={{display:"inline-flex",alignItems:"center",gap:2}}>
+                    <input type="number" min={0} max={100} value={pt.depositPercent||60}
+                      onChange={e=>setPitchDeck({...pd,paymentTerms:{...pt,depositPercent:Number(e.target.value)}})}
+                      style={{width:52,border:"1px solid #e8e4dc",borderRadius:4,padding:"3px 6px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",outline:"none",color:"#e97942",fontWeight:700,background:"transparent",textAlign:"center"}}
+                      onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                    <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"#e97942",fontWeight:700}}>% deposit</span>
+                  </div>
+                ):(
+                  <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#e97942",fontWeight:600,minWidth:120}}>{pt.depositPercent||60}% deposit</span>
+                )}
+              </div>
+              <div style={{flex:1,fontSize:14,color:"#37352f",lineHeight:1.6,minWidth:140}}>
+                {!readonly
+                  ?<Editable value={pt.depositTrigger||"to secure production date and team"} onChange={v=>setPitchDeck({...pd,paymentTerms:{...pt,depositTrigger:v}})} placeholder="trigger / reason…"/>
+                  :<span>{pt.depositTrigger||"to secure production date and team"}</span>}
+              </div>
             </div>
-          ))}
-          {!readonly&&(
-            <div style={{display:"flex",alignItems:"center",gap:10,marginTop:16}}>
-              <span style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>Deposit %:</span>
-              <input type="number" value={pt.depositPercent||60} onChange={e=>setPitchDeck({...pd,paymentTerms:{...pt,depositPercent:Number(e.target.value)}})} style={{width:64,border:"1px solid #e8e4dc",borderRadius:4,padding:"4px 8px",fontSize:13,fontFamily:"'IBM Plex Mono',monospace",outline:"none"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            {/* Balance due row */}
+            <div style={{display:"flex",gap:16,padding:"14px 0",borderBottom:"1px solid #f1f0ef",alignItems:"center",flexWrap:"wrap"}}>
+              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#e97942",fontWeight:600,flexShrink:0,minWidth:120}}>Balance due</span>
+              <div style={{flex:1,fontSize:14,color:"#37352f",lineHeight:1.6,minWidth:140}}>
+                {!readonly
+                  ?<Editable value={pt.balanceTiming||"day of production"} onChange={v=>setPitchDeck({...pd,paymentTerms:{...pt,balanceTiming:v}})} placeholder="when is balance due…"/>
+                  :<span>{pt.balanceTiming||"day of production"}</span>}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── MILESTONE structure ── */}
+        {(pt.structure)==="milestone"&&(
+          <div>
+            {arr(pt.milestones).length===0&&!readonly&&(
+              <div style={{color:"#9b9a97",fontSize:13,marginBottom:12,fontFamily:"'Lora',serif"}}>No milestones yet — add one below.</div>
+            )}
+            {arr(pt.milestones).map((ms,i)=>(
+              <div key={i} style={{display:"flex",gap:10,padding:"12px 0",borderBottom:"1px solid #f1f0ef",alignItems:"center",flexWrap:"wrap"}}>
+                {!readonly?(
+                  <>
+                    <input value={ms.label||""} onChange={e=>{const a=[...arr(pt.milestones)];a[i]={...a[i],label:e.target.value};setPitchDeck({...pd,paymentTerms:{...pt,milestones:a}});}}
+                      placeholder="Label (e.g. Booking)"
+                      style={{width:130,border:"1px solid #e8e4dc",borderRadius:5,padding:"5px 9px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",color:"#e97942",fontWeight:600,outline:"none",background:"transparent"}}
+                      onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                    <div style={{display:"inline-flex",alignItems:"center",gap:2}}>
+                      <input type="number" min={0} max={100} value={ms.percent||0} onChange={e=>{const a=[...arr(pt.milestones)];a[i]={...a[i],percent:Number(e.target.value)};setPitchDeck({...pd,paymentTerms:{...pt,milestones:a}});}}
+                        style={{width:48,border:"1px solid #e8e4dc",borderRadius:4,padding:"5px 6px",fontSize:12,fontFamily:"'IBM Plex Mono',monospace",outline:"none",textAlign:"center"}}
+                        onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                      <span style={{fontSize:12,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97"}}>%</span>
+                    </div>
+                    <input value={ms.trigger||""} onChange={e=>{const a=[...arr(pt.milestones)];a[i]={...a[i],trigger:e.target.value};setPitchDeck({...pd,paymentTerms:{...pt,milestones:a}});}}
+                      placeholder="when due…"
+                      style={{flex:1,minWidth:120,border:"1px solid #e8e4dc",borderRadius:5,padding:"5px 9px",fontSize:13,fontFamily:"'Lora',serif",color:"#37352f",outline:"none"}}
+                      onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                    <button onClick={()=>{const a=arr(pt.milestones).filter((_,j)=>j!==i);setPitchDeck({...pd,paymentTerms:{...pt,milestones:a}});}}
+                      style={{background:"none",border:"none",color:"#e8e4dc",cursor:"pointer",fontSize:13,flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#e8e4dc"}>✕</button>
+                  </>
+                ):(
+                  <>
+                    <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#e97942",fontWeight:600,minWidth:120}}>{ms.label} — {ms.percent}%</span>
+                    <span style={{fontSize:14,color:"#37352f"}}>{ms.trigger}</span>
+                  </>
+                )}
+              </div>
+            ))}
+            {!readonly&&(
+              <button onClick={()=>{const ms=arr(pt.milestones);setPitchDeck({...pd,paymentTerms:{...pt,milestones:[...ms,{label:"",percent:0,trigger:""}]}});}}
+                style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",fontFamily:"inherit",padding:"10px 0"}}
+                onMouseEnter={e=>e.currentTarget.style.color="#37352f"} onMouseLeave={e=>e.currentTarget.style.color="#9b9a97"}>
+                + Add milestone
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ── 100% UPFRONT structure ── */}
+        {(pt.structure)==="upfront"&&(
+          <div style={{display:"flex",gap:16,padding:"14px 0",borderBottom:"1px solid #f1f0ef",alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#e97942",fontWeight:600,flexShrink:0,minWidth:120}}>100% due upfront</span>
+            <div style={{flex:1,fontSize:14,color:"#37352f",lineHeight:1.6,minWidth:140}}>
+              {!readonly
+                ?<Editable value={pt.upfrontTrigger||"required to begin production"} onChange={v=>setPitchDeck({...pd,paymentTerms:{...pt,upfrontTrigger:v}})} placeholder="timing / reason…"/>
+                :<span>{pt.upfrontTrigger||"required to begin production"}</span>}
+            </div>
+          </div>
+        )}
+
+        {/* ── CUSTOM structure ── */}
+        {(pt.structure)==="custom"&&(
+          <div style={{padding:"14px 0"}}>
+            {!readonly
+              ?<textarea value={pt.customText||""} onChange={e=>setPitchDeck({...pd,paymentTerms:{...pt,customText:e.target.value}})} rows={4}
+                  placeholder="Describe your payment terms…"
+                  style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"10px 12px",fontSize:14,fontFamily:"'Lora',serif",color:"#37352f",outline:"none",resize:"vertical",lineHeight:1.7,boxSizing:"border-box"}}
+                  onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+              :<div style={{fontSize:14,color:"#37352f",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{pt.customText}</div>}
+          </div>
+        )}
+
+        {/* Shared: Revisions + Expedited delivery */}
+        <div style={{marginTop:8}}>
+          {(pt.revisionPolicy||!readonly)&&(
+            <div style={{display:"flex",gap:16,padding:"14px 0",borderTop:"1px solid #f1f0ef",alignItems:"flex-start",flexWrap:"wrap"}}>
+              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#e97942",fontWeight:600,flexShrink:0,minWidth:120,paddingTop:2}}>Revisions</span>
+              <div style={{flex:1,fontSize:14,color:"#37352f",lineHeight:1.6,minWidth:140}}>
+                {!readonly
+                  ?<Editable value={pt.revisionPolicy||""} onChange={v=>setPitchDeck({...pd,paymentTerms:{...pt,revisionPolicy:v}})} placeholder="e.g. 2 rounds included…"/>
+                  :<span>{pt.revisionPolicy}</span>}
+              </div>
+            </div>
+          )}
+          {(pt.expeditedDelivery||!readonly)&&(
+            <div style={{display:"flex",gap:16,padding:"14px 0",borderTop:"1px solid #f1f0ef",alignItems:"flex-start",flexWrap:"wrap"}}>
+              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#e97942",fontWeight:600,flexShrink:0,minWidth:120,paddingTop:2}}>Rush / Expedited</span>
+              <div style={{flex:1,fontSize:14,color:"#37352f",lineHeight:1.6,minWidth:140}}>
+                {!readonly
+                  ?<Editable value={pt.expeditedDelivery||""} onChange={v=>setPitchDeck({...pd,paymentTerms:{...pt,expeditedDelivery:v}})} placeholder="e.g. +25% for delivery under 5 days…"/>
+                  :<span>{pt.expeditedDelivery}</span>}
+              </div>
             </div>
           )}
         </div>
