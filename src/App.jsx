@@ -87,6 +87,8 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// Extract the first well-formed JSON object from a string (handles trailing commentary after the closing })
+const extractJSON=(src)=>{const start=src.indexOf("{");if(start===-1)return null;let depth=0,inStr=false,esc=false;for(let i=start;i<src.length;i++){const c=src[i];if(esc){esc=false;continue;}if(c==="\\"&&inStr){esc=true;continue;}if(c==='"'){inStr=!inStr;continue;}if(inStr)continue;if(c==="{")depth++;if(c==="}"){depth--;if(depth===0)return src.slice(start,i+1);}}return null;};
 const readText = (f) => new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result);r.onerror=rej;r.readAsText(f);});
 const readB64 = (f) => new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>res(e.target.result.split(",")[1]);r.onerror=rej;r.readAsDataURL(f);});
 const ACCEPT={"application/pdf":"pdf","text/plain":"txt","application/msword":"doc","application/vnd.openxmlformats-officedocument.wordprocessingml.document":"docx","text/markdown":"md"};
@@ -304,7 +306,7 @@ ${JSON.stringify(brief)}`;
       const data=await res.json();
       const text=(data.content||[]).map(b=>b.text||"").join("").trim();
       let parsed=null;
-      try{const s=text.indexOf("{"),e=text.lastIndexOf("}");if(s!==-1&&e!==-1)parsed=JSON.parse(text.slice(s,e+1));}catch{}
+      try{const j=extractJSON(text);if(j)parsed=JSON.parse(j);}catch{}
       const reply=parsed?.message||text;
       const update=parsed?.briefUpdate;
       if(update&&typeof update==="object"){
@@ -741,7 +743,7 @@ function IdeaCapture({ user, onBack, projects, onOpenProject }) {
       let jsonStr = raw;
       const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (fenced) jsonStr = fenced[1].trim();
-      else { const s = raw.indexOf("{"), e = raw.lastIndexOf("}"); if (s !== -1 && e !== -1) jsonStr = raw.slice(s, e + 1); }
+      else { jsonStr = extractJSON(raw) || raw; }
       jsonStr = jsonStr.replace(/,\s*}/g, "}").replace(/,\s*]/g, "]");
       const rawBrief = JSON.parse(jsonStr);
       const brief = {
@@ -1893,9 +1895,9 @@ RULES:
       if(!parsed){try{parsed=JSON.parse(clean(raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,"").trim()));}catch{}}
       if(!parsed){
         try{
-          const s=raw.indexOf("{");const e=raw.lastIndexOf("}");
-          if(s!==-1&&e!==-1){
-            const slice=clean(raw.slice(s,e+1)).replace(/,(\s*[}\]])/g,"$1");
+          const j=extractJSON(raw);
+          if(j){
+            const slice=clean(j).replace(/,(\s*[}\]])/g,"$1");
             parsed=JSON.parse(slice);
           }
         }catch(pe){console.error("Regenparse error:",pe.message,"raw preview:",raw.slice(0,300));}
@@ -2217,8 +2219,8 @@ function CallSheetPanel({brief,callSheet,onUpdate,readonly}){
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:4000,system,messages:[{role:"user",content:`Generate a call sheet for this production:\n${JSON.stringify(brief)}`}]})});
       const data=await res.json();
       const raw=(data.content||[]).map(b=>b.text||"").join("").trim();
-      const s=raw.indexOf("{"),e=raw.lastIndexOf("}");
-      if(s!==-1&&e!==-1){const parsed=JSON.parse(raw.slice(s,e+1));onUpdate(parsed);}
+      const j=extractJSON(raw);
+      if(j){const parsed=JSON.parse(j);onUpdate(parsed);}
       else setErrMsg("Could not parse call sheet response.");
     }catch(err){setErrMsg(err.message);}
     setGenerating(false);
@@ -3808,10 +3810,10 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:4000,system,messages:[{role:"user",content:`Current project: ${JSON.stringify(activeProject.brief)}\n\nTranscript:\n${transcriptForAI}`}]})});
       const aiData=await res.json();
       const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
-      const s=raw.indexOf("{"),e=raw.lastIndexOf("}");
-      if(s===-1||e===-1)throw new Error("No JSON in response");
+      const _extracted=extractJSON(raw);
+      if(!_extracted)throw new Error("No JSON in response");
       // Clean common JSON issues: unescaped control characters inside string values
-      const cleaned=raw.slice(s,e+1).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
+      const cleaned=_extracted.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
       let parsed;
       try{parsed=JSON.parse(cleaned);}
       catch(pe){
@@ -3988,8 +3990,8 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
         if(!parsed){try{parsed=JSON.parse(raw.replace(/^```(?:json)?\s*/i,"").replace(/\s*```\s*$/,""));}catch{}}
         if(!parsed){
           try{
-            const s=raw.indexOf("{");const e=raw.lastIndexOf("}");
-            if(s!==-1&&e!==-1){let js=raw.slice(s,e+1).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");parsed=JSON.parse(js);}
+            const j=extractJSON(raw);
+            if(j){let js=j.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");parsed=JSON.parse(js);}
           }catch{}
         }
         if(!parsed)throw new Error("Failed to parse AI response — please try again");
@@ -4024,9 +4026,9 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
         const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
         let brief=null;
         try{
-          const s=raw.indexOf("{");const e=raw.lastIndexOf("}");
-          if(s!==-1&&e!==-1){
-            let js=raw.slice(s,e+1).replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
+          const j=extractJSON(raw);
+          if(j){
+            let js=j.replace(/,\s*}/g,"}").replace(/,\s*]/g,"]");
             js=js.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
             brief=JSON.parse(js);
           }
@@ -4115,7 +4117,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       let jsonStr=raw;
       const fenced=raw.match(/```(?:json)?\s*([\s\S]*?)```/);
       if(fenced)jsonStr=fenced[1].trim();
-      else{const s=raw.indexOf("{"),e=raw.lastIndexOf("}");if(s!==-1&&e!==-1)jsonStr=raw.slice(s,e+1);}
+      else{jsonStr=extractJSON(raw)||raw;}
       jsonStr=jsonStr.replace(/,\s*}/g,"}").replace(/,\s*]/g,"]").replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g,"");
       const parsed=JSON.parse(jsonStr);
 
@@ -4181,7 +4183,7 @@ ${JSON.stringify(brief)}`;
       const data=await res.json();
       const text=(data.content||[]).map(b=>b.text||"").join("").trim();
       let parsed=null;
-      try{const s=text.indexOf("{"),e=text.lastIndexOf("}");if(s!==-1&&e!==-1)parsed=JSON.parse(text.slice(s,e+1));}
+      try{const j=extractJSON(text);if(j)parsed=JSON.parse(j);}
       catch(pe){console.error("Chat parse error:",pe);}
       const reply=parsed?.message||text;
       const update=parsed?.briefUpdate;
