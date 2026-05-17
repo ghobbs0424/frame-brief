@@ -4200,7 +4200,10 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
 
   async function savePkg(id,fields){
     setSaving(id);
-    await supabase.from("packages").update({...fields,updated_at:new Date().toISOString()}).eq("id",id);
+    // Strip read-only / immutable fields that PostgREST won't allow in UPDATE
+    const{id:_id,user_id:_uid,created_at:_ca,...updateFields}=fields;
+    const{error}=await supabase.from("packages").update({...updateFields,updated_at:new Date().toISOString()}).eq("id",id);
+    if(error){console.error("savePkg error:",error);setSaving(null);return;}
     onPackagesChange(packages.map(p=>p.id===id?{...p,...fields}:p));
     setSaving(null);
   }
@@ -4217,12 +4220,14 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
     const[included,setIncluded]=useState(arr(pkg.included));
     const[notIncluded,setNotIncluded]=useState(arr(pkg.not_included));
     const[projectTypes,setProjectTypes]=useState(arr(pkg.project_types));
+    const[saveOk,setSaveOk]=useState(false);
     const isOpen=expanded===pkg.id;
     const rateType=local.rate_type||"project";
     const unit=rateUnitLabel(rateType);
 
-    function flush(){
-      savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:projectTypes});
+    async function flush(){
+      await savePkg(pkg.id,{...local,included,not_included:notIncluded,project_types:projectTypes});
+      setSaveOk(true);setTimeout(()=>setSaveOk(false),1800);
     }
 
     return(
@@ -4362,8 +4367,8 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
             </div>
 
             <div style={{display:"flex",gap:8,paddingTop:12,borderTop:"1px solid #f1f0ef"}}>
-              <button onClick={flush} style={{background:"#37352f",color:"#fff",border:"none",padding:"8px 18px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:6}}>
-                {saving===pkg.id?<><div style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,0.4)",borderTop:"1.5px solid #fff",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>Saving…</>:"Save"}
+              <button onClick={flush} style={{background:saveOk?"#1e7e34":"#37352f",color:"#fff",border:"none",padding:"8px 18px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:6,transition:"background .2s"}}>
+                {saving===pkg.id?<><div style={{width:10,height:10,border:"1.5px solid rgba(255,255,255,0.4)",borderTop:"1.5px solid #fff",borderRadius:"50%",animation:"spin 1s linear infinite"}}/>Saving…</>:saveOk?"✓ Saved":"Save"}
               </button>
               <button onClick={()=>setDeleteConfirm(pkg.id)} style={{background:"none",border:"1px solid #f1f0ef",padding:"7px 14px",borderRadius:6,fontSize:12,cursor:"pointer",fontFamily:"'Lora',serif",color:"#9b9a97"}} onMouseEnter={e=>{e.currentTarget.style.borderColor="#c0392b";e.currentTarget.style.color="#c0392b";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#f1f0ef";e.currentTarget.style.color="#9b9a97";}}>Delete</button>
             </div>
