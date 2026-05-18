@@ -364,7 +364,7 @@ RULES:
       return res.status(200).json({ ok: true, calendarSync: true });
     }
 
-    const transcriptionTriggerEvents = ["recording.done"];
+    const transcriptionTriggerEvents = ["bot.done", "bot.call_ended", "recording.done"];
     const handledEvents = [...transcriptionTriggerEvents, "transcript.done", "transcript.failed"];
     if (!event || !handledEvents.includes(eventName)) {
       console.log("Skipping unhandled event:", eventName);
@@ -401,6 +401,22 @@ RULES:
       const botProject = resolvedProject;
 
       if (transcriptionTriggerEvents.includes(eventName)) {
+        // bot.done / bot.call_ended → use bot-level async transcription (primary path)
+        if (eventName === "bot.done" || eventName === "bot.call_ended") {
+          const asyncRes = await fetch(
+            `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/async_transcription`,
+            {
+              method: "POST",
+              headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({ provider: "assembly_ai" }),
+            }
+          );
+          const asyncRaw = await asyncRes.text();
+          console.log("Calendar bot bot.done async transcription trigger — status:", asyncRes.status, "response:", asyncRaw.slice(0, 200));
+          await supabase.from("projects").update({ recall_status: "transcribing", updated_at: new Date().toISOString() }).eq("id", botProject.id);
+          return res.status(200).json({ ok: true, calendarBot: true, triggered: "assembly_ai" });
+        }
+        // recording.done → use recording-level endpoint (fallback)
         let recordingId = recordingIdFromEvent;
         if (!recordingId) {
           const botRes = await fetch(`https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/`, { headers: { "Authorization": `Token ${RECALL_KEY}` } });
@@ -416,7 +432,7 @@ RULES:
             headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({ provider: { recallai_async: { language_code: "en" } } }),
           });
-          console.log("Calendar bot async transcription trigger:", asyncRes.status);
+          console.log("Calendar bot recording.done async transcription trigger:", asyncRes.status);
           await supabase.from("projects").update({ recall_status: "transcribing", updated_at: new Date().toISOString() }).eq("id", botProject.id);
         }
         return res.status(200).json({ ok: true, calendarBot: true });
@@ -435,9 +451,36 @@ RULES:
       return res.status(200).json({ ok: true, calendarBot: true });
     }
 
-    // ── recording.done → trigger async transcription ─────────────────────────
+    // ── bot.done / bot.call_ended / recording.done → trigger async transcription ─
     if (transcriptionTriggerEvents.includes(eventName)) {
-      // recording.done should carry recording_id directly; fall back to bot API if not
+
+      // PRIMARY PATH: bot.done or bot.call_ended → bot-level async transcription
+      if (eventName === "bot.done" || eventName === "bot.call_ended") {
+        console.log(`${eventName} received — triggering bot-level async transcription for bot:`, botId);
+        const asyncRes = await fetch(
+          `https://${RECALL_REGION}.recall.ai/api/v1/bot/${botId}/async_transcription`,
+          {
+            method: "POST",
+            headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ provider: "assembly_ai" }),
+          }
+        );
+        const asyncRaw = await asyncRes.text();
+        console.log("bot-level async transcription — status:", asyncRes.status, "response:", asyncRaw.slice(0, 300));
+
+        if (asyncRes.ok) {
+          await supabase.from("projects").update({
+            recall_status: "transcribing",
+            updated_at: new Date().toISOString(),
+          }).eq("id", project.id);
+          return res.status(200).json({ ok: true, triggered: "assembly_ai", status: asyncRes.status });
+        }
+
+        // If bot-level endpoint fails, fall through to recording-based approach
+        console.warn("bot-level async_transcription failed — falling through to recording-based approach. status:", asyncRes.status, asyncRaw.slice(0, 200));
+      }
+
+      // FALLBACK PATH: recording.done (or bot.done fallback) → recording-level endpoint
       let recordingId = recordingIdFromEvent;
       if (!recordingId) {
         console.log("No recording_id in event — fetching from bot API");
@@ -449,7 +492,6 @@ RULES:
         console.log("Bot fetch status:", botRes.status, "response:", botRaw.slice(0, 500));
         if (botRes.ok) {
           const botData = JSON.parse(botRaw);
-          // recordings is typically an array; grab the first/only one
           recordingId = (botData.recordings && botData.recordings[0] && botData.recordings[0].id)
             || (botData.recording && botData.recording.id);
           console.log("recording_id from bot API:", recordingId);
@@ -467,31 +509,31 @@ RULES:
 
       const asyncUrl = `https://${RECALL_REGION}.recall.ai/api/v1/recording/${recordingId}/create_transcript/`;
       const asyncBody = { provider: { recallai_async: { language_code: "en" } } };
-      console.log("Triggering async transcription — url:", asyncUrl, "body:", JSON.stringify(asyncBody));
+      console.log("Triggering recording-level async transcription — url:", asyncUrl, "body:", JSON.stringify(asyncBody));
 
-      const asyncRes = await fetch(asyncUrl, {
+      const asyncRes2 = await fetch(asyncUrl, {
         method: "POST",
         headers: { "Authorization": `Token ${RECALL_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify(asyncBody),
       });
 
-      const rawText = await asyncRes.text();
-      if (!asyncRes.ok) {
-        console.error("ASYNC TRANSCRIPTION TRIGGER FAILED — status:", asyncRes.status, "response:", rawText);
+      const rawText = await asyncRes2.text();
+      if (!asyncRes2.ok) {
+        console.error("RECORDING-LEVEL TRANSCRIPTION TRIGGER FAILED — status:", asyncRes2.status, "response:", rawText);
         await supabase.from("projects").update({
           recall_status: "transcription_error",
           updated_at: new Date().toISOString(),
         }).eq("id", project.id);
-        return res.status(200).json({ ok: false, status: asyncRes.status, body: rawText });
+        return res.status(200).json({ ok: false, status: asyncRes2.status, body: rawText });
       }
 
-      console.log("Async transcription triggered OK — status:", asyncRes.status, "response:", rawText);
+      console.log("Recording-level transcription triggered OK — status:", asyncRes2.status, "response:", rawText);
       await supabase.from("projects").update({
         recall_status: "transcribing",
         updated_at: new Date().toISOString(),
       }).eq("id", project.id);
 
-      return res.status(200).json({ ok: true, triggered: asyncRes.status });
+      return res.status(200).json({ ok: true, triggered: "recallai_async", status: asyncRes2.status });
     }
 
     // ── transcript.failed → log and mark error ───────────────────────────────
