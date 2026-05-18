@@ -3458,8 +3458,134 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
 
         {/* Main content */}
         <div style={{flex:1,overflowY:"auto",padding:"32px 24px"}}>
-          {calendarSettings?.calendar_connected&&<div style={{marginBottom:20,padding:"12px 16px",background:"#f5f8ff",borderRadius:10,border:"1px solid #e8f0fe",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={onMeetings}><span style={{fontSize:20}}>📅</span><div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"#1a56c4"}}>View Upcoming Meetings</div><div style={{fontSize:11,color:"#9b9a97"}}>See your scheduled meetings, bot status, and link follow-ups</div></div><span style={{color:"#1a56c4",fontSize:16}}>→</span></div>}
-          <h1 style={{fontSize:26,fontWeight:700,color:"#37352f",marginBottom:20,letterSpacing:"-0.02em"}}>Projects</h1>
+          {(()=>{
+            // Section 1: Greeting + date
+            const hour=new Date().getHours();
+            const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
+            const firstName=(user?.email||"").split("@")[0].split(".")[0];
+            const displayName=firstName.charAt(0).toUpperCase()+firstName.slice(1);
+
+            // Section 2: Financial snapshot
+            const collected=arr(projects).filter(p=>p.pitch_approval?.status==="deposit_paid"||p.pitch_approval?.status==="paid_in_full").reduce((s,p)=>s+(p.pitch_approval.status==="paid_in_full"?(p.pitch_approval.totalAmount||0):(p.pitch_approval.depositAmount||0)),0);
+            const outstanding=arr(projects).filter(p=>p.pitch_approval?.status==="approved").reduce((s,p)=>s+(p.pitch_approval.depositAmount||0),0);
+            const pipeline=arr(projects).filter(p=>!p.pitch_approval?.status&&arr(p.pitch_deck?.lineItems).some(li=>Number(li.price)>0)).reduce((s,p)=>s+arr(p.pitch_deck?.lineItems).reduce((t,li)=>t+(Number(li.price)||0),0),0);
+
+            // Section 3: Active projects widget
+            const recentProjects=arr(projects).sort((a,b)=>new Date(b.updated_at)-new Date(a.updated_at)).slice(0,4);
+
+            // Section 3: Upcoming meetings widget
+            const now=new Date();
+            const scheduledMeetings=arr(projects).flatMap(p=>arr(p.meeting_history).filter(m=>m.status==="scheduled"&&m.date&&new Date(m.date)>now).map(m=>({...m,projectTitle:p.title,projectEmoji:p.brief?.coverEmoji||"🎬",projectObj:p}))).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,4);
+
+            // Section 4: Recent ideas
+            let recentIdeas=[];
+            try{
+              const raw=localStorage.getItem(`framebrief_ideas_${user?.id}`);
+              if(raw){
+                const allIdeas=Object.values(JSON.parse(raw)).flat();
+                recentIdeas=allIdeas.filter(i=>i.brief?.title||i.raw_text).sort((a,b)=>new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0)).slice(0,4);
+              }
+            }catch(e){}
+
+            return(<>
+              {/* Greeting */}
+              <div style={{marginBottom:28}}>
+                <div style={{fontFamily:"'Lora',serif",fontSize:26,fontWeight:700,color:"#37352f",marginBottom:4}}>{greeting}, {displayName} 👋</div>
+                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#9b9a97"}}>{new Date().toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric",year:"numeric"})}</div>
+              </div>
+
+              {/* Financial snapshot */}
+              <div style={{display:"flex",gap:10,marginBottom:28,flexWrap:"wrap"}}>
+                {[
+                  {label:"Collected",value:collected,color:"#1e7e34",bg:"#f0faf4"},
+                  {label:"Outstanding",value:outstanding,color:"#b45309",bg:"#fffbf0"},
+                  {label:"Pipeline",value:pipeline,color:"#37352f",bg:"#fafaf9"},
+                ].map(stat=>(
+                  <div key={stat.label} onClick={onFinancial} style={{background:stat.bg,border:`1px solid ${stat.color}22`,borderRadius:10,padding:"14px 20px",cursor:"pointer",minWidth:140,flex:1,transition:"transform .1s"}} onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"} onMouseLeave={e=>e.currentTarget.style.transform="none"}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.15em",marginBottom:4}}>{stat.label}</div>
+                    <div style={{fontFamily:"'Lora',serif",fontSize:22,fontWeight:700,color:stat.color}}>${stat.value.toLocaleString()}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Two-column widget row */}
+              <div style={{display:"flex",gap:16,marginBottom:28,flexWrap:"wrap"}}>
+                {/* Active Projects widget */}
+                <div style={{flex:"1 1 280px",minWidth:280,background:"#fafaf9",border:"1px solid #f1f0ef",borderRadius:12,padding:20}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em"}}>Active Projects</div>
+                    <span style={{fontFamily:"'Lora',serif",fontSize:12,color:"#1a56c4",cursor:"pointer",textDecoration:"none"}} onClick={()=>{}}>View all →</span>
+                  </div>
+                  {recentProjects.length===0
+                    ?<div style={{textAlign:"center",padding:"24px",color:"#c4c3bf",fontStyle:"italic",fontSize:13,fontFamily:"'Lora',serif"}}>No projects yet — create your first brief</div>
+                    :recentProjects.map((p,idx)=>(
+                      <div key={p.id} onClick={()=>onOpen(p)} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:idx<recentProjects.length-1?"1px solid #f1f0ef":"none",cursor:"pointer"}} onMouseEnter={e=>e.currentTarget.style.opacity="0.75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                        <span style={{fontSize:20,flexShrink:0}}>{p.brief?.coverEmoji||"🎬"}</span>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontFamily:"'Lora',serif",fontSize:13,fontWeight:700,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.title||"Untitled"}</div>
+                          <div style={{fontSize:11,color:"#9b9a97",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.client_name||""}</div>
+                        </div>
+                        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:3,flexShrink:0}}>
+                          <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,borderRadius:20,padding:"2px 7px",background:"#f1f0ef",color:"#9b9a97"}}>{p.status}</span>
+                          {p.pitch_approval?.status&&<span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,borderRadius:20,padding:"2px 7px",background:p.pitch_approval.status==="paid_in_full"?"#e6f4ea":p.pitch_approval.status==="deposit_paid"?"#e6f4ea":p.pitch_approval.status==="approved"?"#fff8e6":"#f1f0ef",color:p.pitch_approval.status==="paid_in_full"?"#1e7e34":p.pitch_approval.status==="deposit_paid"?"#1e7e34":p.pitch_approval.status==="approved"?"#b45309":"#9b9a97"}}>{p.pitch_approval.status==="paid_in_full"?"✓ Paid":p.pitch_approval.status==="deposit_paid"?"✓ Deposit":p.pitch_approval.status==="approved"?"⏳ Awaiting":""}</span>}
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+
+                {/* Upcoming Meetings widget */}
+                <div style={{flex:"1 1 280px",minWidth:280,background:"#fafaf9",border:"1px solid #f1f0ef",borderRadius:12,padding:20}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:14}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em"}}>Upcoming Meetings</div>
+                    <span style={{fontFamily:"'Lora',serif",fontSize:12,color:"#1a56c4",cursor:"pointer"}} onClick={onMeetings}>View all →</span>
+                  </div>
+                  {scheduledMeetings.length>0
+                    ?scheduledMeetings.map((m,idx)=>(
+                      <div key={m.id||idx} style={{padding:"10px 0",borderBottom:idx<scheduledMeetings.length-1?"1px solid #f1f0ef":"none"}}>
+                        <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#1a56c4",fontWeight:600,flexShrink:0,marginTop:2}}>{new Date(m.date).toLocaleDateString("en-US",{month:"short",day:"numeric"})}</div>
+                          <div style={{flex:1,minWidth:0}}>
+                            <div style={{fontFamily:"'Lora',serif",fontSize:13,fontWeight:700,color:"#37352f",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(m.summary||m.title||"Meeting").slice(0,40)}</div>
+                            <div style={{fontSize:11,color:"#9b9a97"}}>{m.projectEmoji} {m.projectTitle}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                    :calendarSettings?.calendar_connected
+                      ?<div style={{textAlign:"center",padding:"24px",color:"#c4c3bf",fontStyle:"italic",fontSize:13,fontFamily:"'Lora',serif"}}>No upcoming meetings scheduled</div>
+                      :<div style={{textAlign:"center",padding:"20px"}}>
+                        <div style={{fontSize:11,color:"#9b9a97",marginBottom:12,fontFamily:"'IBM Plex Mono',monospace"}}>Connect Google Calendar to auto-join meetings</div>
+                        <button onClick={handleConnectCalendar} style={{background:"#1a56c4",color:"#fff",border:"none",borderRadius:6,padding:"8px 16px",fontSize:12,fontFamily:"'Lora',serif",cursor:"pointer"}}>Connect Calendar</button>
+                      </div>
+                  }
+                </div>
+              </div>
+
+              {/* Recent Ideas */}
+              {recentIdeas.length>0&&(
+                <div style={{marginBottom:28}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em"}}>Recent Ideas</div>
+                    <span style={{fontFamily:"'Lora',serif",fontSize:12,color:"#e97942",cursor:"pointer"}} onClick={onIdeas}>Open Idea Capture →</span>
+                  </div>
+                  <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
+                    {recentIdeas.map((idea,idx)=>(
+                      <div key={idea.id||idx} onClick={onIdeas} style={{background:"#fffbf0",border:"1px solid #f5e9d0",borderRadius:10,padding:"14px 16px",minWidth:180,maxWidth:220,cursor:"pointer",flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.opacity="0.85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                        <div style={{fontFamily:"'Lora',serif",fontSize:13,fontWeight:700,color:"#37352f",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{idea.brief?.title||idea.raw_text?.slice(0,50)||"Untitled"}</div>
+                        {idea.brief?.format&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",marginBottom:3}}>{idea.brief.format}</div>}
+                        <div style={{fontSize:11,color:"#c4c3bf"}}>{idea.created_at?new Date(idea.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric"}):""}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Divider */}
+              <hr style={{border:"none",borderTop:"1px solid #f1f0ef",margin:"24px 0"}}/>
+            </>);
+          })()}
+          <h1 style={{fontSize:26,fontWeight:700,color:"#37352f",marginBottom:20,letterSpacing:"-0.02em"}}>All Projects</h1>
           <div style={{display:"flex",gap:10,marginBottom:24,flexWrap:"wrap"}}>
             <div style={{flex:1,minWidth:180,position:"relative"}}><span style={{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14,color:"#9b9a97"}}>🔍</span><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search projects…" style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px 10px 36px",fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",outline:"none",background:"#fafaf9",boxSizing:"border-box"}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/></div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["All",...STATUSES].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"7px 12px",borderRadius:20,border:"1px solid",borderColor:filter===s?"#37352f":"#e8e4dc",background:filter===s?"#37352f":"transparent",color:filter===s?"#fff":"#9b9a97",fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>{s}</button>)}</div>
