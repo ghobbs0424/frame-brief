@@ -3376,42 +3376,40 @@ function AIPriorityWidget({projects,recentIdeas,userId,aiTodos,onTodosGenerated,
       const dayName=now.toLocaleDateString("en-US",{weekday:"long"});
       const dateLabel=now.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
 
-      const projectSummaries=arr(projects).map(p=>({
-        title:p.title||"Untitled",
-        client:p.client_name||"",
+      // Keep context lean — trim to essentials so output tokens aren't wasted on input
+      const projectSummaries=arr(projects).slice(0,12).map(p=>({
+        id:p.id,
+        title:(p.title||"Untitled").slice(0,60),
+        client:(p.client_name||"").slice(0,40),
         status:p.status||"Draft",
-        paymentStatus:p.pitch_approval?.status||null,
-        depositAmount:p.pitch_approval?.depositAmount||0,
-        totalAmount:p.pitch_approval?.totalAmount||0,
-        pendingClientTodos:arr(p.brief?.clientActionItems).filter(t=>!t.done).length,
-        pendingInternalTodos:arr(p.brief?.internalTodos).filter(t=>!t.done).length,
-        internalTodos:arr(p.brief?.internalTodos).filter(t=>!t.done).map(t=>t.text).slice(0,3),
-        clientTodos:arr(p.brief?.clientActionItems).filter(t=>!t.done).map(t=>t.text).slice(0,2),
-        updatedDaysAgo:Math.floor((Date.now()-new Date(p.updated_at))/86400000),
+        pay:p.pitch_approval?.status||null,
+        deposit:p.pitch_approval?.depositAmount||0,
+        total:p.pitch_approval?.totalAmount||0,
+        todos:arr(p.brief?.internalTodos).filter(t=>!t.done).map(t=>t.text.slice(0,60)).slice(0,3),
+        clientTodos:arr(p.brief?.clientActionItems).filter(t=>!t.done).map(t=>t.text.slice(0,60)).slice(0,2),
         pitchSent:!!p.pitch_deck?.sentAt,
         pitchViewed:!!p.pitch_deck?.viewedAt,
-        id:p.id,
+        daysAgo:Math.floor((Date.now()-new Date(p.updated_at))/86400000),
       }));
+      const ideaSummaries=arr(recentIdeas).filter(i=>!i.brief?.title).map(i=>(i.raw_text||"").slice(0,60));
+      const meetings=arr(projects).flatMap(p=>arr(p.meeting_history).filter(m=>m.status==="scheduled"&&m.date&&new Date(m.date)>now).map(m=>({title:(m.summary||m.title||"Meeting").slice(0,50),date:m.date,project:(p.title||"").slice(0,40)}))).slice(0,5);
 
-      const ideaSummaries=arr(recentIdeas).filter(i=>!i.brief?.title).map(i=>({raw:(i.raw_text||"").slice(0,80)}));
-      const scheduledMeetings=arr(projects).flatMap(p=>arr(p.meeting_history).filter(m=>m.status==="scheduled"&&m.date&&new Date(m.date)>now).map(m=>({title:m.summary||m.title||"Meeting",date:m.date,project:p.title})));
-
-      const ctx=JSON.stringify({today:dateLabel,dayOfWeek:dayName,projects:projectSummaries,unbuiltIdeas:ideaSummaries,upcomingMeetings:scheduledMeetings});
+      const ctx=`Date: ${dayName} ${dateLabel}\nProjects: ${JSON.stringify(projectSummaries)}\nMeetings: ${JSON.stringify(meetings)}\nUnbuilt ideas: ${JSON.stringify(ideaSummaries)}`;
 
       const res=await callAI({
         model:MODEL,
-        max_tokens:1200,
-        system:`You are a creative business assistant for a videographer/photographer. Given their current projects, todos, meetings, and ideas, generate a prioritized action list for TODAY and THIS WEEK. Return ONLY valid JSON — no markdown, no explanation.
+        max_tokens:2000,
+        system:`You are a creative business assistant for a videographer/photographer. Analyze their projects and return a JSON action list. Return ONLY raw JSON — no markdown fences, no explanation, nothing before or after the JSON object.
 
-Return exactly: {"today":[...],"week":[...]}
+Respond with exactly this shape:
+{"today":[{"priority":"high","category":"finance","text":"action","projectTitle":"name or null","projectId":"id or null"}],"week":[...]}
 
-Each item in the arrays: {"priority":"high"|"medium"|"low","category":"project"|"finance"|"follow-up"|"meeting"|"ideas"|"admin","text":"Clear 1-sentence action","projectTitle":"Project name if relevant or null","projectId":"project id if relevant or null"}
-
-TODAY: 3-6 most urgent items — things that should happen within 24 hours. Be specific (name the project, client, amount).
-WEEK: 5-10 items for the next 7 days, broader strategic tasks.
-Prioritize: unpaid approvals/deposits first, then client follow-ups, then active production todos, then meetings, then creative development.
-Only include actionable, specific items. Do not repeat today items in the week list.`,
-        messages:[{role:"user",content:`Here is my current business context:\n${ctx}\n\nGenerate my prioritized to-do list for today and this week.`}],
+priority: "high"|"medium"|"low"
+category: "project"|"finance"|"follow-up"|"meeting"|"ideas"|"admin"
+TODAY: 3-5 urgent items for the next 24 hours, specific and named.
+WEEK: 5-8 items for the next 7 days. Do NOT repeat today items.
+Order: unpaid deposits > client follow-ups > production tasks > meetings > creative.`,
+        messages:[{role:"user",content:ctx}],
       });
 
       if(!res.ok){
@@ -3420,10 +3418,17 @@ Only include actionable, specific items. Do not repeat today items in the week l
       }
 
       const data=await res.json();
-      const text=data?.content?.[0]?.text||"";
-      let parsed;
-      try{parsed=JSON.parse(text);}catch{const m=text.match(/\{[\s\S]*\}/);try{parsed=m?JSON.parse(m[0]):null;}catch{parsed=null;}}
-      if(!parsed?.today)throw new Error("Invalid response format");
+      const rawText=(data?.content?.[0]?.text||"").trim();
+      // Strip markdown fences if model wraps anyway
+      const text=rawText.replace(/^```(?:json)?\s*/i,"").replace(/\s*```$/,"").trim();
+      console.log("AI priorities raw:",text.slice(0,200));
+      let parsed=null;
+      try{parsed=JSON.parse(text);}catch{
+        // Try extracting the outermost JSON object
+        const m=text.match(/\{[\s\S]*\}/);
+        if(m){try{parsed=JSON.parse(m[0]);}catch(e2){console.error("JSON extract also failed:",e2.message,text.slice(0,300));}}
+      }
+      if(!parsed?.today)throw new Error("Could not parse AI response");
 
       // Tag each item with projectId from matching title
       const tagItem=item=>{
