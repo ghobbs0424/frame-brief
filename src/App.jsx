@@ -3348,6 +3348,178 @@ function FinancialDashboard({projects,onBack,onOpenProject}){
   );
 }
 
+// ─── AI PRIORITY WIDGET ───────────────────────────────────────────────────────
+function AIPriorityWidget({projects,recentIdeas,userId,aiTodos,onTodosGenerated,onOpenProject}){
+  const[tab,setTab]=useState("today");
+  const[generating,setGenerating]=useState(false);
+  const[error,setError]=useState("");
+
+  const todos=aiTodos?.todos||{today:[],week:[]};
+  const generatedAt=aiTodos?.generatedAt?new Date(aiTodos.generatedAt):null;
+  const isStale=!generatedAt||(Date.now()-generatedAt.getTime()>23*60*60*1000);
+  const timeStr=generatedAt?generatedAt.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):null;
+  const dateStr=generatedAt?generatedAt.toLocaleDateString("en-US",{month:"short",day:"numeric"}):null;
+  const isToday=generatedAt&&new Date().toDateString()===generatedAt.toDateString();
+
+  const PRIORITY_STYLE={
+    high:{bg:"#fef2f2",color:"#b91c1c",border:"#fecaca",label:"HIGH"},
+    medium:{bg:"#fffbeb",color:"#b45309",border:"#fde68a",label:"MED"},
+    low:{bg:"#f0fdf4",color:"#166534",border:"#bbf7d0",label:"LOW"},
+  };
+  const CAT_EMOJI={project:"🎬",finance:"💳","follow-up":"📩",meeting:"📅",ideas:"💡",admin:"📋"};
+
+  async function handleGenerate(){
+    setGenerating(true);setError("");
+    try{
+      // Build lean context for Claude
+      const now=new Date();
+      const dayName=now.toLocaleDateString("en-US",{weekday:"long"});
+      const dateLabel=now.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
+
+      const projectSummaries=arr(projects).map(p=>({
+        title:p.title||"Untitled",
+        client:p.client_name||"",
+        status:p.status||"Draft",
+        paymentStatus:p.pitch_approval?.status||null,
+        depositAmount:p.pitch_approval?.depositAmount||0,
+        totalAmount:p.pitch_approval?.totalAmount||0,
+        pendingClientTodos:arr(p.brief?.clientActionItems).filter(t=>!t.done).length,
+        pendingInternalTodos:arr(p.brief?.internalTodos).filter(t=>!t.done).length,
+        internalTodos:arr(p.brief?.internalTodos).filter(t=>!t.done).map(t=>t.text).slice(0,3),
+        clientTodos:arr(p.brief?.clientActionItems).filter(t=>!t.done).map(t=>t.text).slice(0,2),
+        updatedDaysAgo:Math.floor((Date.now()-new Date(p.updated_at))/86400000),
+        pitchSent:!!p.pitch_deck?.sentAt,
+        pitchViewed:!!p.pitch_deck?.viewedAt,
+        id:p.id,
+      }));
+
+      const ideaSummaries=arr(recentIdeas).filter(i=>!i.brief?.title).map(i=>({raw:(i.raw_text||"").slice(0,80)}));
+      const scheduledMeetings=arr(projects).flatMap(p=>arr(p.meeting_history).filter(m=>m.status==="scheduled"&&m.date&&new Date(m.date)>now).map(m=>({title:m.summary||m.title||"Meeting",date:m.date,project:p.title})));
+
+      const ctx=JSON.stringify({today:dateLabel,dayOfWeek:dayName,projects:projectSummaries,unbuiltIdeas:ideaSummaries,upcomingMeetings:scheduledMeetings});
+
+      const res=await callAI({
+        model:MODEL,
+        max_tokens:1200,
+        system:`You are a creative business assistant for a videographer/photographer. Given their current projects, todos, meetings, and ideas, generate a prioritized action list for TODAY and THIS WEEK. Return ONLY valid JSON — no markdown, no explanation.
+
+Return exactly: {"today":[...],"week":[...]}
+
+Each item in the arrays: {"priority":"high"|"medium"|"low","category":"project"|"finance"|"follow-up"|"meeting"|"ideas"|"admin","text":"Clear 1-sentence action","projectTitle":"Project name if relevant or null","projectId":"project id if relevant or null"}
+
+TODAY: 3-6 most urgent items — things that should happen within 24 hours. Be specific (name the project, client, amount).
+WEEK: 5-10 items for the next 7 days, broader strategic tasks.
+Prioritize: unpaid approvals/deposits first, then client follow-ups, then active production todos, then meetings, then creative development.
+Only include actionable, specific items. Do not repeat today items in the week list.`,
+        messages:[{role:"user",content:`Here is my current business context:\n${ctx}\n\nGenerate my prioritized to-do list for today and this week.`}],
+      });
+
+      const data=await res.json();
+      const text=data?.content?.[0]?.text||"";
+      let parsed;
+      try{parsed=JSON.parse(text);}catch{const m=text.match(/\{[\s\S]*\}/);parsed=m?JSON.parse(m[0]):null;}
+      if(!parsed?.today)throw new Error("Invalid response");
+
+      // Tag each item with projectId from matching title
+      const taggedToday=(parsed.today||[]).map(item=>{
+        if(item.projectTitle&&!item.projectId){const p=arr(projects).find(p=>(p.title||"").toLowerCase()===item.projectTitle.toLowerCase());if(p)item.projectId=p.id;}
+        return item;
+      });
+      const taggedWeek=(parsed.week||[]).map(item=>{
+        if(item.projectTitle&&!item.projectId){const p=arr(projects).find(p=>(p.title||"").toLowerCase()===item.projectTitle.toLowerCase());if(p)item.projectId=p.id;}
+        return item;
+      });
+
+      const result={generatedAt:new Date().toISOString(),todos:{today:taggedToday,week:taggedWeek}};
+      await supabase.from("user_settings").upsert({id:userId,ai_todos:result,updated_at:new Date().toISOString()},{onConflict:"id"});
+      onTodosGenerated(result);
+    }catch(e){setError("Couldn't generate priorities — try again.");}
+    setGenerating(false);
+  }
+
+  const listItems=tab==="today"?todos.today:todos.week;
+
+  return(
+    <div style={{background:"#fafaf9",border:"1px solid #f1f0ef",borderRadius:12,padding:20,marginBottom:28}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:28,height:28,borderRadius:"50%",background:"#37352f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:"#fff",flexShrink:0}}>✦</div>
+          <div>
+            <div style={{fontFamily:"'Lora',serif",fontSize:15,fontWeight:700,color:"#37352f",lineHeight:1}}>AI Daily Priorities</div>
+            {generatedAt&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#c4c3bf",marginTop:2}}>{isToday?`Today at ${timeStr}`:`${dateStr} at ${timeStr}`}{isStale?" · stale":""}</div>}
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {/* Today / Week tabs */}
+          <div style={{display:"flex",background:"#f1f0ef",borderRadius:8,padding:2,gap:2}}>
+            {["today","week"].map(t=>(
+              <button key={t} onClick={()=>setTab(t)} style={{padding:"5px 14px",borderRadius:6,border:"none",background:tab===t?"#fff":"transparent",color:tab===t?"#37352f":"#9b9a97",fontFamily:"'IBM Plex Mono',monospace",fontSize:11,cursor:"pointer",fontWeight:tab===t?600:400,boxShadow:tab===t?"0 1px 3px rgba(0,0,0,0.08)":"none",transition:"all .12s"}}>
+                {t==="today"?"Today":"This Week"}
+              </button>
+            ))}
+          </div>
+          <button onClick={handleGenerate} disabled={generating} style={{display:"flex",alignItems:"center",gap:5,background:isStale||!generatedAt?"#37352f":"#fff",color:isStale||!generatedAt?"#fff":"#9b9a97",border:isStale||!generatedAt?"none":"1px solid #e8e4dc",borderRadius:8,padding:"6px 12px",fontFamily:"'Lora',serif",fontSize:12,cursor:generating?"not-allowed":"pointer",opacity:generating?0.6:1,flexShrink:0}}>
+            {generating?<><span className="spin" style={{display:"inline-block",width:11,height:11,border:"1.5px solid currentColor",borderTop:"1.5px solid transparent",borderRadius:"50%"}}/>Generating…</>:<>🔄 {generatedAt?"Refresh":"Generate"}</>}
+          </button>
+        </div>
+      </div>
+
+      {/* Error */}
+      {error&&<div style={{fontSize:12,color:"#c0392b",marginBottom:12,fontFamily:"'IBM Plex Mono',monospace"}}>{error}</div>}
+
+      {/* Empty state */}
+      {!generatedAt&&!generating&&(
+        <div style={{textAlign:"center",padding:"28px 20px"}}>
+          <div style={{fontSize:32,marginBottom:10}}>✦</div>
+          <div style={{fontFamily:"'Lora',serif",fontSize:14,fontWeight:600,color:"#37352f",marginBottom:6}}>Get your day's priorities</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#9b9a97",lineHeight:1.6,maxWidth:320,margin:"0 auto 16px"}}>Claude will scan your projects, todos, payments, and meetings to surface what needs your attention today.</div>
+          <button onClick={handleGenerate} style={{background:"#37352f",color:"#fff",border:"none",padding:"10px 24px",borderRadius:8,fontFamily:"'Lora',serif",fontSize:13,cursor:"pointer"}}>✦ Generate Priorities</button>
+        </div>
+      )}
+
+      {/* Generating skeleton */}
+      {generating&&listItems.length===0&&(
+        <div style={{display:"flex",flexDirection:"column",gap:10}}>
+          {[1,2,3,4].map(i=>(
+            <div key={i} style={{height:48,borderRadius:8,background:"#f1f0ef",animation:`pulse 1.5s ${i*0.15}s infinite ease-in-out`}}/>
+          ))}
+        </div>
+      )}
+
+      {/* List */}
+      {!generating&&listItems.length>0&&(
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {listItems.map((item,idx)=>{
+            const ps=PRIORITY_STYLE[item.priority]||PRIORITY_STYLE.medium;
+            const catEmoji=CAT_EMOJI[item.category]||"📋";
+            const hasProject=item.projectId&&onOpenProject;
+            const proj=hasProject?arr(projects).find(p=>p.id===item.projectId):null;
+            return(
+              <div key={idx} onClick={()=>{if(proj&&onOpenProject)onOpenProject(proj);}} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 14px",background:"#fff",border:"1px solid #f1f0ef",borderRadius:10,cursor:proj?"pointer":"default",transition:"all .12s"}} onMouseEnter={e=>{if(proj){e.currentTarget.style.background="#f7f6f3";e.currentTarget.style.borderColor="#e0ddd8";}}} onMouseLeave={e=>{e.currentTarget.style.background="#fff";e.currentTarget.style.borderColor="#f1f0ef";}}>
+                {/* Priority badge */}
+                <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fontWeight:700,background:ps.bg,color:ps.color,border:`1px solid ${ps.border}`,borderRadius:4,padding:"2px 6px",flexShrink:0,marginTop:1,letterSpacing:"0.04em"}}>{ps.label}</span>
+                {/* Content */}
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontFamily:"'Lora',serif",fontSize:13,color:"#37352f",lineHeight:1.4}}>{item.text}</div>
+                  {item.projectTitle&&<div style={{fontSize:11,color:"#9b9a97",marginTop:3,fontFamily:"'IBM Plex Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{catEmoji} {item.projectTitle}</div>}
+                  {!item.projectTitle&&<div style={{fontSize:11,color:"#c4c3bf",marginTop:2,fontFamily:"'IBM Plex Mono',monospace"}}>{catEmoji} {item.category}</div>}
+                </div>
+                {proj&&<span style={{fontSize:11,color:"#1a56c4",flexShrink:0,alignSelf:"center",marginLeft:4}}>→</span>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* No items for this tab */}
+      {!generating&&generatedAt&&listItems.length===0&&(
+        <div style={{textAlign:"center",padding:"20px",color:"#c4c3bf",fontStyle:"italic",fontSize:13,fontFamily:"'Lora',serif"}}>No {tab==="today"?"today's":"this week's"} items — you're all caught up!</div>
+      )}
+    </div>
+  );
+}
+
 // ─── ACCOUNT SETTINGS ─────────────────────────────────────────────────────────
 function AccountSettings({user,onBack,userProfile,onProfileSave}){
   const[form,setForm]=useState({
@@ -3481,7 +3653,7 @@ function AccountSettings({user,onBack,userProfile,onProfileSave}){
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings,onPackageLibrary,onFinancial,onAccount,userProfile,recentIdeas}){
+function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings,onPackageLibrary,onFinancial,onAccount,userProfile,recentIdeas,aiTodos,onAiTodosGenerated}){
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
   const[sidebarOpen,setSidebarOpen]=useState(true);
@@ -3634,6 +3806,16 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
                   </div>
                 ))}
               </div>
+
+              {/* AI Priority Widget */}
+              <AIPriorityWidget
+                projects={projects}
+                recentIdeas={recentIdeas}
+                userId={user?.id}
+                aiTodos={aiTodos}
+                onTodosGenerated={onAiTodosGenerated}
+                onOpenProject={onOpen}
+              />
 
               {/* Two-column widget row */}
               <div style={{display:"flex",gap:16,marginBottom:28,flexWrap:"wrap"}}>
@@ -5395,6 +5577,7 @@ function FrameBriefApp(){
   const[packages,setPackages]=useState([]);
   const[userProfile,setUserProfile]=useState(null);
   const[recentIdeas,setRecentIdeas]=useState([]);
+  const[aiTodos,setAiTodos]=useState(null);
   const[pitchPreviewMode,setPitchPreviewMode]=useState(false);
   const[pitchCopied,setPitchCopied]=useState(false);
   const[pitchSharedId,setPitchSharedId]=useState(null);
@@ -5440,8 +5623,8 @@ function FrameBriefApp(){
   useEffect(()=>{if(user){loadProjects();loadSharedProjects();loadClients();loadPackages();loadUserProfile();loadRecentIdeas();}},[user]); // eslint-disable-line
 
   async function loadUserProfile(){
-    const{data}=await supabase.from("user_settings").select("display_name,business_name,phone,website,location,bio").eq("id",user.id).single();
-    if(data)setUserProfile(data);
+    const{data}=await supabase.from("user_settings").select("display_name,business_name,phone,website,location,bio,ai_todos").eq("id",user.id).single();
+    if(data){setUserProfile(data);if(data.ai_todos)setAiTodos(data.ai_todos);}
   }
 
   async function loadRecentIdeas(){
@@ -6350,7 +6533,7 @@ ${JSON.stringify(brief)}`;
     </div>
   );
 
-  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} userProfile={userProfile} recentIdeas={recentIdeas} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")} onPackageLibrary={()=>setScreen("packageLibrary")} onFinancial={()=>setScreen("financial")} onAccount={()=>setScreen("account")}/></div>);
+  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} userProfile={userProfile} recentIdeas={recentIdeas} aiTodos={aiTodos} onAiTodosGenerated={t=>{setAiTodos(t);}} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")} onPackageLibrary={()=>setScreen("packageLibrary")} onFinancial={()=>setScreen("financial")} onAccount={()=>setScreen("account")}/></div>);
 
   if(screen==="input")return(<div><style>{CSS}</style><IntakeScreen
     transcript={transcript} setTranscript={setTranscript}
