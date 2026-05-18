@@ -3481,7 +3481,7 @@ function AccountSettings({user,onBack,userProfile,onProfileSave}){
 }
 
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings,onPackageLibrary,onFinancial,onAccount,userProfile}){
+function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings,onPackageLibrary,onFinancial,onAccount,userProfile,recentIdeas}){
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
   const[sidebarOpen,setSidebarOpen]=useState(true);
@@ -3611,15 +3611,8 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
             const now=new Date();
             const scheduledMeetings=arr(projects).flatMap(p=>arr(p.meeting_history).filter(m=>m.status==="scheduled"&&m.date&&new Date(m.date)>now).map(m=>({...m,projectTitle:p.title,projectEmoji:p.brief?.coverEmoji||"🎬",projectObj:p}))).sort((a,b)=>new Date(a.date)-new Date(b.date)).slice(0,4);
 
-            // Section 4: Recent ideas
-            let recentIdeas=[];
-            try{
-              const raw=localStorage.getItem(`framebrief_ideas_${user?.id}`);
-              if(raw){
-                const allIdeas=Object.values(JSON.parse(raw)).flat();
-                recentIdeas=allIdeas.filter(i=>i.brief?.title||i.raw_text).sort((a,b)=>new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0)).slice(0,4);
-              }
-            }catch(e){}
+            // Section 4: Recent ideas (from Supabase via prop)
+            const recentIdeasList=arr(recentIdeas).filter(i=>i.brief?.title||i.raw_text||i.rawText).slice(0,4);
 
             return(<>
               {/* Greeting */}
@@ -3697,20 +3690,24 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
               </div>
 
               {/* Recent Ideas */}
-              {recentIdeas.length>0&&(
+              {recentIdeasList.length>0&&(
                 <div style={{marginBottom:28}}>
                   <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
                     <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em"}}>Recent Ideas</div>
                     <span style={{fontFamily:"'Lora',serif",fontSize:12,color:"#e97942",cursor:"pointer"}} onClick={onIdeas}>Open Idea Capture →</span>
                   </div>
                   <div style={{display:"flex",gap:10,overflowX:"auto",paddingBottom:4}}>
-                    {recentIdeas.map((idea,idx)=>(
-                      <div key={idea.id||idx} onClick={onIdeas} style={{background:"#fffbf0",border:"1px solid #f5e9d0",borderRadius:10,padding:"14px 16px",minWidth:180,maxWidth:220,cursor:"pointer",flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.opacity="0.85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-                        <div style={{fontFamily:"'Lora',serif",fontSize:13,fontWeight:700,color:"#37352f",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{idea.brief?.title||idea.raw_text?.slice(0,50)||"Untitled"}</div>
-                        {idea.brief?.format&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",marginBottom:3}}>{idea.brief.format}</div>}
-                        <div style={{fontSize:11,color:"#c4c3bf"}}>{idea.created_at?new Date(idea.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric"}):""}</div>
-                      </div>
-                    ))}
+                    {recentIdeasList.map((idea,idx)=>{
+                      const title=idea.brief?.title||(idea.raw_text||idea.rawText||"").slice(0,50)||"Untitled";
+                      const dateStr=idea.created_at?new Date(idea.created_at).toLocaleDateString("en-US",{month:"short",day:"numeric"}):"";
+                      return(
+                        <div key={idea.id||idx} onClick={onIdeas} style={{background:"#fffbf0",border:"1px solid #f5e9d0",borderRadius:10,padding:"14px 16px",minWidth:180,maxWidth:220,cursor:"pointer",flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.opacity="0.85"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
+                          <div style={{fontFamily:"'Lora',serif",fontSize:13,fontWeight:700,color:"#37352f",marginBottom:4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{title}</div>
+                          {idea.brief?.format&&<div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",marginBottom:3}}>{idea.brief.format}</div>}
+                          <div style={{fontSize:11,color:"#c4c3bf"}}>{dateStr}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -5397,6 +5394,7 @@ function FrameBriefApp(){
   const[moreMenuOpen,setMoreMenuOpen]=useState(false);
   const[packages,setPackages]=useState([]);
   const[userProfile,setUserProfile]=useState(null);
+  const[recentIdeas,setRecentIdeas]=useState([]);
   const[pitchPreviewMode,setPitchPreviewMode]=useState(false);
   const[pitchCopied,setPitchCopied]=useState(false);
   const[pitchSharedId,setPitchSharedId]=useState(null);
@@ -5439,11 +5437,16 @@ function FrameBriefApp(){
     }
   },[]);
 
-  useEffect(()=>{if(user){loadProjects();loadSharedProjects();loadClients();loadPackages();loadUserProfile();}},[user]); // eslint-disable-line
+  useEffect(()=>{if(user){loadProjects();loadSharedProjects();loadClients();loadPackages();loadUserProfile();loadRecentIdeas();}},[user]); // eslint-disable-line
 
   async function loadUserProfile(){
     const{data}=await supabase.from("user_settings").select("display_name,business_name,phone,website,location,bio").eq("id",user.id).single();
     if(data)setUserProfile(data);
+  }
+
+  async function loadRecentIdeas(){
+    const{data}=await supabase.from("ideas").select("id,raw_text,brief,created_at,workspace_id").eq("user_id",user.id).order("created_at",{ascending:false}).limit(4);
+    if(data)setRecentIdeas(data);
   }
 
   // ─── URL ROUTING ──────────────────────────────────────────────────────────────
@@ -6347,7 +6350,7 @@ ${JSON.stringify(brief)}`;
     </div>
   );
 
-  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} userProfile={userProfile} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")} onPackageLibrary={()=>setScreen("packageLibrary")} onFinancial={()=>setScreen("financial")} onAccount={()=>setScreen("account")}/></div>);
+  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} userProfile={userProfile} recentIdeas={recentIdeas} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")} onPackageLibrary={()=>setScreen("packageLibrary")} onFinancial={()=>setScreen("financial")} onAccount={()=>setScreen("account")}/></div>);
 
   if(screen==="input")return(<div><style>{CSS}</style><IntakeScreen
     transcript={transcript} setTranscript={setTranscript}
