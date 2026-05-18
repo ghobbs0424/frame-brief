@@ -2,6 +2,18 @@ import React, { useState, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const MODEL = "claude-sonnet-4-6";
+
+// Generate a readable URL slug from a project title + first 8 chars of UUID
+function makeSlug(title, id) {
+  const base = (title || "untitled")
+    .toLowerCase()
+    .replace(/[''""]/g, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 50) || "untitled";
+  return `${base}-${(id || "").slice(0, 8)}`;
+}
+
 // API calls are proxied through /api/ai — key lives server-side only
 async function callAI(body) {
   return fetch("/api/ai", {
@@ -4997,7 +5009,9 @@ function FrameBriefApp(){
     if(scr==="clients"||scr==="clientProfile")return"/clients";
     if(scr==="packageLibrary")return"/pricing";
     if(scr==="doc"&&projId){
-      const base=`/project/${projId}`;
+      // Use slug if available, otherwise UUID
+      const projSlug=activeProject?.slug||projId;
+      const base=`/project/${projSlug}`;
       if(pg==="pitch-deck")return`${base}/pitch`;
       if(pg==="shootday")return`${base}/shoot`;
       if(pg==="postprod")return`${base}/post`;
@@ -5015,7 +5029,7 @@ function FrameBriefApp(){
     if(path&&window.location.pathname!==path){
       window.history.pushState({screen,page,projId:activeProject?.id},"",path);
     }
-  },[screen,page,activeProject?.id]); // eslint-disable-line
+  },[screen,page,activeProject?.id,activeProject?.slug]); // eslint-disable-line
 
   // Parse a URL pathname and navigate to the right screen/page
   async function navigateToPath(pathname,allProjects,currentUser){
@@ -5031,9 +5045,15 @@ function FrameBriefApp(){
     if(projMatch){
       const pid=projMatch[1];
       const sub=projMatch[3]||"";
-      let proj=(allProjects||[]).find(p=>p.id===pid);
+      const isUUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(pid);
+      // Try in-memory first
+      let proj=(allProjects||[]).find(p=>isUUID?p.id===pid:p.slug===pid);
       if(!proj){
-        const{data}=await supabase.from("projects").select("*").eq("id",pid).single();
+        // Fetch from Supabase — by UUID or by slug
+        const q=isUUID
+          ?supabase.from("projects").select("*").eq("id",pid)
+          :supabase.from("projects").select("*").eq("slug",pid);
+        const{data}=await q.single();
         proj=data;
       }
       if(!proj){setScreen("dashboard");return;}
@@ -5184,9 +5204,12 @@ function FrameBriefApp(){
   async function saveProject(projectData){
     setDbSaving(true);
     const isOwner=!user||user.id===projectData.user_id;
+    // Generate slug lazily for existing projects that don't have one
+    const slug=projectData.slug||makeSlug(projectData.brief?.projectTitle||projectData.title||"untitled",projectData.id);
+    if(!projectData.slug)projectData={...projectData,slug};
     let data,error;
     if(isOwner){
-      ({data,error}=await supabase.from("projects").upsert({id:projectData.id,user_id:user.id,title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",status:projectData.status||"Draft",brief:projectData.brief||{},doc_count:projectData.doc_count||0,client_id:projectData.client_id||null,meeting_stage:projectData.meeting_stage||"discovery",meeting_history:projectData.meeting_history||[],call_sheet:projectData.call_sheet||{},post_production:projectData.post_production||{},updated_at:new Date().toISOString()}).select().single());
+      ({data,error}=await supabase.from("projects").upsert({id:projectData.id,user_id:user.id,title:projectData.brief?.projectTitle||"Untitled",client_name:projectData.brief?.clientName||"",status:projectData.status||"Draft",brief:projectData.brief||{},doc_count:projectData.doc_count||0,client_id:projectData.client_id||null,meeting_stage:projectData.meeting_stage||"discovery",meeting_history:projectData.meeting_history||[],call_sheet:projectData.call_sheet||{},post_production:projectData.post_production||{},slug,updated_at:new Date().toISOString()}).select().single());
       // If new lifecycle columns don't exist yet, fall back to saving without them
       if(error){
         console.warn("saveProject: full upsert failed, retrying without lifecycle columns:",error.message);
@@ -5579,7 +5602,8 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       const mn=briefData.meetingNotes||{};
       const combinedText=allText||"";
       const discoveryMeeting={id:`m-${Date.now()}`,date:new Date().toISOString(),stage:"discovery",summary:mn.summary||briefData.logline||"Initial brief created from intake workspace.",keyPoints:arr(mn.keyPoints),topics:arr(mn.topics),actionItems:[],suggestedChanges:[],transcriptText:combinedText||null,transcriptExcerpt:combinedText.slice(0,500),status:"reviewed"};
-      const newProject={id:crypto.randomUUID(),user_id:user.id,title:briefData.projectTitle||intakeTitle||"Untitled",client_name:briefData.clientName||"",status:"Draft",brief:briefData,pitch_deck:pitchDeck||{},doc_count:validDocs.length,client_id:resolvedClientId||null,meeting_stage:"discovery",meeting_history:[discoveryMeeting],created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
+      const newProjId=crypto.randomUUID();
+      const newProject={id:newProjId,user_id:user.id,title:briefData.projectTitle||intakeTitle||"Untitled",client_name:briefData.clientName||"",status:"Draft",brief:briefData,pitch_deck:pitchDeck||{},doc_count:validDocs.length,client_id:resolvedClientId||null,meeting_stage:"discovery",meeting_history:[discoveryMeeting],slug:makeSlug(briefData.projectTitle||intakeTitle||"untitled",newProjId),created_at:new Date().toISOString(),updated_at:new Date().toISOString()};
       const saved=await saveProject(newProject);
       setActiveProject(saved||newProject);
       setPage("overview");setShareMode(false);setChatLog([]);setChatOpen(false);
@@ -5860,6 +5884,7 @@ ${JSON.stringify(brief)}`;
           id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",
           status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},
           doc_count:0,client_id:(inputClientId&&inputClientId!=="__new__"?inputClientId:null),recall_bot_id:botId,recall_status:"bot_joined",
+          slug:makeSlug("meeting-in-progress",projectId),
           created_at:new Date().toISOString(),updated_at:new Date().toISOString()
         }).select().single();
         const project=data||{id:projectId,user_id:user.id,title:"Meeting in progress…",client_name:"",status:"Draft",brief:{projectTitle:"Meeting in progress…",concepts:[],clientActionItems:[],internalTodos:[]},doc_count:0,recall_bot_id:botId,recall_status:"bot_joined"};
