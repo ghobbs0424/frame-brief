@@ -5104,6 +5104,16 @@ function FrameBriefApp(){
     loadShareRoute(shareProjectId);
   },[shareProjectId,authLoading]); // eslint-disable-line
 
+  // Generate + save slug for existing projects that don't have one yet
+  useEffect(()=>{
+    if(!activeProject?.id||activeProject.slug||!user||activeProject.user_id!==user.id)return;
+    const slug=makeSlug(activeProject.brief?.projectTitle||activeProject.title||"untitled",activeProject.id);
+    supabase.from("projects").update({slug,updated_at:new Date().toISOString()}).eq("id",activeProject.id).then(()=>{
+      setActiveProject(prev=>prev?.id===activeProject.id?{...prev,slug}:prev);
+      setProjects(ps=>ps.map(p=>p.id===activeProject.id?{...p,slug}:p));
+    });
+  },[activeProject?.id]); // eslint-disable-line
+
   // Initialize pendingMeeting when opening a project that already has brief_pending_review status
   useEffect(()=>{
     if(activeProject?.recall_status==="brief_pending_review"){
