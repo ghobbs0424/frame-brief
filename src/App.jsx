@@ -3348,8 +3348,140 @@ function FinancialDashboard({projects,onBack,onOpenProject}){
   );
 }
 
+// ─── ACCOUNT SETTINGS ─────────────────────────────────────────────────────────
+function AccountSettings({user,onBack,userProfile,onProfileSave}){
+  const[form,setForm]=useState({
+    display_name:userProfile?.display_name||"",
+    business_name:userProfile?.business_name||"",
+    phone:userProfile?.phone||"",
+    website:userProfile?.website||"",
+    location:userProfile?.location||"",
+    bio:userProfile?.bio||"",
+  });
+  const[saving,setSaving]=useState(false);
+  const[saved,setSaved]=useState(false);
+  const[pwForm,setPwForm]=useState({next:"",confirm:""});
+  const[pwMsg,setPwMsg]=useState("");
+  const[pwSaving,setPwSaving]=useState(false);
+  const[pwVisible,setPwVisible]=useState(false);
+
+  function field(key){return{value:form[key],onChange:e=>setForm(f=>({...f,[key]:e.target.value}))};}
+
+  async function handleSave(){
+    setSaving(true);setSaved(false);
+    const{error}=await supabase.from("user_settings").upsert({id:user.id,...form,updated_at:new Date().toISOString()},{onConflict:"id"});
+    if(!error){onProfileSave({...userProfile,...form});setSaved(true);setTimeout(()=>setSaved(false),2500);}
+    setSaving(false);
+  }
+
+  async function handlePasswordChange(){
+    if(pwForm.next!==pwForm.confirm){setPwMsg("⚠ Passwords don't match");return;}
+    if(pwForm.next.length<8){setPwMsg("⚠ Password must be at least 8 characters");return;}
+    setPwSaving(true);setPwMsg("");
+    const{error}=await supabase.auth.updateUser({password:pwForm.next});
+    if(error)setPwMsg("⚠ "+error.message);
+    else{setPwMsg("✓ Password updated successfully");setPwForm({next:"",confirm:""});}
+    setPwSaving(false);
+  }
+
+  const initials=((form.display_name||user?.email||"?").match(/\b\w/g)||[]).slice(0,2).join("").toUpperCase()||"?";
+  const inputStyle={width:"100%",border:"1px solid #e8e4dc",borderRadius:8,padding:"10px 14px",fontFamily:"'Lora',serif",fontSize:14,color:"#37352f",outline:"none",background:"#fafaf9",boxSizing:"border-box"};
+  const labelStyle={display:"block",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:6};
+
+  return(
+    <div style={{minHeight:"100vh",background:"#fff"}}>
+      {/* Header */}
+      <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,background:"#fff",zIndex:10}}>
+        <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#9b9a97",fontFamily:"'Lora',serif",padding:"4px 0",display:"flex",alignItems:"center",gap:6}}>← Back</button>
+        <span style={{color:"#e8e4dc"}}>|</span>
+        <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#37352f",fontWeight:500,letterSpacing:"0.08em"}}>ACCOUNT SETTINGS</span>
+      </div>
+
+      <div style={{maxWidth:600,margin:"0 auto",padding:"40px 24px 80px"}}>
+        {/* Avatar */}
+        <div style={{display:"flex",alignItems:"center",gap:20,marginBottom:40}}>
+          <div style={{width:72,height:72,borderRadius:"50%",background:"#37352f",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,fontWeight:700,color:"#f5ede0",fontFamily:"'Lora',serif",flexShrink:0,letterSpacing:"-0.02em"}}>{initials}</div>
+          <div>
+            <div style={{fontFamily:"'Lora',serif",fontSize:20,fontWeight:700,color:"#37352f",marginBottom:2}}>{form.display_name||user?.email?.split("@")[0]||"Your Name"}</div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:12,color:"#9b9a97"}}>{user?.email}</div>
+          </div>
+        </div>
+
+        {/* Profile section */}
+        <div style={{marginBottom:36}}>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#37352f",fontWeight:600,letterSpacing:"0.08em",marginBottom:20,paddingBottom:10,borderBottom:"1px solid #f1f0ef"}}>PROFILE</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+            <div>
+              <label style={labelStyle}>Display Name</label>
+              <input {...field("display_name")} placeholder="Garrison" style={inputStyle} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            </div>
+            <div>
+              <label style={labelStyle}>Business Name</label>
+              <input {...field("business_name")} placeholder="GH Productions" style={inputStyle} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            </div>
+          </div>
+          <div style={{marginBottom:16}}>
+            <label style={labelStyle}>Email</label>
+            <input value={user?.email||""} readOnly style={{...inputStyle,background:"#f7f6f3",color:"#9b9a97",cursor:"not-allowed"}}/>
+            <div style={{fontSize:11,color:"#c4c3bf",marginTop:4,fontFamily:"'IBM Plex Mono',monospace"}}>Email is managed through your login credentials</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+            <div>
+              <label style={labelStyle}>Phone</label>
+              <input {...field("phone")} placeholder="+1 (713) 555-0100" style={inputStyle} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            </div>
+            <div>
+              <label style={labelStyle}>Location</label>
+              <input {...field("location")} placeholder="Houston, TX" style={inputStyle} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+            </div>
+          </div>
+          <div style={{marginBottom:16}}>
+            <label style={labelStyle}>Website</label>
+            <input {...field("website")} placeholder="https://ghproductions.co" style={inputStyle} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+          </div>
+          <div style={{marginBottom:24}}>
+            <label style={labelStyle}>Bio</label>
+            <textarea {...field("bio")} placeholder="Videographer & photographer based in Houston. Specializing in music videos, documentaries, and commercial content." rows={3} style={{...inputStyle,resize:"vertical",minHeight:80,lineHeight:1.6}} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+          </div>
+          <button onClick={handleSave} disabled={saving} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 28px",borderRadius:8,fontFamily:"'Lora',serif",fontSize:14,cursor:saving?"not-allowed":"pointer",opacity:saving?0.6:1,display:"flex",alignItems:"center",gap:8}}>
+            {saving?"Saving…":saved?"✓ Saved":"Save Changes"}
+          </button>
+        </div>
+
+        {/* Password section */}
+        <div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#37352f",fontWeight:600,letterSpacing:"0.08em",marginBottom:20,paddingBottom:10,borderBottom:"1px solid #f1f0ef"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <span>SECURITY</span>
+              <button onClick={()=>setPwVisible(v=>!v)} style={{background:"none",border:"none",cursor:"pointer",fontSize:11,color:"#1a56c4",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.08em"}}>{pwVisible?"Hide":"Change Password"}</button>
+            </div>
+          </div>
+          {pwVisible&&(
+            <div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16}}>
+                <div>
+                  <label style={labelStyle}>New Password</label>
+                  <input type="password" value={pwForm.next} onChange={e=>setPwForm(f=>({...f,next:e.target.value}))} placeholder="At least 8 characters" style={inputStyle} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                </div>
+                <div>
+                  <label style={labelStyle}>Confirm Password</label>
+                  <input type="password" value={pwForm.confirm} onChange={e=>setPwForm(f=>({...f,confirm:e.target.value}))} placeholder="Repeat new password" style={inputStyle} onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+                </div>
+              </div>
+              {pwMsg&&<div style={{fontSize:12,color:pwMsg.startsWith("✓")?"#1e7e34":"#c0392b",marginBottom:12,fontFamily:"'IBM Plex Mono',monospace"}}>{pwMsg}</div>}
+              <button onClick={handlePasswordChange} disabled={pwSaving||!pwForm.next||!pwForm.confirm} style={{background:"#fff",color:"#37352f",border:"1px solid #e8e4dc",padding:"10px 24px",borderRadius:8,fontFamily:"'Lora',serif",fontSize:14,cursor:pwSaving?"not-allowed":"pointer",opacity:pwSaving||(!pwForm.next||!pwForm.confirm)?0.5:1}}>
+                {pwSaving?"Updating…":"Update Password"}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings,onPackageLibrary,onFinancial}){
+function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings,onPackageLibrary,onFinancial,onAccount,userProfile}){
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
   const[sidebarOpen,setSidebarOpen]=useState(true);
@@ -3436,6 +3568,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
       {calendarMsg&&<div style={{fontSize:11,padding:"4px 10px",color:calendarMsg.startsWith("✓")?"#1e7e34":"#c0392b",lineHeight:1.4}}>{calendarMsg}</div>}
       <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:10}}>Account</div>
       <div style={{fontSize:12,color:"#9b9a97",padding:"4px 10px",marginBottom:8,lineHeight:1.5,wordBreak:"break-all"}}>{user?.email}</div>
+      <button onClick={onAccount} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>👤</span><span>Profile & Settings</span></button>
       <button onClick={onSignOut} className="nb"><span style={{fontSize:15}}>🚪</span><span>Sign Out</span></button>
     </div>
   </>);}
@@ -3462,8 +3595,9 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
             // Section 1: Greeting + date
             const hour=new Date().getHours();
             const greeting=hour<12?"Good morning":hour<17?"Good afternoon":"Good evening";
-            const firstName=(user?.email||"").split("@")[0].split(".")[0];
-            const displayName=firstName.charAt(0).toUpperCase()+firstName.slice(1);
+            const rawFirst=(user?.email||"").split("@")[0].split(".")[0];
+            const emailFallback=rawFirst.charAt(0).toUpperCase()+rawFirst.slice(1);
+            const displayName=userProfile?.display_name||(userProfile?.business_name?userProfile.business_name.split(" ")[0]:null)||emailFallback;
 
             // Section 2: Financial snapshot
             const collected=arr(projects).filter(p=>p.pitch_approval?.status==="deposit_paid"||p.pitch_approval?.status==="paid_in_full").reduce((s,p)=>s+(p.pitch_approval.status==="paid_in_full"?(p.pitch_approval.totalAmount||0):(p.pitch_approval.depositAmount||0)),0);
@@ -5262,6 +5396,7 @@ function FrameBriefApp(){
   const[showScheduleConsultation,setShowScheduleConsultation]=useState(false);
   const[moreMenuOpen,setMoreMenuOpen]=useState(false);
   const[packages,setPackages]=useState([]);
+  const[userProfile,setUserProfile]=useState(null);
   const[pitchPreviewMode,setPitchPreviewMode]=useState(false);
   const[pitchCopied,setPitchCopied]=useState(false);
   const[pitchSharedId,setPitchSharedId]=useState(null);
@@ -5304,7 +5439,12 @@ function FrameBriefApp(){
     }
   },[]);
 
-  useEffect(()=>{if(user){loadProjects();loadSharedProjects();loadClients();loadPackages();}},[user]);
+  useEffect(()=>{if(user){loadProjects();loadSharedProjects();loadClients();loadPackages();loadUserProfile();}},[user]); // eslint-disable-line
+
+  async function loadUserProfile(){
+    const{data}=await supabase.from("user_settings").select("display_name,business_name,phone,website,location,bio").eq("id",user.id).single();
+    if(data)setUserProfile(data);
+  }
 
   // ─── URL ROUTING ──────────────────────────────────────────────────────────────
   const urlInitialized=useRef(false);
@@ -5318,6 +5458,7 @@ function FrameBriefApp(){
     if(scr==="clients"||scr==="clientProfile")return"/clients";
     if(scr==="packageLibrary")return"/pricing";
     if(scr==="financial")return"/financial";
+    if(scr==="account")return"/account";
     if(scr==="doc"&&projId){
       // Use slug if available, otherwise UUID
       const projSlug=activeProject?.slug||projId;
@@ -5351,6 +5492,7 @@ function FrameBriefApp(){
     if(pathname==="/clients"){setScreen("clients");return;}
     if(pathname==="/pricing"){setScreen("packageLibrary");return;}
     if(pathname==="/financial"){setScreen("financial");return;}
+    if(pathname==="/account"){setScreen("account");return;}
 
     const projMatch=pathname.match(/^\/project\/([^/]+)(\/(.+))?$/);
     if(projMatch){
@@ -6166,6 +6308,17 @@ ${JSON.stringify(brief)}`;
     </div>
   );
 
+  if(screen==="account")return(
+    <div><style>{CSS}</style>
+      <AccountSettings
+        user={user}
+        userProfile={userProfile}
+        onBack={()=>setScreen("dashboard")}
+        onProfileSave={profile=>{setUserProfile(profile);}}
+      />
+    </div>
+  );
+
   if(screen==="financial")return(
     <div><style>{CSS}</style>
       <FinancialDashboard
@@ -6194,7 +6347,7 @@ ${JSON.stringify(brief)}`;
     </div>
   );
 
-  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")} onPackageLibrary={()=>setScreen("packageLibrary")} onFinancial={()=>setScreen("financial")}/></div>);
+  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} userProfile={userProfile} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")} onPackageLibrary={()=>setScreen("packageLibrary")} onFinancial={()=>setScreen("financial")} onAccount={()=>setScreen("account")}/></div>);
 
   if(screen==="input")return(<div><style>{CSS}</style><IntakeScreen
     transcript={transcript} setTranscript={setTranscript}
