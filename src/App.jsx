@@ -3929,12 +3929,12 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
 
       {/* ── ABOUT THIS PROJECT ─────────────────────────────── */}
       {(pd.approach||brief?.overview||!readonly)&&(
-        <div style={{padding:"40px 40px",borderBottom:"1px solid #f1f0ef"}}>
-          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24}}>
+        <div style={{padding:"28px 24px",borderBottom:"1px solid #f1f0ef"}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:16}}>
             <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>About This Project</div>
             <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
           </div>
-          <div style={{fontSize:17,lineHeight:2,color:"#37352f",maxWidth:720}}>
+          <div style={{fontSize:14,lineHeight:1.75,color:"#37352f",maxWidth:720}}>
             {!readonly
               ?<Editable value={pd.approach||""} onChange={v=>setPitchDeck({...pd,approach:v})} multiline placeholder="Describe the creative vision and approach for this project…"/>
               :<p style={{margin:0}}>{pd.approach}</p>}
