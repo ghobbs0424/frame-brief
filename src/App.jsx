@@ -4805,6 +4805,99 @@ function FrameBriefApp(){
 
   useEffect(()=>{if(user){loadProjects();loadSharedProjects();loadClients();loadPackages();}},[user]);
 
+  // ─── URL ROUTING ──────────────────────────────────────────────────────────────
+  const urlInitialized=useRef(false);
+
+  // Convert app state → canonical URL path
+  function stateToPath(scr,pg,projId){
+    if(!scr||scr==="dashboard")return"/";
+    if(scr==="input")return"/new";
+    if(scr==="ideas")return"/ideas";
+    if(scr==="meetings")return"/meetings";
+    if(scr==="clients"||scr==="clientProfile")return"/clients";
+    if(scr==="packageLibrary")return"/pricing";
+    if(scr==="doc"&&projId){
+      const base=`/project/${projId}`;
+      if(pg==="pitch-deck")return`${base}/pitch`;
+      if(pg==="shootday")return`${base}/shoot`;
+      if(pg==="postprod")return`${base}/post`;
+      if(pg&&pg.startsWith("concept-"))return`${base}/concept/${pg.split("-")[1]}`;
+      return base;
+    }
+    return null; // transient / special screens — don't push
+  }
+
+  // Sync state → URL on every nav change
+  useEffect(()=>{
+    const skip=["loading","sharedIdea","pitchPublic","auth"];
+    if(skip.includes(screen))return;
+    const path=stateToPath(screen,page,activeProject?.id);
+    if(path&&window.location.pathname!==path){
+      window.history.pushState({screen,page,projId:activeProject?.id},"",path);
+    }
+  },[screen,page,activeProject?.id]); // eslint-disable-line
+
+  // Parse a URL pathname and navigate to the right screen/page
+  async function navigateToPath(pathname,allProjects,currentUser){
+    if(!pathname||pathname==="/"){setScreen("dashboard");return;}
+    if(/^\/(share|idea|pitch)\//.test(pathname))return; // handled elsewhere
+    if(pathname==="/new"){setScreen("input");return;}
+    if(pathname==="/ideas"){setScreen("ideas");return;}
+    if(pathname==="/meetings"){setScreen("meetings");return;}
+    if(pathname==="/clients"){setScreen("clients");return;}
+    if(pathname==="/pricing"){setScreen("packageLibrary");return;}
+
+    const projMatch=pathname.match(/^\/project\/([^/]+)(\/(.+))?$/);
+    if(projMatch){
+      const pid=projMatch[1];
+      const sub=projMatch[3]||"";
+      let proj=(allProjects||[]).find(p=>p.id===pid);
+      if(!proj){
+        const{data}=await supabase.from("projects").select("*").eq("id",pid).single();
+        proj=data;
+      }
+      if(!proj){setScreen("dashboard");return;}
+      let pg="overview";
+      if(sub==="pitch")pg="pitch-deck";
+      else if(sub==="shoot")pg="shootday";
+      else if(sub==="post")pg="postprod";
+      else if(sub.startsWith("concept/")){pg=`concept-${sub.split("/")[1]}`;}
+      const uid=currentUser?.id||user?.id;
+      setMyRole(proj.user_id===uid?"owner":"viewer");
+      setActiveProject(proj);
+      setPage(pg);
+      setShareMode(false);
+      setChatLog([]);
+      setChatOpen(false);
+      setSidebarOpen(false);
+      setViewingMeeting(null);
+      setViewingMeetingIdx(null);
+      setMeetingNotesExpanded(false);
+      setScreen("doc");
+      return;
+    }
+    setScreen("dashboard");
+  }
+
+  // On initial load: once auth resolves, parse URL and navigate
+  useEffect(()=>{
+    if(authLoading||urlInitialized.current)return;
+    urlInitialized.current=true;
+    const pathname=window.location.pathname;
+    if(/^\/(share|idea|pitch)\//.test(pathname))return;
+    if(!user)return; // not signed in — auth screen will show
+    navigateToPath(pathname,projects,user);
+  },[authLoading,user]); // eslint-disable-line
+
+  // Browser back / forward
+  useEffect(()=>{
+    function handlePop(){navigateToPath(window.location.pathname,projects,user);}
+    window.addEventListener("popstate",handlePop);
+    return()=>window.removeEventListener("popstate",handlePop);
+  },[projects,user]); // eslint-disable-line
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
   // Load shared project once auth resolves
   useEffect(()=>{
     if(!shareProjectId||authLoading)return;
