@@ -3791,6 +3791,11 @@ function rateUnitLabel(rateType){return(RATE_TYPES.find(r=>r.id===rateType)||RAT
 // ─── PITCH DECK PAGE ──────────────────────────────────────────────────────────
 function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompany,brief}){
   const coverInputRef=useRef(null);
+  const [openSections, setOpenSections] = useState({
+    about:true, investment:true, addons:true, scope:true,
+    payment:true, whyus:true, moodboard:true,
+  });
+  function toggleSection(key){ setOpenSections(s=>({...s,[key]:!s[key]})); }
 
   async function handleCoverFile(e){
     const file=e.target.files?.[0];
@@ -3930,15 +3935,18 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
       {/* ── ABOUT THIS PROJECT ─────────────────────────────── */}
       {(pd.approach||brief?.overview||!readonly)&&(
         <div style={{padding:"28px 24px",borderBottom:"1px solid #f1f0ef"}}>
-          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:16}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:openSections.about?16:0,cursor:"pointer"}} onClick={()=>toggleSection("about")}>
             <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>About This Project</div>
             <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
+            <span style={{fontSize:10,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:openSections.about?"rotate(90deg)":"rotate(0deg)",flexShrink:0}}>▶</span>
           </div>
-          <div style={{fontSize:14,lineHeight:1.75,color:"#37352f",maxWidth:720}}>
-            {!readonly
-              ?<Editable value={pd.approach||""} onChange={v=>setPitchDeck({...pd,approach:v})} multiline placeholder="Describe the creative vision and approach for this project…"/>
-              :<p style={{margin:0}}>{pd.approach}</p>}
-          </div>
+          {openSections.about&&(
+            <div style={{fontSize:14,lineHeight:1.75,color:"#37352f",maxWidth:720}}>
+              {!readonly
+                ?<Editable value={pd.approach||""} onChange={v=>setPitchDeck({...pd,approach:v})} multiline placeholder="Describe the creative vision and approach for this project…"/>
+                :<p style={{margin:0}}>{pd.approach}</p>}
+            </div>
+          )}
         </div>
       )}
 
@@ -3974,14 +3982,16 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
       {/* ── INVESTMENT — itemized invoice ──────────────────── */}
       {(lineItems.length>0||!readonly)&&(
       <div style={{padding:"40px 24px",borderBottom:"1px solid #f1f0ef"}}>
-        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:openSections.investment?28:0,cursor:"pointer"}} onClick={()=>toggleSection("investment")}>
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Investment</div>
           <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
           {investmentTotal>0&&(
             <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:13,fontWeight:700,color:"#37352f",whiteSpace:"nowrap"}}>{fmtPrice(investmentTotal)}</div>
           )}
+          <span style={{fontSize:10,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:openSections.investment?"rotate(90deg)":"rotate(0deg)",flexShrink:0}}>▶</span>
         </div>
-
+        {openSections.investment&&(
+        <>
         {/* Itemized invoice — stacked card layout, mobile-friendly */}
         <div style={{border:"1px solid #e8e4dc",borderRadius:10,overflow:"hidden",marginBottom:20}}>
           {lineItems.map((li,i)=>{
@@ -4049,11 +4059,15 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
         {/* Scope of work — concept/deliverable detail cards */}
         {pkgs.length>0&&(
           <div style={{marginTop:8}}>
-            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.2em",marginBottom:20}}>Scope of Work</div>
-            {pkgs.map((pkg,i)=>(
+            <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:openSections.scope?20:0,cursor:"pointer"}} onClick={()=>toggleSection("scope")}>
+              <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Scope of Work</div>
+              <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
+              <span style={{fontSize:10,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:openSections.scope?"rotate(90deg)":"rotate(0deg)",flexShrink:0}}>▶</span>
+            </div>
+            {openSections.scope&&pkgs.map((pkg,i)=>(
               <div key={pkg.id||i} style={{
                 background:"#fff",border:"1px solid #e8e4dc",borderLeft:"3px solid #e8e4dc",
-                borderRadius:10,padding:"28px 32px",marginBottom:16,
+                borderRadius:10,padding:"20px 18px",marginBottom:16,
                 boxShadow:"0 1px 6px rgba(0,0,0,0.04)",position:"relative",overflow:"hidden",
               }}>
                 <div style={{position:"absolute",top:-10,right:16,fontFamily:"'IBM Plex Mono',monospace",fontSize:100,fontWeight:700,color:"#f7f6f5",lineHeight:1,pointerEvents:"none",userSelect:"none",zIndex:0}}>
@@ -4078,7 +4092,7 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
                     )}
                   </div>
                   {(pkg.description||!readonly)&&(
-                    <div style={{fontSize:14,color:"#37352f",lineHeight:1.8,margin:"16px 0",paddingTop:14,borderTop:"1px solid #f1f0ef"}}>
+                    <div style={{fontSize:13,color:"#37352f",lineHeight:1.7,margin:"16px 0",paddingTop:14,borderTop:"1px solid #f1f0ef"}}>
                       {!readonly?<Editable value={pkg.description||""} onChange={v=>upPkg(i,"description",v)} multiline placeholder="Describe this deliverable…"/>:<p style={{margin:0}}>{pkg.description}</p>}
                     </div>
                   )}
@@ -4110,6 +4124,8 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
               </button>
             )}
           </div>
+        )}
+        </>
         )}
       </div>
       )}
@@ -4153,10 +4169,13 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
       {/* ── ADD-ONS ──────────────────────────────────────── */}
       {(addOns.length>0||!readonly)&&(
         <div style={{padding:"40px 40px",borderBottom:"1px solid #f1f0ef"}}>
-          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:openSections.addons?28:0,cursor:"pointer"}} onClick={()=>toggleSection("addons")}>
             <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Add-Ons</div>
             <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
+            <span style={{fontSize:10,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:openSections.addons?"rotate(90deg)":"rotate(0deg)",flexShrink:0}}>▶</span>
           </div>
+          {openSections.addons&&(
+          <>
           {addOns.length>0&&(
             <table style={{width:"100%",maxWidth:540,borderCollapse:"collapse",fontSize:14}}>
               <thead>
@@ -4187,16 +4206,20 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
               + Add add-on
             </button>
           )}
+          </>
+          )}
         </div>
       )}
 
       {/* ── PAYMENT & SCHEDULING ─────────────────────────── */}
       <div style={{padding:"40px 24px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
-        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:24}}>
+        <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:openSections.payment?24:0,cursor:"pointer"}} onClick={()=>toggleSection("payment")}>
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Payment & Scheduling</div>
           <div style={{flex:1,height:1,background:"#e8e4dc"}}/>
+          <span style={{fontSize:10,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:openSections.payment?"rotate(90deg)":"rotate(0deg)",flexShrink:0}}>▶</span>
         </div>
-
+        {openSections.payment&&(
+        <>
         {/* Structure selector — edit mode only */}
         {!readonly&&(
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:24}}>
@@ -4340,28 +4363,36 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
             </div>
           )}
         </div>
+        </>
+        )}
       </div>
 
       {/* ── WHY US ───────────────────────────────────────── */}
       {(pd.whyUs||!readonly)&&(
         <div style={{padding:"40px 40px",borderBottom:"1px solid #f1f0ef"}}>
-          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:openSections.whyus?28:0,cursor:"pointer"}} onClick={()=>toggleSection("whyus")}>
             <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Why {creativeCompany||pd.creativeCompany||"GH Productions"}</div>
             <div style={{flex:1,height:1,background:"#f1f0ef"}}/>
+            <span style={{fontSize:10,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:openSections.whyus?"rotate(90deg)":"rotate(0deg)",flexShrink:0}}>▶</span>
           </div>
-          <div style={{fontSize:16,lineHeight:1.9,color:"#37352f",maxWidth:680}}>
-            {!readonly?<Editable value={pd.whyUs||""} onChange={v=>setPitchDeck({...pd,whyUs:v})} multiline placeholder="Why choose GH Productions…"/>:<p style={{margin:0}}>{pd.whyUs}</p>}
-          </div>
+          {openSections.whyus&&(
+            <div style={{fontSize:16,lineHeight:1.9,color:"#37352f",maxWidth:680}}>
+              {!readonly?<Editable value={pd.whyUs||""} onChange={v=>setPitchDeck({...pd,whyUs:v})} multiline placeholder="Why choose GH Productions…"/>:<p style={{margin:0}}>{pd.whyUs}</p>}
+            </div>
+          )}
         </div>
       )}
 
       {/* ── MOOD BOARD ───────────────────────────────────── */}
       {(moodUrls.length>0||!readonly)&&(
         <div style={{padding:"40px 40px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
-          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:28}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:openSections.moodboard?28:0,cursor:"pointer"}} onClick={()=>toggleSection("moodboard")}>
             <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>Mood & Inspiration</div>
             <div style={{flex:1,height:1,background:"#e8e4dc"}}/>
+            <span style={{fontSize:10,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:openSections.moodboard?"rotate(90deg)":"rotate(0deg)",flexShrink:0}}>▶</span>
           </div>
+          {openSections.moodboard&&(
+          <>
           {moodUrls.length>0&&(
             <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12,marginBottom:16}}>
               {moodUrls.map((url,i)=>(
@@ -4378,6 +4409,8 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
               onMouseEnter={e=>{e.currentTarget.style.borderColor="#c4c3bf";e.currentTarget.style.color="#37352f";}} onMouseLeave={e=>{e.currentTarget.style.borderColor="#e8e4dc";e.currentTarget.style.color="#9b9a97";}}>
               + Add Image URL
             </button>
+          )}
+          </>
           )}
         </div>
       )}
