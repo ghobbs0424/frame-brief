@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Dark rounded background -->
+  <rect width="32" height="32" rx="7" fill="#37352f"/>
+
+  <!-- F — vertical stroke -->
+  <rect x="8" y="6" width="4.5" height="20" rx="1" fill="#f5ede0"/>
+  <!-- F — top horizontal stroke -->
+  <rect x="8" y="6" width="15" height="4.5" rx="1" fill="#f5ede0"/>
+  <!-- F — mid horizontal stroke -->
+  <rect x="8" y="14.5" width="10.5" height="4" rx="1" fill="#f5ede0"/>
+
+  <!-- Orange lens dot — camera / record indicator -->
+  <circle cx="24.5" cy="7.5" r="3.5" fill="#e97942"/>
+  <circle cx="24.5" cy="7.5" r="1.5" fill="#37352f" opacity="0.5"/>
+</svg>
