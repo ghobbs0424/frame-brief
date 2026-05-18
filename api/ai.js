@@ -14,7 +14,7 @@ export default async function handler(req, res) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_KEY,
+        "x-api-key": process.env.ANTHROPIC_KEY || process.env.VITE_ANTHROPIC_KEY,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({ model, max_tokens, system, messages })

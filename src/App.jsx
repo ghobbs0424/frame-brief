@@ -3414,26 +3414,30 @@ Only include actionable, specific items. Do not repeat today items in the week l
         messages:[{role:"user",content:`Here is my current business context:\n${ctx}\n\nGenerate my prioritized to-do list for today and this week.`}],
       });
 
+      if(!res.ok){
+        const errData=await res.json().catch(()=>({}));
+        throw new Error(errData?.error?.message||`API error ${res.status}`);
+      }
+
       const data=await res.json();
       const text=data?.content?.[0]?.text||"";
       let parsed;
-      try{parsed=JSON.parse(text);}catch{const m=text.match(/\{[\s\S]*\}/);parsed=m?JSON.parse(m[0]):null;}
-      if(!parsed?.today)throw new Error("Invalid response");
+      try{parsed=JSON.parse(text);}catch{const m=text.match(/\{[\s\S]*\}/);try{parsed=m?JSON.parse(m[0]):null;}catch{parsed=null;}}
+      if(!parsed?.today)throw new Error("Invalid response format");
 
       // Tag each item with projectId from matching title
-      const taggedToday=(parsed.today||[]).map(item=>{
+      const tagItem=item=>{
         if(item.projectTitle&&!item.projectId){const p=arr(projects).find(p=>(p.title||"").toLowerCase()===item.projectTitle.toLowerCase());if(p)item.projectId=p.id;}
         return item;
-      });
-      const taggedWeek=(parsed.week||[]).map(item=>{
-        if(item.projectTitle&&!item.projectId){const p=arr(projects).find(p=>(p.title||"").toLowerCase()===item.projectTitle.toLowerCase());if(p)item.projectId=p.id;}
-        return item;
-      });
+      };
+      const result={generatedAt:new Date().toISOString(),todos:{today:(parsed.today||[]).map(tagItem),week:(parsed.week||[]).map(tagItem)}};
 
-      const result={generatedAt:new Date().toISOString(),todos:{today:taggedToday,week:taggedWeek}};
-      await supabase.from("user_settings").upsert({id:userId,ai_todos:result,updated_at:new Date().toISOString()},{onConflict:"id"});
+      // Save to Supabase — fire and forget, don't block showing results
+      supabase.from("user_settings").upsert({id:userId,ai_todos:result,updated_at:new Date().toISOString()},{onConflict:"id"}).then(({error})=>{
+        if(error)console.warn("ai_todos save failed:",error.message);
+      });
       onTodosGenerated(result);
-    }catch(e){setError("Couldn't generate priorities — try again.");}
+    }catch(e){console.error("AIPriority generate error:",e);setError("Couldn't generate priorities — try again. ("+e.message+")");}
     setGenerating(false);
   }
 
