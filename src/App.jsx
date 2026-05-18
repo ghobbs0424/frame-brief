@@ -2,7 +2,14 @@ import React, { useState, useRef, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 const MODEL = "claude-sonnet-4-6";
-const API_KEY = import.meta.env.VITE_ANTHROPIC_KEY || "";
+// API calls are proxied through /api/ai — key lives server-side only
+async function callAI(body) {
+  return fetch("/api/ai", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+}
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "";
 const SUPABASE_ANON = import.meta.env.VITE_SUPABASE_ANON_KEY || "";
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON);
@@ -310,7 +317,7 @@ FIELD SCHEMAS:
 Current brief:
 ${JSON.stringify(brief)}`;
       const apiMessages=updatedLog.filter(m=>m.role==="user"||m.role==="assistant");
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:4000,system,messages:apiMessages})});
+      const res=await callAI({model:MODEL,max_tokens:4000,system,messages:apiMessages});
       const data=await res.json();
       const text=(data.content||[]).map(b=>b.text||"").join("").trim();
       let parsed=null;
@@ -741,11 +748,7 @@ function IdeaCapture({ user, onBack, projects, onOpenProject }) {
     // Generate brief
     setGenerating(id);
     try {
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "anthropic-dangerous-direct-browser-access": "true", "x-api-key": API_KEY, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: MODEL, max_tokens: 3000, system: IDEA_SYSTEM, messages: [{ role: "user", content: `Generate a creative brief for this idea:\n\n${text}` }] })
-      });
+      const res = await callAI({ model: MODEL, max_tokens: 3000, system: IDEA_SYSTEM, messages: [{ role: "user", content: `Generate a creative brief for this idea:\n\n${text}` }] });
       const data = await res.json();
       const raw = (data.content || []).map(b => b.text || "").join("").trim();
       let jsonStr = raw;
@@ -1880,11 +1883,7 @@ RULES:
         ? transcriptText.slice(0,10000)+"...[middle omitted]..."+transcriptText.slice(-8000)
         : transcriptText;
 
-      const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-        body:JSON.stringify({model:MODEL,max_tokens:2000,system:REGEN_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcriptForAI}`}]}),
-      });
+      const aiRes=await callAI({model:MODEL,max_tokens:2000,system:REGEN_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(briefSummary)}\n\nMeeting transcript:\n${transcriptForAI}`}]});
       const aiData=await aiRes.json();
       if(!aiRes.ok||aiData.error)throw new Error(aiData?.error?.message||`AI error ${aiRes.status}`);
       const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
@@ -2224,7 +2223,7 @@ function CallSheetPanel({brief,callSheet,onUpdate,readonly}){
     try{
       const system=`You are a production coordinator. Generate a detailed call sheet from this production brief. Return ONLY valid JSON, no markdown:
 {"callTime":"","date":"","location":"","schedule":[{"time":"","activity":"","notes":""}],"contactInfo":[{"name":"","role":"","phone":""}],"equipment":[""],"crewAssignments":[{"name":"","role":"","callTime":""}],"directorNotes":"","clientInstructions":""}`;
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:4000,system,messages:[{role:"user",content:`Generate a call sheet for this production:\n${JSON.stringify(brief)}`}]})});
+      const res=await callAI({model:MODEL,max_tokens:4000,system,messages:[{role:"user",content:`Generate a call sheet for this production:\n${JSON.stringify(brief)}`}]});
       const data=await res.json();
       const raw=(data.content||[]).map(b=>b.text||"").join("").trim();
       const j=extractJSON(raw);
@@ -5267,7 +5266,7 @@ topics: 2-5 main subjects discussed with 2-4 bullet points each. actionItems: co
 ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brief. briefUpdates is a partial brief update (only changed fields, plain short values).":"If this is a discovery meeting, briefUpdates can be the full brief structure with concise values."}`;
       // Cap transcript sent to AI at 8000 chars to keep response size manageable; full text is still saved below
       const transcriptForAI=transcriptText.slice(0,8000);
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:4000,system,messages:[{role:"user",content:`Current project: ${JSON.stringify(activeProject.brief)}\n\nTranscript:\n${transcriptForAI}`}]})});
+      const res=await callAI({model:MODEL,max_tokens:4000,system,messages:[{role:"user",content:`Current project: ${JSON.stringify(activeProject.brief)}\n\nTranscript:\n${transcriptForAI}`}]});
       const aiData=await res.json();
       const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
       const _extracted=extractJSON(raw);
@@ -5437,11 +5436,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
         }
         const CONCEPT_SCHEMA=`{"id":"concept-N","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[{"name":"","vibe":"","description":"","shots":""}],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"hooks":[],"selectedHook":"","deliverableFormat":"","directorNotes":""}`;
         const CONSULT_SYS=`You are a creative director AI reviewing a follow-up meeting for an ongoing production project. Analyze the transcript and the existing brief, then return ONLY valid JSON, no markdown:\n{"stage":"discovery|consultation|shoot_day|post_production","summary":"2-3 sentence summary of what was discussed","keyPoints":["key point 1","key point 2","key point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}],"actionItems":[{"owner":"Person Name","task":"specific task to complete","deadline":""}],"suggestedChanges":[{"field":"fieldName","description":"What to change and why","before":"current value (quote from brief if possible)","after":"suggested new value as plain text"}],"briefUpdates":{"fieldName":"new value"}}\n\nRULES:\n- stage: discovery (first call), consultation (follow-up/revision), shoot_day (day-of or prep), post_production (editing/delivery).\n- topics: 2-5 main subjects discussed, each with 2-4 bullet points. Group related discussion points together.\n- actionItems: concrete next steps with a clear owner (person's name or "Client"/"Team"), specific task, and deadline if mentioned.\n- suggestedChanges: 3-6 specific changes with plain-text "after" descriptions for display only.\n- briefUpdates: partial JSON with ACTUAL new values to merge. Only include changed fields. Scalar fields (budget, timeline, projectType, logline, overview, generalNotes, moodDescription, date, coverEmoji) = new string. clientActionItems/internalTodos = full arrays including existing. concepts: if client requests new concepts, generate full objects using schema: ${CONCEPT_SCHEMA} — assign incremented IDs, rich content for all fields. Include only new/modified concepts. Do NOT include unchanged fields.`;
-        const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
-          method:"POST",
-          headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-          body:JSON.stringify({model:MODEL,max_tokens:8000,system:CONSULT_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(proj.brief)}\n\nMeeting transcript:\n${transcriptText}`}]}),
-        });
+        const aiRes=await callAI({model:MODEL,max_tokens:8000,system:CONSULT_SYS,messages:[{role:"user",content:`Existing brief:\n${JSON.stringify(proj.brief)}\n\nMeeting transcript:\n${transcriptText}`}]});
         const aiData=await aiRes.json();
         if(!aiRes.ok||aiData.error)throw new Error(aiData?.error?.message||`AI error ${aiRes.status}`);
         const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
@@ -5476,11 +5471,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       } else {
         // ── Discovery flow: generate full brief ──
         const DISC_SYS=`You are a creative director AI for a video and photography production company. Analyze meeting notes and return ONLY a valid JSON object with no markdown or backticks. For each concept, generate 3-5 compelling opening hooks in the "hooks" array — each hook is a single punchy sentence that grabs attention in the first 3 seconds, varying styles: emotional, curiosity-driven, bold statement, question, cinematic. Also extract meetingNotes: a 2-3 sentence summary of the discovery meeting, 3-5 key points discussed, and 2-4 main topics covered. Return this structure: {"coverEmoji":"🎬","projectTitle":"","clientName":"","projectType":"","date":"","timeline":"","budget":"","logline":"","overview":"","moodKeywords":[],"moodDescription":"","references":[],"overallLocations":[],"overallWardrobe":[],"overallProps":[],"generalNotes":"","clientActionItems":[{"id":"ca-1","text":"","done":false}],"internalTodos":[{"id":"it-1","text":"","done":false}],"meetingNotes":{"summary":"2-3 sentence summary of the discovery meeting","keyPoints":["key point 1","key point 2","key point 3"],"topics":[{"title":"Topic Name","points":["key detail 1","key detail 2"]}]},"concepts":[{"id":"concept-1","emoji":"🎥","title":"","type":"","logline":"","description":"","moodKeywords":[],"inspiration":[],"locations":[],"lighting":{"style":"","description":"","technical":""},"colorHex":["#c8a97e","#3d2b1f","#f5ede0"],"colorDescription":"","wardrobe":[],"wardrobeNotes":"","props":[],"shotList":[{"number":"01","type":"","description":"","lens":"","notes":""}],"script":{"hook":"","act1":"","act2":"","act3":"","cta":""},"deliverableFormat":"","directorNotes":"","hooks":["","",""],"selectedHook":""}]}`;
-        const aiRes=await fetch("https://api.anthropic.com/v1/messages",{
-          method:"POST",
-          headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-          body:JSON.stringify({model:MODEL,max_tokens:8000,system:DISC_SYS,messages:[{role:"user",content:`Create a production brief from this meeting transcript:\n\n${transcriptText}`}]}),
-        });
+        const aiRes=await callAI({model:MODEL,max_tokens:8000,system:DISC_SYS,messages:[{role:"user",content:`Create a production brief from this meeting transcript:\n\n${transcriptText}`}]});
         const aiData=await aiRes.json();
         if(!aiRes.ok||aiData.error)throw new Error(aiData?.error?.message||`AI error ${aiRes.status}`);
         const raw=(aiData.content||[]).map(b=>b.text||"").join("").trim();
@@ -5563,11 +5554,7 @@ ${hasExistingBrief?"suggestedChanges lists specific changes to the existing brie
       for(const ref of fetchedRefs)prompt+=`REFERENCE — ${ref.label}:\n${ref.text.slice(0,2000)}\n\n`;
       userContent.push({type:"text",text:prompt.trim()});
 
-      const res=await fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
-        body:JSON.stringify({model:MODEL,max_tokens:12000,system:INTAKE_SYSTEM_PROMPT,messages:[{role:"user",content:userContent}]}),
-      });
+      const res=await callAI({model:MODEL,max_tokens:12000,system:INTAKE_SYSTEM_PROMPT,messages:[{role:"user",content:userContent}]});
       const data=await res.json();
       if(!res.ok||data.error)throw new Error(data?.error?.message||`API error ${res.status}`);
       const raw=(data.content||[]).map(b=>b.text||"").join("").trim();
@@ -5639,7 +5626,7 @@ Current brief:
 ${JSON.stringify(brief)}`;
       // Filter out role:"system" messages — Anthropic only accepts "user" and "assistant"
       const apiMessages=updatedLog.filter(m=>m.role==="user"||m.role==="assistant");
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","anthropic-dangerous-direct-browser-access":"true","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},body:JSON.stringify({model:MODEL,max_tokens:8000,system,messages:apiMessages})});
+      const res=await callAI({model:MODEL,max_tokens:8000,system,messages:apiMessages});
       const data=await res.json();
       const text=(data.content||[]).map(b=>b.text||"").join("").trim();
       let parsed=null;
