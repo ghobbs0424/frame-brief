@@ -3271,7 +3271,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{["All",...STATUSES].map(s=><button key={s} onClick={()=>setFilter(s)} style={{padding:"7px 12px",borderRadius:20,border:"1px solid",borderColor:filter===s?"#37352f":"#e8e4dc",background:filter===s?"#37352f":"transparent",color:filter===s?"#fff":"#9b9a97",fontFamily:"'Lora',serif",fontSize:12,cursor:"pointer",whiteSpace:"nowrap"}}>{s}</button>)}</div>
           </div>
           {filtered.length===0?(<div style={{textAlign:"center",padding:"60px 20px"}}><div style={{fontSize:44,marginBottom:14}}>🎬</div><p style={{fontSize:17,fontWeight:600,color:"#37352f",marginBottom:8}}>{search||filter!=="All"?"No projects match":"No projects yet"}</p><p style={{fontSize:14,color:"#9b9a97",marginBottom:20}}>{search||filter!=="All"?"Try different filters":"Create your first production brief."}</p>{!search&&filter==="All"&&<button onClick={onNew} style={{background:"#37352f",color:"#fff",border:"none",padding:"11px 24px",borderRadius:6,fontFamily:"'Lora',serif",fontSize:14,cursor:"pointer"}}>+ Create First Brief</button>}</div>)
-          :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))",gap:14}}>{filtered.map(p=>(<div key={p.id} onClick={()=>onOpen(p)} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"18px",background:"#fafaf9",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#f0ede8";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fafaf9";e.currentTarget.style.borderColor="#f1f0ef";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><div style={{display:"flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}>{p.share_enabled&&<span style={{fontSize:10,background:"#e8f0fe",color:"#1a56c4",borderRadius:20,padding:"2px 8px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em"}}>👥 Shared</span>}<StatusBadge status={p.status} onChange={s=>onStatusChange(p.id,s)}/><button onClick={e=>{e.stopPropagation();if(window.confirm("Delete this project?"))onDelete(p.id);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"2px 4px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>🗑</button></div></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{arr(p.brief?.concepts).map((c,i)=><span key={i} style={{fontSize:11,background:"#f1f0ef",borderRadius:20,padding:"2px 8px",color:"#9b9a97"}}>{c.emoji} {c.title}</span>)}</div>{p.doc_count>0&&<div style={{fontSize:11,color:"#9b9a97",marginBottom:4}}>📎 {p.doc_count} doc{p.doc_count>1?"s":""}</div>}<div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div>)}
+          :(<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))",gap:14}}>{filtered.map(p=>(<div key={p.id} onClick={()=>onOpen(p)} style={{border:"1px solid #f1f0ef",borderRadius:10,padding:"18px",background:"#fafaf9",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#f0ede8";e.currentTarget.style.borderColor="#e0ddd8";}} onMouseLeave={e=>{e.currentTarget.style.background="#fafaf9";e.currentTarget.style.borderColor="#f1f0ef";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><div style={{display:"flex",alignItems:"center",gap:6}} onClick={e=>e.stopPropagation()}>{p.share_enabled&&<span style={{fontSize:10,background:"#e8f0fe",color:"#1a56c4",borderRadius:20,padding:"2px 8px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em"}}>👥 Shared</span>}<StatusBadge status={p.status} onChange={s=>onStatusChange(p.id,s)}/><button onClick={e=>{e.stopPropagation();if(window.confirm("Delete this project?"))onDelete(p.id);}} style={{background:"none",border:"none",color:"#ddd",cursor:"pointer",fontSize:13,padding:"2px 4px"}} onMouseEnter={e=>e.currentTarget.style.color="#c0392b"} onMouseLeave={e=>e.currentTarget.style.color="#ddd"}>🗑</button></div></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{arr(p.brief?.concepts).map((c,i)=><span key={i} style={{fontSize:11,background:"#f1f0ef",borderRadius:20,padding:"2px 8px",color:"#9b9a97"}}>{c.emoji} {c.title}</span>)}</div>{p.doc_count>0&&<div style={{fontSize:11,color:"#9b9a97",marginBottom:4}}>📎 {p.doc_count} doc{p.doc_count>1?"s":""}</div>}{p.pitch_approval?.status&&(<div style={{display:"inline-flex",alignItems:"center",gap:4,marginBottom:4}}><span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,borderRadius:20,padding:"2px 8px",background:p.pitch_approval.status==="paid_in_full"?"#e6f4ea":p.pitch_approval.status==="deposit_paid"?"#e6f4ea":p.pitch_approval.status==="approved"?"#fff8e6":"#f1f0ef",color:p.pitch_approval.status==="paid_in_full"?"#1e7e34":p.pitch_approval.status==="deposit_paid"?"#1e7e34":p.pitch_approval.status==="approved"?"#b45309":"#9b9a97"}}>{p.pitch_approval.status==="paid_in_full"?"✓ Paid in Full":p.pitch_approval.status==="deposit_paid"?"✓ Deposit Paid":p.pitch_approval.status==="approved"?"⏳ Awaiting Payment":""}</span></div>)}<div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div>)}
 
           {/* Shared with you section */}
           {filteredShared.length>0&&(<div style={{marginTop:40}}><h2 style={{fontSize:18,fontWeight:700,color:"#37352f",marginBottom:16,letterSpacing:"-0.02em",display:"flex",alignItems:"center",gap:8}}>👥 Shared with you</h2><div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(240px, 1fr))",gap:14}}>{filteredShared.map(p=>(<div key={p.id} onClick={()=>onOpen({...p,_sharedRole:p.myRole})} style={{border:"1px solid #e8f0fe",borderRadius:10,padding:"18px",background:"#f5f8ff",cursor:"pointer",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="#ebf1ff";e.currentTarget.style.borderColor="#c5d8fb";}} onMouseLeave={e=>{e.currentTarget.style.background="#f5f8ff";e.currentTarget.style.borderColor="#e8f0fe";}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}><span style={{fontSize:26}}>{p.brief?.coverEmoji||"🎬"}</span><span style={{fontSize:10,background:p.myRole==="editor"?"#fdeee4":"#e8f0fe",color:p.myRole==="editor"?"#b94a1a":"#1a56c4",borderRadius:20,padding:"2px 8px",fontWeight:600,fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"0.04em",textTransform:"capitalize"}}>{p.myRole==="editor"?"✏️ Editor":"👁 Viewer"}</span></div><div style={{fontWeight:700,fontSize:14,color:"#37352f",marginBottom:4,lineHeight:1.3}}>{p.title||"Untitled"}</div><div style={{fontSize:12,color:"#9b9a97",marginBottom:8}}>{p.client_name}{p.brief?.projectType?` · ${p.brief.projectType}`:""}</div><div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>{arr(p.brief?.concepts).map((c,i)=><span key={i} style={{fontSize:11,background:"#e8f0fe",borderRadius:20,padding:"2px 8px",color:"#1a56c4"}}>{c.emoji} {c.title}</span>)}</div><div style={{fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>Updated {new Date(p.updated_at).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"})}</div></div>))}</div></div>)}
@@ -3787,6 +3787,172 @@ const RATE_TYPES=[
   {id:"deliverable",label:"Per Deliverable",unit:"/ deliverable"},
 ];
 function rateUnitLabel(rateType){return(RATE_TYPES.find(r=>r.id===rateType)||RATE_TYPES[0]).unit;}
+
+// ─── PITCH PAYMENT FLOW ───────────────────────────────────────────────────────
+function PitchPaymentFlow({pitchDeck,projectId,existingApproval}){
+  const pd=pitchDeck||{};
+  const pt=pd.paymentTerms||{};
+  const lineItems=arr(pd.lineItems);
+  const total=lineItems.reduce((sum,li)=>sum+(Number(li.price)||0),0);
+
+  // Compute deposit
+  let depositAmount=0,depositLabel="Deposit",balanceLine="";
+  const structure=pt.structure||"deposit";
+  if(structure==="deposit"){
+    const pct=Number(pt.depositPercent)||60;
+    depositAmount=total*(pct/100);
+    depositLabel=`${pct}% Deposit`;
+    balanceLine=pt.balanceTiming?`Balance due ${pt.balanceTiming}`:"";
+  } else if(structure==="upfront"){
+    depositAmount=total;
+    depositLabel="Full Payment (Upfront)";
+  } else if(structure==="milestone"){
+    const ms=arr(pt.milestones);
+    const first=ms[0]||{};
+    depositAmount=total*(Number(first.percent||0)/100);
+    depositLabel=first.label||"First Milestone";
+  } else if(structure==="custom"){
+    depositAmount=total;
+    depositLabel="Total Investment";
+  }
+
+  const fmt=n=>n.toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});
+  const pct=Number(pt.depositPercent)||60;
+  const defaultTerms=`A ${pct}% deposit is required to secure your production date and team. The remaining balance is due ${pt.balanceTiming||"day of production"}. By paying the deposit, you acknowledge and agree to all payment terms listed. Late payments are subject to a $50/week late fee. All communication is handled during business hours (Mon–Fri 10AM–6PM, Sat 11AM–3PM). On active shoot days, response times may be delayed.`;
+  const termsText=pt.termsText||defaultTerms;
+
+  const [agreed,setAgreed]=useState(false);
+  const [clientName,setClientName]=useState("");
+  const [clientEmail,setClientEmail]=useState("");
+  const [submitting,setSubmitting]=useState(false);
+  const [errMsg,setErrMsg]=useState("");
+  const [approval,setApproval]=useState(existingApproval||null);
+
+  if(total===0)return null;
+
+  const isConfirmed=approval&&(approval.status==="approved"||approval.status==="deposit_paid"||approval.status==="paid_in_full");
+
+  if(isConfirmed){
+    return(
+      <div style={{maxWidth:680,margin:"0 auto",padding:"0 24px 80px"}}>
+        <div style={{background:"#fff",borderRadius:14,border:"1px solid #f1f0ef",padding:"40px 36px",textAlign:"center",boxShadow:"0 2px 16px rgba(0,0,0,0.06)"}}>
+          <div style={{fontSize:48,marginBottom:16}}>✓</div>
+          <div style={{fontSize:22,fontWeight:700,color:"#37352f",fontFamily:"'Lora',serif",marginBottom:10}}>You're confirmed!</div>
+          <div style={{fontSize:15,color:"#9b9a97",fontFamily:"'Lora',serif",marginBottom:32,lineHeight:1.7}}>
+            Thank you, {approval.clientName}. Your approval has been received and your date is secured. We'll be in touch shortly.
+          </div>
+          <div style={{background:"#fafaf9",borderRadius:10,border:"1px solid #f1f0ef",padding:"20px 24px",textAlign:"left",maxWidth:360,margin:"0 auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+              <span style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>AGREED BY</span>
+              <span style={{fontSize:13,color:"#37352f",fontFamily:"'Lora',serif",fontWeight:600}}>{approval.clientName}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+              <span style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>DATE</span>
+              <span style={{fontSize:13,color:"#37352f",fontFamily:"'Lora',serif"}}>{new Date(approval.agreedAt).toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"})}</span>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              <span style={{fontSize:12,color:"#9b9a97",fontFamily:"'IBM Plex Mono',monospace"}}>DEPOSIT</span>
+              <span style={{fontSize:13,color:"#37352f",fontFamily:"'Lora',serif",fontWeight:600}}>${fmt(approval.depositAmount)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  async function handleApprove(){
+    setErrMsg("");
+    if(!agreed){setErrMsg("Please agree to the terms and conditions.");return;}
+    if(!clientName.trim()){setErrMsg("Please enter your full name.");return;}
+    if(!clientEmail.trim()||!/\S+@\S+\.\S+/.test(clientEmail.trim())){setErrMsg("Please enter a valid email address.");return;}
+    setSubmitting(true);
+    const approvalData={
+      status:"approved",
+      clientName:clientName.trim(),
+      clientEmail:clientEmail.trim(),
+      agreedToTerms:true,
+      agreedAt:new Date().toISOString(),
+      depositAmount,
+      totalAmount:total,
+      depositLabel,
+      // ── Payment processor integrates here ──
+      // paymentProvider: null,  // "lumino" | "stripe"
+      // paymentIntentId: null,
+    };
+    const {error}=await supabase.from("projects").update({pitch_approval:approvalData,updated_at:new Date().toISOString()}).eq("id",projectId);
+    setSubmitting(false);
+    if(error){setErrMsg("Something went wrong. Please try again.");return;}
+    setApproval(approvalData);
+  }
+
+  return(
+    <div style={{maxWidth:680,margin:"0 auto",padding:"0 24px 80px"}}>
+      {/* Header card */}
+      <div style={{background:"#37352f",borderRadius:"14px 14px 0 0",padding:"28px 32px"}}>
+        <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Ready to Move Forward?</div>
+        <div style={{fontSize:22,fontWeight:700,color:"#fff",fontFamily:"'Lora',serif"}}>Approve & Secure Your Date</div>
+      </div>
+      {/* Main card */}
+      <div style={{background:"#fff",borderRadius:"0 0 14px 14px",border:"1px solid #f1f0ef",borderTop:"none",padding:"28px 32px",boxShadow:"0 4px 20px rgba(0,0,0,0.07)"}}>
+        {/* Investment summary */}
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:14}}>Investment Summary</div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderTop:"1px solid #f1f0ef"}}>
+            <span style={{fontSize:14,color:"#9b9a97",fontFamily:"'Lora',serif"}}>Total Investment</span>
+            <span style={{fontSize:15,color:"#37352f",fontFamily:"'IBM Plex Mono',monospace",fontWeight:600}}>${fmt(total)}</span>
+          </div>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",borderTop:"1px solid #f1f0ef"}}>
+            <span style={{fontSize:14,color:"#37352f",fontFamily:"'Lora',serif",fontWeight:600}}>{depositLabel}</span>
+            <span style={{fontSize:16,color:"#e97942",fontFamily:"'IBM Plex Mono',monospace",fontWeight:700}}>${fmt(depositAmount)}</span>
+          </div>
+          {balanceLine&&<div style={{fontSize:12,color:"#9b9a97",fontFamily:"'Lora',serif",fontStyle:"italic",marginTop:4}}>{balanceLine}</div>}
+        </div>
+
+        {/* T&C */}
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Terms & Conditions</div>
+          <div style={{maxHeight:160,overflowY:"auto",background:"#fafaf9",border:"1px solid #f1f0ef",borderRadius:8,padding:"14px 16px",fontSize:13,color:"#37352f",fontFamily:"'Lora',serif",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{termsText}</div>
+        </div>
+
+        {/* Agree checkbox */}
+        <label style={{display:"flex",alignItems:"flex-start",gap:10,cursor:"pointer",marginBottom:20}}>
+          <input type="checkbox" checked={agreed} onChange={e=>setAgreed(e.target.checked)} style={{marginTop:3,flexShrink:0,width:16,height:16,accentColor:"#37352f",cursor:"pointer"}}/>
+          <span style={{fontSize:14,color:"#37352f",fontFamily:"'Lora',serif",lineHeight:1.6}}>I have read and agree to the terms and conditions above.</span>
+        </label>
+
+        {/* Name + email */}
+        <div style={{display:"flex",gap:14,marginBottom:20,flexWrap:"wrap"}}>
+          <div style={{flex:"1 1 200px"}}>
+            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Full Name</div>
+            <input value={clientName} onChange={e=>setClientName(e.target.value)} placeholder="Jane Smith"
+              style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:7,padding:"10px 12px",fontSize:14,fontFamily:"'Lora',serif",color:"#37352f",outline:"none",boxSizing:"border-box"}}
+              onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+          </div>
+          <div style={{flex:"1 1 200px"}}>
+            <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:6}}>Email</div>
+            <input type="email" value={clientEmail} onChange={e=>setClientEmail(e.target.value)} placeholder="jane@company.com"
+              style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:7,padding:"10px 12px",fontSize:14,fontFamily:"'Lora',serif",color:"#37352f",outline:"none",boxSizing:"border-box"}}
+              onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}/>
+          </div>
+        </div>
+
+        {/* Error */}
+        {errMsg&&<div style={{fontSize:13,color:"#c0392b",fontFamily:"'Lora',serif",marginBottom:14,padding:"10px 14px",background:"#fff5f5",border:"1px solid #fcc",borderRadius:7}}>{errMsg}</div>}
+
+        {/* Submit button */}
+        <button onClick={handleApprove} disabled={submitting}
+          style={{width:"100%",background:submitting?"#888":"#37352f",color:"#fff",border:"none",borderRadius:8,padding:"15px 24px",fontSize:15,fontFamily:"'Lora',serif",fontWeight:700,cursor:submitting?"not-allowed":"pointer",transition:"opacity .15s"}}>
+          {submitting?"Submitting…":`Approve & Confirm — ${depositLabel} $${fmt(depositAmount)}`}
+        </button>
+
+        {/* Payment placeholder */}
+        <div style={{textAlign:"center",marginTop:12,fontSize:11,color:"#c4c3bf",fontFamily:"'IBM Plex Mono',monospace"}}>
+          Payment processing will be enabled soon
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ─── PITCH DECK PAGE ──────────────────────────────────────────────────────────
 function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompany,brief}){
@@ -4343,6 +4509,21 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
           </div>
         )}
 
+        {/* Terms & Conditions textarea — creator only */}
+        {!readonly&&(
+          <div style={{padding:"14px 0",borderTop:"1px solid #f1f0ef"}}>
+            <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:8}}>Terms & Conditions</div>
+            <textarea
+              value={pt.termsText||""}
+              onChange={e=>setPitchDeck({...pd,paymentTerms:{...pt,termsText:e.target.value}})}
+              placeholder="Paste your terms and conditions here — clients will see and agree to these before paying..."
+              rows={6}
+              style={{width:"100%",border:"1px solid #e8e4dc",borderRadius:6,padding:"10px 12px",fontSize:14,fontFamily:"'Lora',serif",color:"#37352f",outline:"none",resize:"vertical",lineHeight:1.7,boxSizing:"border-box"}}
+              onFocus={e=>e.target.style.borderColor="#37352f"} onBlur={e=>e.target.style.borderColor="#e8e4dc"}
+            />
+          </div>
+        )}
+
         {/* Shared: Revisions + Expedited delivery */}
         <div style={{marginTop:8}}>
           {(pt.revisionPolicy||!readonly)&&(
@@ -4794,7 +4975,7 @@ function FrameBriefApp(){
     if(mp){
       setPitchSharedId(mp[1]);
       setPitchSharedLoading(true);
-      supabase.from("projects").select("pitch_deck,brief,title").eq("id",mp[1]).single()
+      supabase.from("projects").select("pitch_deck,brief,title,pitch_approval").eq("id",mp[1]).single()
         .then(({data,error})=>{
           setPitchSharedLoading(false);
           if(!error&&data){setPitchSharedData(data);setScreen("pitchPublic");}
@@ -5634,6 +5815,11 @@ ${JSON.stringify(brief)}`;
             brief={pitchSharedData?.brief}
           />
           </div>
+          <PitchPaymentFlow
+            pitchDeck={pitchSharedData.pitch_deck||{}}
+            projectId={pitchSharedId}
+            existingApproval={pitchSharedData.pitch_approval||null}
+          />
           {pitchSharedData?.pitch_deck?.status==="package_selected"&&(
             <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#37352f",color:"#fff",padding:"14px 24px",borderRadius:10,fontSize:14,fontFamily:"'Lora',serif",boxShadow:"0 4px 20px rgba(0,0,0,0.2)",zIndex:100,textAlign:"center",maxWidth:400}}>
               ✓ Package selected! We'll be in touch within 24 hours to confirm your booking.
@@ -5716,6 +5902,7 @@ ${JSON.stringify(brief)}`;
             <button className="tbtn hide-on-mobile" onClick={copyPitchLink}>{pitchCopied?"✓ Copied!":"🔗 Share Pitch Deck"}</button>
             <button className={`tbtn hide-on-mobile ${pitchPreviewMode?"on":""}`} onClick={()=>setPitchPreviewMode(o=>!o)}>👁 Preview</button>
             {activeProject?.pitch_deck?.status&&<span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:activeProject.pitch_deck.status==="package_selected"?"#e6f4ea":activeProject.pitch_deck.status==="viewed"?"#e8f0fe":"#f1f0ef",color:activeProject.pitch_deck.status==="package_selected"?"#1e7e34":activeProject.pitch_deck.status==="viewed"?"#1a56c4":"#9b9a97",borderRadius:20,padding:"3px 10px",fontWeight:600,flexShrink:0}}>{activeProject.pitch_deck.status==="package_selected"?"SELECTED":activeProject.pitch_deck.status==="viewed"?"VIEWED":activeProject.pitch_deck.status==="sent"?"SENT":"DRAFT"}</span>}
+            {activeProject?.pitch_approval?.status&&(<span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:activeProject.pitch_approval.status==="paid_in_full"||activeProject.pitch_approval.status==="deposit_paid"?"#e6f4ea":"#fff8e6",color:activeProject.pitch_approval.status==="paid_in_full"||activeProject.pitch_approval.status==="deposit_paid"?"#1e7e34":"#b45309",borderRadius:20,padding:"3px 10px",fontWeight:600,flexShrink:0}}>{activeProject.pitch_approval.status==="paid_in_full"?"✓ Paid in Full":activeProject.pitch_approval.status==="deposit_paid"?"✓ Deposit Paid":activeProject.pitch_approval.status==="approved"?"⏳ Awaiting Payment":""}</span>)}
           </>}
           {/* Desktop buttons — hidden on pitch-deck page */}
           {page!=="pitch-deck"&&myRole==="owner"&&<button className="tbtn hide-on-mobile" onClick={()=>setShowShareModal(true)}>🔗 Share{activeProject?.share_enabled&&<span style={{marginLeft:4,width:6,height:6,borderRadius:"50%",background:"#e97942",display:"inline-block",verticalAlign:"middle"}}/>}</button>}
