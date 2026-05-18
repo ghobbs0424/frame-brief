@@ -3792,7 +3792,7 @@ function rateUnitLabel(rateType){return(RATE_TYPES.find(r=>r.id===rateType)||RAT
 function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompany,brief}){
   const coverInputRef=useRef(null);
   const [openSections, setOpenSections] = useState({
-    about:true, investment:true, addons:true, scope:true,
+    about:true, creating:true, investment:true, addons:true, scope:true,
     payment:true, whyus:true, moodboard:true,
   });
   function toggleSection(key){ setOpenSections(s=>({...s,[key]:!s[key]})); }
@@ -3952,30 +3952,33 @@ function PitchDeckPage({pitchDeck,setPitchDeck,readonly,projectId,creativeCompan
 
       {/* ── DELIVERABLES / CONCEPTS ────────────────────────── */}
       {arr(brief?.concepts).length>0&&(
-        <div style={{padding:"40px 40px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
-          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:32}}>
+        <div style={{padding:"28px 24px",background:"#fafaf9",borderBottom:"1px solid #f1f0ef"}}>
+          <div style={{display:"flex",alignItems:"center",gap:16,marginBottom:openSections.creating?24:0,cursor:"pointer"}} onClick={()=>toggleSection("creating")}>
             <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.2em",whiteSpace:"nowrap"}}>What We're Creating</div>
             <div style={{flex:1,height:1,background:"#e8e4dc"}}/>
+            <span style={{fontSize:10,color:"#c4c3bf",transition:"transform .2s",display:"inline-block",transform:openSections.creating?"rotate(90deg)":"rotate(0deg)",flexShrink:0}}>▶</span>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:20}}>
-            {arr(brief.concepts).map((c,i)=>(
-              <div key={i} style={{background:"#fff",border:"1px solid #e8e4dc",borderRadius:10,padding:"24px 28px",boxShadow:"0 1px 6px rgba(0,0,0,0.04)"}}>
-                <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
-                  <span style={{fontSize:26}}>{c.emoji||"🎥"}</span>
-                  <div>
-                    <div style={{fontWeight:700,fontSize:15,color:"#37352f",lineHeight:1.3}}>{c.title}</div>
-                    <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#e97942",textTransform:"uppercase",letterSpacing:"0.1em",marginTop:2}}>{c.type}</div>
+          {openSections.creating&&(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:16}}>
+              {arr(brief.concepts).map((c,i)=>(
+                <div key={i} style={{background:"#fff",border:"1px solid #e8e4dc",borderRadius:10,padding:"18px 20px",boxShadow:"0 1px 6px rgba(0,0,0,0.04)"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                    <span style={{fontSize:22}}>{c.emoji||"🎥"}</span>
+                    <div>
+                      <div style={{fontWeight:700,fontSize:14,color:"#37352f",lineHeight:1.3}}>{c.title}</div>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#e97942",textTransform:"uppercase",letterSpacing:"0.1em",marginTop:2}}>{c.type}</div>
+                    </div>
                   </div>
+                  {c.logline&&<p style={{fontSize:13,color:"#9b9a97",lineHeight:1.6,margin:"0 0 10px",fontStyle:"italic"}}>{c.logline}</p>}
+                  {c.deliverableFormat&&(
+                    <div style={{fontSize:12,color:"#37352f",background:"#f1f0ef",borderRadius:6,padding:"5px 9px",fontFamily:"'IBM Plex Mono',monospace"}}>
+                      📦 {c.deliverableFormat}
+                    </div>
+                  )}
                 </div>
-                {c.logline&&<p style={{fontSize:13,color:"#9b9a97",lineHeight:1.65,margin:"0 0 12px",fontStyle:"italic"}}>{c.logline}</p>}
-                {c.deliverableFormat&&(
-                  <div style={{fontSize:12,color:"#37352f",background:"#f1f0ef",borderRadius:6,padding:"6px 10px",fontFamily:"'IBM Plex Mono',monospace"}}>
-                    📦 {c.deliverableFormat}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
