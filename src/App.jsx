@@ -3254,7 +3254,7 @@ function FinancialDashboard({projects,onBack,onOpenProject}){
       <div style={{maxWidth:900,margin:"0 auto"}}>
         {/* Header */}
         <div style={{marginBottom:32}}>
-          <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:"#9b9a97",fontFamily:"'Lora',serif",fontSize:14,padding:"0 0 16px 0",display:"flex",alignItems:"center",gap:6}}>← Financial</button>
+          <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:"#9b9a97",fontFamily:"'Lora',serif",fontSize:14,padding:"0 0 16px 0",display:"flex",alignItems:"center",gap:6}}>← Dashboard</button>
           <div style={{fontSize:28,fontWeight:700,color:"#37352f",marginBottom:6}}>Financial Overview</div>
           <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97"}}>Track revenue, deposits, and outstanding balances</div>
         </div>
@@ -3568,7 +3568,7 @@ function AccountSettings({user,onBack,userProfile,onProfileSave}){
     <div style={{minHeight:"100vh",background:"#fff"}}>
       {/* Header */}
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",gap:12,position:"sticky",top:0,background:"#fff",zIndex:10}}>
-        <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#9b9a97",fontFamily:"'Lora',serif",padding:"4px 0",display:"flex",alignItems:"center",gap:6}}>← Back</button>
+        <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",fontSize:14,color:"#9b9a97",fontFamily:"'Lora',serif",padding:"4px 0",display:"flex",alignItems:"center",gap:6}}>← Dashboard</button>
         <span style={{color:"#e8e4dc"}}>|</span>
         <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,color:"#37352f",fontWeight:500,letterSpacing:"0.08em"}}>ACCOUNT SETTINGS</span>
       </div>
@@ -4134,7 +4134,7 @@ function IntakeScreen({
   return(
     <div style={{minHeight:"100vh",background:"#fff"}}>
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"11px 20px",display:"flex",alignItems:"center",gap:10,position:"sticky",top:0,background:"rgba(255,255,255,0.97)",backdropFilter:"blur(10px)",zIndex:10}}>
-        <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",...serif,display:"flex",alignItems:"center",gap:4}}>← Projects</button>
+        <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",fontSize:13,cursor:"pointer",...serif,display:"flex",alignItems:"center",gap:4}}>← Dashboard</button>
         <span style={{color:"#e8e4dc"}}>·</span>
         <span style={{fontSize:13,fontWeight:700,color:"#37352f"}}>New Project</span>
       </div>
@@ -5481,7 +5481,7 @@ function PackageLibrary({user,packages,onPackagesChange,onBack}){
     <div style={{minHeight:"100vh",background:"#fff"}}>
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4}}>← Back</button>
+          <button onClick={onBack} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4}}>← Dashboard</button>
           <span style={{color:"#e8e4dc"}}>·</span>
           <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11,letterSpacing:"0.08em",color:"#37352f",fontWeight:500}}>PRICING</span>
         </div>
@@ -6587,7 +6587,7 @@ ${JSON.stringify(brief)}`;
       <div style={{borderBottom:"1px solid #f1f0ef",padding:"10px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",background:"rgba(255,255,255,0.97)",backdropFilter:"blur(10px)",flexShrink:0,zIndex:100}}>
         <div style={{display:"flex",alignItems:"center",gap:8,overflow:"hidden",minWidth:0}}>
           <button onClick={()=>setSidebarOpen(true)} style={{background:"none",border:"none",fontSize:20,cursor:"pointer",padding:"2px 6px",color:"#37352f",flexShrink:0}}>☰</button>
-          <button onClick={()=>setScreen("dashboard")} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>← Projects</button>
+          <button onClick={()=>setScreen("dashboard")} style={{background:"none",border:"none",color:"#9b9a97",cursor:"pointer",fontSize:13,fontFamily:"'Lora',serif",display:"flex",alignItems:"center",gap:4,flexShrink:0}}>← Dashboard</button>
           <span style={{color:"#e8e4dc",flexShrink:0}}>·</span>
           <span style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{brief.projectTitle}</span>
           <span className="hide-on-mobile"><StatusBadge status={activeProject.status} onChange={s=>updateStatus(activeProject.id,s)}/></span>
