@@ -3166,8 +3166,190 @@ function ScheduleConsultationModal({user,project,onClose,onScheduled}){
   );
 }
 
+// ─── FINANCIAL DASHBOARD ──────────────────────────────────────────────────────
+function FinancialDashboard({projects,onBack,onOpenProject}){
+  const[filter,setFilter]=useState("All");
+  const[localProjects,setLocalProjects]=useState(projects);
+  useEffect(()=>setLocalProjects(projects),[projects]);
+
+  async function handleStatusUpdate(project,newStatus){
+    const updated={...project.pitch_approval,status:newStatus};
+    await supabase.from("projects").update({pitch_approval:updated,updated_at:new Date().toISOString()}).eq("id",project.id);
+    setLocalProjects(prev=>prev.map(p=>p.id===project.id?{...p,pitch_approval:updated}:p));
+  }
+
+  const approvedProjects=localProjects.filter(p=>p.pitch_approval?.status);
+  const collected=approvedProjects
+    .filter(p=>p.pitch_approval.status==="deposit_paid"||p.pitch_approval.status==="paid_in_full")
+    .reduce((s,p)=>s+(p.pitch_approval.status==="paid_in_full"?(p.pitch_approval.totalAmount||0):(p.pitch_approval.depositAmount||0)),0);
+  const outstanding=approvedProjects
+    .filter(p=>p.pitch_approval.status==="approved")
+    .reduce((s,p)=>s+(p.pitch_approval.depositAmount||0),0);
+  const paidInFull=approvedProjects
+    .filter(p=>p.pitch_approval.status==="paid_in_full")
+    .reduce((s,p)=>s+(p.pitch_approval.totalAmount||0),0);
+  const pipeline=localProjects
+    .filter(p=>!p.pitch_approval?.status&&(arr(p.pitch_deck?.lineItems).length>0))
+    .reduce((s,p)=>s+arr(p.pitch_deck?.lineItems).reduce((t,li)=>t+(Number(li.price)||0),0),0);
+
+  function fmt(n){return"$"+Number(n||0).toLocaleString("en-US",{minimumFractionDigits:0,maximumFractionDigits:0});}
+
+  const summaryCards=[
+    {label:"Total Collected",value:collected,color:"#1e7e34",sub:"deposits + paid in full"},
+    {label:"Awaiting Payment",value:outstanding,color:"#e97942",sub:"approved, not yet paid"},
+    {label:"Paid in Full",value:paidInFull,color:"#1a56c4",sub:"fully settled projects"},
+    {label:"In Pipeline",value:pipeline,color:"#37352f",sub:"pending pitch approvals"},
+  ];
+
+  const filterTabs=["All","Approved","Deposit Paid","Paid in Full","Pipeline"];
+
+  const filtered=localProjects.filter(p=>{
+    const pa=p.pitch_approval;
+    const hasLineItems=arr(p.pitch_deck?.lineItems).some(li=>Number(li.price)>0);
+    if(filter==="All")return pa?.status||hasLineItems;
+    if(filter==="Approved")return pa?.status==="approved";
+    if(filter==="Deposit Paid")return pa?.status==="deposit_paid";
+    if(filter==="Paid in Full")return pa?.status==="paid_in_full";
+    if(filter==="Pipeline")return!pa?.status&&hasLineItems;
+    return false;
+  }).sort((a,b)=>{
+    const da=a.pitch_approval?.agreedAt||a.updated_at;
+    const db=b.pitch_approval?.agreedAt||b.updated_at;
+    return new Date(db)-new Date(da);
+  });
+
+  function statusBadge(pa){
+    if(!pa?.status)return{bg:"#f1f0ef",color:"#9b9a97",text:"◦ PIPELINE"};
+    if(pa.status==="paid_in_full")return{bg:"#e6f4ea",color:"#1e7e34",text:"✓ PAID IN FULL"};
+    if(pa.status==="deposit_paid")return{bg:"#e6f4ea",color:"#1e7e34",text:"✓ DEPOSIT PAID"};
+    if(pa.status==="approved")return{bg:"#fff8e6",color:"#b45309",text:"⏳ AWAITING PAYMENT"};
+    return{bg:"#f1f0ef",color:"#9b9a97",text:"◦ PIPELINE"};
+  }
+
+  function rowTotal(p){
+    if(p.pitch_approval?.totalAmount)return p.pitch_approval.totalAmount;
+    return arr(p.pitch_deck?.lineItems).reduce((t,li)=>t+(Number(li.price)||0),0);
+  }
+
+  function rowDeposit(p){
+    if(p.pitch_approval?.depositAmount)return p.pitch_approval.depositAmount;
+    const total=rowTotal(p);
+    const terms=p.pitch_deck?.paymentTerms||"";
+    const pct=parseFloat(terms);
+    if(!isNaN(pct)&&pct>0&&pct<=100)return Math.round(total*(pct/100));
+    return 0;
+  }
+
+  function fmtDate(d){
+    if(!d)return"—";
+    const dt=new Date(d);
+    if(isNaN(dt))return"—";
+    return dt.toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"});
+  }
+
+  const[hoveredRow,setHoveredRow]=useState(null);
+
+  return(
+    <div style={{minHeight:"100vh",background:"#fff",padding:"32px 24px",fontFamily:"'Lora',serif"}}>
+      <div style={{maxWidth:900,margin:"0 auto"}}>
+        {/* Header */}
+        <div style={{marginBottom:32}}>
+          <button onClick={onBack} style={{background:"none",border:"none",cursor:"pointer",color:"#9b9a97",fontFamily:"'Lora',serif",fontSize:14,padding:"0 0 16px 0",display:"flex",alignItems:"center",gap:6}}>← Financial</button>
+          <div style={{fontSize:28,fontWeight:700,color:"#37352f",marginBottom:6}}>Financial Overview</div>
+          <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97"}}>Track revenue, deposits, and outstanding balances</div>
+        </div>
+
+        {/* Summary Cards */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:12,marginBottom:32}}>
+          {summaryCards.map(card=>(
+            <div key={card.label} style={{background:"#fff",border:"1px solid #f1f0ef",borderRadius:12,padding:20}}>
+              <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",textTransform:"uppercase",color:"#9b9a97",letterSpacing:"0.08em",marginBottom:10}}>{card.label}</div>
+              <div style={{fontSize:26,fontWeight:700,color:card.color,fontFamily:"'Lora',serif",marginBottom:6}}>{fmt(card.value)}</div>
+              <div style={{fontSize:12,color:"#9b9a97"}}>{card.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Filter Tabs */}
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:20}}>
+          {filterTabs.map(tab=>(
+            <button key={tab} onClick={()=>setFilter(tab)} style={{padding:"6px 14px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",background:filter===tab?"#37352f":"#f1f0ef",color:filter===tab?"#f5ede0":"#9b9a97",fontWeight:600,transition:"all 0.15s"}}>{tab}</button>
+          ))}
+        </div>
+
+        {/* Transactions List */}
+        {filtered.length===0?(
+          <div style={{textAlign:"center",padding:"60px 20px",color:"#9b9a97",fontStyle:"italic",fontFamily:"'Lora',serif",fontSize:14,lineHeight:1.7}}>
+            No transactions yet. Send a pitch deck to a client to start tracking payments.
+          </div>
+        ):(
+          <div>
+            {filtered.map(p=>{
+              const pa=p.pitch_approval;
+              const badge=statusBadge(pa);
+              const total=rowTotal(p);
+              const deposit=rowDeposit(p);
+              const balance=total-deposit;
+              const clientName=pa?.clientName||p.client_name||"—";
+              return(
+                <div
+                  key={p.id}
+                  onClick={()=>onOpenProject(p)}
+                  onMouseEnter={()=>setHoveredRow(p.id)}
+                  onMouseLeave={()=>setHoveredRow(null)}
+                  style={{background:hoveredRow===p.id?"#f5f4f2":"#fafaf9",border:"1px solid #f1f0ef",borderRadius:10,padding:"16px 20px",marginBottom:8,cursor:"pointer",transition:"background 0.12s"}}
+                >
+                  {/* Top row */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <div style={{fontSize:15,fontWeight:700,color:"#37352f",fontFamily:"'Lora',serif"}}>{p.title||"Untitled Project"}</div>
+                      <div style={{fontSize:12,color:"#9b9a97",marginTop:2}}>{clientName}</div>
+                    </div>
+                    <div style={{background:badge.bg,color:badge.color,borderRadius:20,padding:"4px 10px",fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,flexShrink:0,marginLeft:16}}>{badge.text}</div>
+                  </div>
+
+                  {/* Bottom row */}
+                  <div style={{display:"flex",alignItems:"flex-end",justifyContent:"space-between",flexWrap:"wrap",marginTop:10,gap:12}}>
+                    <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+                      <div>
+                        <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Invoice Total</div>
+                        <div style={{fontSize:14,fontWeight:700,color:"#37352f",fontFamily:"'Lora',serif"}}>{fmt(total)}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Deposit</div>
+                        <div style={{fontSize:14,fontWeight:700,color:"#37352f",fontFamily:"'Lora',serif"}}>{fmt(deposit)}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Balance</div>
+                        <div style={{fontSize:14,fontWeight:700,color:"#37352f",fontFamily:"'Lora',serif"}}>{fmt(balance)}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#9b9a97",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:2}}>Agreed</div>
+                        <div style={{fontSize:14,fontWeight:700,color:"#37352f",fontFamily:"'Lora',serif"}}>{fmtDate(pa?.agreedAt)}</div>
+                      </div>
+                    </div>
+                    {/* Action buttons */}
+                    {pa?.status&&pa.status!=="paid_in_full"&&(
+                      <div style={{display:"flex",gap:8,flexShrink:0}} onClick={e=>e.stopPropagation()}>
+                        {pa.status==="approved"&&(
+                          <button onClick={()=>handleStatusUpdate(p,"deposit_paid")} style={{padding:"6px 12px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,background:"#37352f",color:"#fff",border:"none",borderRadius:6,cursor:"pointer"}}>Mark Deposit Paid</button>
+                        )}
+                        <button onClick={()=>handleStatusUpdate(p,"paid_in_full")} style={{padding:"6px 12px",fontSize:11,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,background:"#1e7e34",color:"#fff",border:"none",borderRadius:6,cursor:"pointer"}}>Mark Paid in Full</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── DASHBOARD ────────────────────────────────────────────────────────────────
-function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings,onPackageLibrary}){
+function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange,user,onSignOut,onIdeas,onClients,onMeetings,onPackageLibrary,onFinancial}){
   const[search,setSearch]=useState("");
   const[filter,setFilter]=useState("All");
   const[sidebarOpen,setSidebarOpen]=useState(true);
@@ -3240,6 +3422,7 @@ function Dashboard({projects,sharedProjects,onOpen,onNew,onDelete,onStatusChange
       <button onClick={onIdeas} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💡</span><span>Idea Capture</span></button>
       <button onClick={onClients} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>👥</span><span>Clients</span></button>
       <button onClick={onPackageLibrary} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💰</span><span>Pricing</span></button>
+      <button onClick={onFinancial} className="nb" style={{marginBottom:4}}><span style={{fontSize:15}}>💳</span><span>Financial</span></button>
       <div style={{marginTop:24,fontSize:10,fontFamily:"'IBM Plex Mono',monospace",color:"#c4c3bf",textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:8}}>Calendar</div>
       <button onClick={onMeetings} className="nb" style={{marginBottom:4,position:"relative"}}>
         <span style={{fontSize:15}}>📅</span>
@@ -5008,6 +5191,7 @@ function FrameBriefApp(){
     if(scr==="meetings")return"/meetings";
     if(scr==="clients"||scr==="clientProfile")return"/clients";
     if(scr==="packageLibrary")return"/pricing";
+    if(scr==="financial")return"/financial";
     if(scr==="doc"&&projId){
       // Use slug if available, otherwise UUID
       const projSlug=activeProject?.slug||projId;
@@ -5040,6 +5224,7 @@ function FrameBriefApp(){
     if(pathname==="/meetings"){setScreen("meetings");return;}
     if(pathname==="/clients"){setScreen("clients");return;}
     if(pathname==="/pricing"){setScreen("packageLibrary");return;}
+    if(pathname==="/financial"){setScreen("financial");return;}
 
     const projMatch=pathname.match(/^\/project\/([^/]+)(\/(.+))?$/);
     if(projMatch){
@@ -5855,13 +6040,35 @@ ${JSON.stringify(brief)}`;
     </div>
   );
 
+  if(screen==="financial")return(
+    <div><style>{CSS}</style>
+      <FinancialDashboard
+        projects={projects}
+        onBack={()=>setScreen("dashboard")}
+        onOpenProject={p=>{
+          setMyRole("owner");
+          setActiveProject(p);
+          setPage("overview");
+          setShareMode(false);
+          setChatLog([]);
+          setChatOpen(false);
+          setSidebarOpen(false);
+          setViewingMeeting(null);
+          setViewingMeetingIdx(null);
+          setMeetingNotesExpanded(false);
+          setScreen("doc");
+        }}
+      />
+    </div>
+  );
+
   if(screen==="packageLibrary")return(
     <div><style>{CSS}</style>
       <PackageLibrary user={user} packages={packages} onPackagesChange={setPackages} onBack={()=>setScreen("dashboard")}/>
     </div>
   );
 
-  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")} onPackageLibrary={()=>setScreen("packageLibrary")}/></div>);
+  if(screen==="dashboard")return(<div><style>{CSS}</style><Dashboard projects={projects} sharedProjects={sharedProjects} user={user} onOpen={p=>{const role=p._sharedRole||(p.user_id===user?.id?"owner":"owner");setMyRole(p._sharedRole?p._sharedRole:role);setActiveProject(p);setPage("overview");setShareMode(p._sharedRole==="viewer");setChatLog([]);setChatOpen(false);setSidebarOpen(false);setViewingMeeting(null);setViewingMeetingIdx(null);setMeetingNotesExpanded(false);setScreen("doc");}} onNew={()=>{setTranscript("");setDocs([]);setErrMsg("");setInputClientId(null);setNewClientNameInput("");setScreen("input");}} onDelete={deleteProject} onStatusChange={updateStatus} onSignOut={()=>supabase.auth.signOut()} onIdeas={()=>setScreen("ideas")} onClients={()=>setScreen("clients")} onMeetings={()=>setScreen("meetings")} onPackageLibrary={()=>setScreen("packageLibrary")} onFinancial={()=>setScreen("financial")}/></div>);
 
   if(screen==="input")return(<div><style>{CSS}</style><IntakeScreen
     transcript={transcript} setTranscript={setTranscript}
